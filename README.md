@@ -6,13 +6,15 @@ This repository contains the Phase 1 invoice audit MVP and the supporting SCT on
 
 - `apps/web`: Next.js app and API layer for upload, audit job orchestration, approval, and export.
 - `apps/worker-py`: FastAPI parser/export worker for Excel, Markdown, text, PDF text, and OpenDataLoader PDF JSON.
-- `apps/mcp-server`: TypeScript validation server with invoice audit tools for rate, evidence, duplicate, tax, FX, shipment, and cost checks.
+- `apps/mcp-server`: TypeScript validation server with 14 audit tools (rate, evidence, duplicate, tax, FX, shipment, cost, TYPE-B classification, HS/UAE customs, DEM/DET, router, explanation builder).
 
 Do not commit raw invoice files, raw contract rates, TRN, BOE, BL, container numbers, personal contact details, tokens, or original P2 evidence files.
 
-## Current Status
+## Current Status (2026-06-13)
 
-The MVP has working local components for upload, job status, parser dispatch, validation traces, approval flow, and 13-sheet workbook export.
+Cross-validated against Track 1 (shpiment v3.2 PRO, 9-gate system). P0-P2 gaps resolved: 14 MCP tools, 368 tests (Worker 95, MCP 186, Web 107). Typecheck 0 errors.
+
+The MVP has working local components for upload, job status, parser dispatch, validation traces, approval flow, 13-sheet workbook export, DSV Waybill field extraction, 3-way reconciliation, DLP export gate, HS/UAE customs compliance, and DEM/DET evidence checks.
 
 Production deployment uses Vercel for the web app, Vercel Blob for file storage, and Neon Postgres through `DATABASE_URL` for persistence.
 

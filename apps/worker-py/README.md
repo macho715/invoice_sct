@@ -14,6 +14,12 @@ FastAPI worker for invoice/evidence parsing (xlsx, md, txt, **pdf** from P3A).
 - Low-confidence / scanned pages surface `SCANNED_PAGE_DETECTED` + force AMBER in later stages (P3C).
 - Fixtures: `tests/fixtures/text-pdf-00[1-5].pdf` (generated text-based invoice samples; one low-text for AMBER path).
 
+## DSV Waybill Parser (2026-06-13)
+- New `dsv_waybill` parser ported from Track 1 `pdf_processor_v1_2_dsv_patched.py` (v1.4.1).
+- Extracts: waybill_no, trip_no, order_no, job_no, po_no, do_no, bol_no, lane (origin/destination with UAE HVDC normalization), timeline, driver/truck details.
+- `pdf_text.py` auto-detects DSV Waybill text and enriches `EvidenceCandidate` with DSV fields.
+- Fixtures: `tests/fixtures/dsv-waybill-001.txt` (28 tests).
+
 ## pdf_json Parser (2026-06-13)
 - New `pdf_json` parser for OpenDataLoader JSON output.
 - `file_type='pdf_json'` now supported in `POST /parse`.

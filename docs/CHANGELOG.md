@@ -26,6 +26,54 @@
 - `/mcp get_hvdc_case_status caseNo=207721` returned `WHCASE-207721`, `WARN`, `M100_FINAL_DELIVERED`, `canonicalEvents=6`, `caseCard=36`, and output template `ui://hvdc/answer-card-v10.html`.
 
 
+## SESS-005 — Cross-validation & Track 1↔Track 2 Gap Patching (2026-06-13)
+
+### Added
+- DSV Waybill parser port: `apps/worker-py/app/parsers/dsv_waybill.py` (8 core functions from Track 1, 28 tests)
+- `classify_type_b` MCP tool (8-class priority classification, Track 1 `TYPE_B_Rules` port)
+- `check_hs_uae_compliance` MCP tool (BOE validation, HS code format check)
+- `check_dem_det` MCP tool (DEM/DET evidence requirement check, final settlement ZERO trigger)
+- `checkReconciliation()` 3-way tie-out in gate-bridge (Final Subtotal = Line_Audit = TYPE-B ±0.01)
+- `checkDlpExport()` DLP scan in export pipeline (violations → ZERO block)
+- `scanWorkbook()` DLP scanner method (16 P2 categories)
+- InvoiceHeader field extraction in xlsx parser (invoice_no, vendor, issue_date from Excel)
+- xlsx parser column expansion (shipment_ref, job_number, rate_basis, for_charge_component)
+- `rate_cards` DB seed script (20 HVDC rate records, 6 charge types)
+- `present_evidence` input for evidence_required tool (end-to-end evidence tracking)
+- `applied_rate` input for rate_card tool (variance calculation now functional)
+- evidence finding merge into final gate verdict (doc_guardian → ZERO/AMBER escalation)
+- event tracking trace to SESS-005
+
+### Changed
+- MCP tools: 11 → 14 (all 14 with tests and typecheck)
+- numeric_integrity verdict: AMBER → ZERO (aligned with Track 1 hard_blocker #11)
+- gate-bridge now accepts `evidenceFindings` and `checkReconciliation`
+- cf-mcp-client orchestrates `classify_type_b` and `check_hs_uae_compliance` per line
+- DLP scanner: 12 → 16 P2 categories (added VESSEL_VOYAGE, APPROVAL_TEXT, INTERNAL_AMOUNT, DUPLICATE_INVOICE)
+- BLOB_HEALTHCHECK_URL default → empty string (graceful skip when unset)
+- web job detail page restored API fetch (in-memory STORE failed on Vercel serverless)
+- vercel deploy workflow: `working-directory: apps/web` + pnpm
+
+### Fixed
+- P0: `check_rate_card.ts:68` dead code (`appliedRate=null` → uses input)
+- P0: `check_evidence_required.ts:35` dead code (`present=[]` → uses input)
+- P0: upload-form large file routing (>4.5MB → `/api/files/ingest/large`)
+- P1: numeric_integrity verdict inconsistency (AMBER → ZERO)
+- P1: 3-way reconciliation tie-out added to buildGateResult flow
+- P1: rate_cards DB seed created
+
+### Removed
+- 11 dependabot PRs closed (version bumps deferred)
+- `BLOB_HEALTHCHECK_URL` dummy fallback `http://127.0.0.1:65535/health-probe-dummy`
+
+### Verified
+- Worker-PY: 95 tests PASS
+- MCP Server: 186 tests PASS (15 test files)
+- Web: 107 tests, 24 test files (2 cf-mcp-client tests require live CF worker)
+- Typecheck: 0 errors across all components
+- Cross-validation: Track 1 9 gates → 8 FULL, 1 P3 (Harness/RTM, CI-dependent)
+- Commit: `3cb5c13`, 20 commits in SESS-005
+
 ## Codex Documentation Update — 2026-06-13T18:20:29.442785+00:00
 
 **Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
