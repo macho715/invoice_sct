@@ -1,0 +1,14 @@
+{
+  "name": "@invoice-audit/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "exports": {
+    "./invoice": "./invoice.schema.ts",
+    "./validation": "./validation.schema.ts",
+    "./export": "./export.schema.ts"
+  }
+}

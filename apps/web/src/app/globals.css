@@ -1,0 +1,11 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f8f9fb; color: #111; }
+.container { max-width: 720px; margin: 0 auto; padding: 24px; }
+.card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.btn { background: #0a4ed6; color: #fff; border: 0; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.btn:disabled { background: #999; cursor: not-allowed; }
+.input { display: block; margin: 8px 0 16px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+.alert { padding: 12px; border-radius: 6px; margin: 12px 0; }
+.alert-error { background: #fee; color: #900; }
+.alert-warn  { background: #ffeaa0; color: #664; }
+.alert-pass  { background: #d4f7d4; color: #060; }

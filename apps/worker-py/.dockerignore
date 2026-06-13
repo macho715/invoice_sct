@@ -1,0 +1,92 @@
+# ----------------------------------------------------------------------------
+# .dockerignore — Invoice Audit Parser worker
+# Keeps the build context small and prevents leaking secrets / dev artifacts.
+# ----------------------------------------------------------------------------
+
+# --- Python bytecode / caches ----------------------------------------------
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+**/*.egg-info/
+dist/
+build/
+invoice_audit_parser.egg-info/
+
+# --- Virtual environments ---------------------------------------------------
+.venv
+venv/
+env/
+ENV/
+.python-version
+
+# --- Tests / fixtures / dev scripts ---------------------------------------
+tests/
+test_*/
+**/test_*.py
+**/*_test.py
+**/conftest.py
+make_fixture.py
+smoke_parse.py
+fixtures/
+test_data/
+samples/
+
+# --- Environment / secrets --------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+# --- VCS / CI ---------------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.github
+.gitlab-ci.yml
+.circleci
+
+# --- Node (in case of mixed workspaces) -----------------------------------
+node_modules/
+.npm/
+.pnpm-store/
+yarn-error.log
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# --- Editor / OS noise ------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+logs/
+
+# --- Docs / planning (not needed at runtime) -------------------------------
+*.md
+!app/**/*.md
+docs/
+plan.md
+CLAUDE.md
+.claude/
+
+# --- Docker meta -----------------------------------------------------------
+Dockerfile
+.dockerignore
+docker-compose*.yml

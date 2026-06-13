@@ -1,0 +1,33 @@
+{
+  "version": "v3.1_PRO_HARNESS_PATCH",
+  "patch_id": "HARNESS-ENG-v3.1-SINGLE-ZIP-20260609",
+  "score_range": [
+    0,
+    100
+  ],
+  "thresholds": {
+    "pass_ready_min": 85,
+    "amber_min": 60,
+    "zero_below_for_critical": 60
+  },
+  "evidence_status_scores": {
+    "MATCHED_EXACT": 95,
+    "MATCHED_AMOUNT": 85,
+    "MATCHED_APPROVAL": 80,
+    "PARTIAL": 60,
+    "MISSING": 0,
+    "CONFLICT": 0,
+    "NOT_APPLICABLE": 100
+  },
+  "document_weights": {
+    "final_subtotal_before_vat": 30,
+    "contract_rate_scope": 25,
+    "official_customs_or_boe": 25,
+    "vendor_invoice": 20,
+    "client_approval": 20,
+    "terminal_or_port_invoice": 20,
+    "gate_in_out_or_discharge_dates": 15,
+    "technical_datasheet_or_certificate": 15
+  },
+  "critical_gate_rule": "If critical gate evidence score < threshold, do not PASS; use AMBER or ZERO according to finality requested."
+}

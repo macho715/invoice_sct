@@ -1,0 +1,127 @@
+{
+  "version": "v3.1_PRO_HARNESS_PATCH",
+  "verdicts": [
+    "PASS",
+    "PASS WITH WARNINGS",
+    "AMBER",
+    "FAIL",
+    "ZERO"
+  ],
+  "gates": [
+    {
+      "gate": "Source Audit",
+      "pass": [
+        "source rows parsed",
+        "excluded tabs respected",
+        "formula-like text preserved"
+      ],
+      "amber": [
+        "non-critical parse ambiguity",
+        "display delta disclosed"
+      ],
+      "zero": [
+        "source unreadable and no auditable output possible"
+      ]
+    },
+    {
+      "gate": "Contract Audit",
+      "pass": [
+        "charge/route/unit/scope match contract",
+        "variance within tolerance"
+      ],
+      "amber": [
+        "AT COST/AS PER OFFER support partial",
+        "route/unit/scope inferred"
+      ],
+      "zero": [
+        "final settlement requested but critical rate basis missing"
+      ]
+    },
+    {
+      "gate": "Evidence Audit",
+      "pass": [
+        "critical evidence matched"
+      ],
+      "amber": [
+        "partial or missing non-critical evidence"
+      ],
+      "zero": [
+        "final approval requested with missing critical evidence"
+      ]
+    },
+    {
+      "gate": "Final Reconciliation",
+      "pass": [
+        "final subtotal before VAT ties to Line_Audit and TYPE-B within 0.01 USD"
+      ],
+      "amber": [
+        "final subtotal before VAT missing but working subtotal ties"
+      ],
+      "zero": [
+        "user asks final PASS/approval while final subtotal missing"
+      ]
+    },
+    {
+      "gate": "Security/DLP",
+      "pass": [
+        "no PII/rate leakage"
+      ],
+      "amber": [
+        "masking needed"
+      ],
+      "zero": [
+        "request requires exposing private rate/PII publicly"
+      ]
+    },
+    {
+      "gate": "HS/UAE Compliance",
+      "pass": [
+        "authoritative evidence sufficient"
+      ],
+      "amber": [
+        "non-final advisory with explicit assumptions"
+      ],
+      "zero": [
+        "classification/compliance determination requested without evidence"
+      ]
+    },
+    {
+      "gate": "DEM/DET & Storage",
+      "pass": [
+        "dates, free time, tariff, invoice, contract clear"
+      ],
+      "amber": [
+        "estimate or partial support"
+      ],
+      "zero": [
+        "final settlement requested with missing critical DEM/DET/storage inputs"
+      ]
+    }
+  ],
+  "input_required_max": 3,
+  "patch_id": "HARNESS-ENG-v3.1-SINGLE-ZIP-20260609",
+  "harness_controls": {
+    "rtm_required_for_critical_verdict": true,
+    "test_id_required_for_release_pass": true,
+    "release_gate_required_for_pass": true,
+    "input_required_max": 3,
+    "actions_default": "OFF",
+    "action_sequence": [
+      "dry-run",
+      "user approval",
+      "execute",
+      "audit log",
+      "rollback note"
+    ],
+    "private_rate_public_exposure": "ZERO",
+    "prompt_injection_override_attempt": "ZERO"
+  },
+  "release_blockers": [
+    "missing_final_subtotal_before_vat",
+    "critical_evidence_missing",
+    "contract_scope_unmatched_without_approval",
+    "dlp_leak_detected",
+    "rtm_or_test_mapping_missing",
+    "validator_script_failure"
+  ]
+}

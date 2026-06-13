@@ -1,0 +1,22 @@
+node_modules/
+.next/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.DS_Store
+# Dev blob stub (Phase 1 E2E local filesystem)
+.dev-blob/
+# TypeScript incremental build cache
+*.tsbuildinfo
+# Test artifacts
+test.pdf
+test_body.json
+tests_output.txt
+tests_run.txt
+install_log.txt
+# Python egg-info
+*.egg-info/
+

@@ -1,0 +1,10 @@
+﻿Rule_ID,Priority,Keyword/Pattern,TYPE_B,Note,Harness_Note
+RULE-TB-001,1,customs inspection / inspection by customs / customs inspection fee,Inspection,Inspection has priority over generic customs.,RTM linked; priority conflict must be tested.
+RULE-TB-002,2,customs clearance / bill of entry / BOE / customs duty / export customs / import customs / customs documentation,Customs,Generic customs charge.,RTM linked; priority conflict must be tested.
+RULE-TB-003,2,SHJ customs code-opening / new code opening fee / customs gate pass,Customs,Customs wording or SHJ code-opening maps to Customs.,RTM linked; priority conflict must be tested.
+RULE-TB-004,3,master DO / house DO / delivery order / DO fee / document delivery order,DO,Delivery order bucket.,RTM linked; priority conflict must be tested.
+RULE-TB-005,4,transport / truck / trucking / inland / FB from / CIPCA / MOSB / road freight / appointment charge,INLAND,Inland/transport bucket.,RTM linked; priority conflict must be tested.
+RULE-TB-006,5,terminal handling / port handling / THC / TSC / discharging / loading / unloading / berth / stevedoring,THC,Terminal/port handling bucket.,RTM linked; priority conflict must be tested.
+RULE-TB-007,6,detention / container detention / line detention,Detention,Detention only; demurrage/storage require evidence context.,RTM linked; priority conflict must be tested.
+RULE-TB-008,7,storage / stroage / yard storage / warehouse storage / port storage,STROAGE,Preserve misspelled output label STROAGE.,RTM linked; priority conflict must be tested.
+RULE-TB-009,8,all remaining descriptions,OTHERS,Fallback only.,RTM linked; priority conflict must be tested.

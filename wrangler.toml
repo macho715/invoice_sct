@@ -1,0 +1,77 @@
+name = "hvdc-ontology-chatgpt-app"
+main = "server/src/worker.ts"
+compatibility_date = "2026-05-13"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ALLOWED_ORIGIN = "https://chatgpt.com,https://claude.ai"
+WIDGET_DOMAIN = "https://hvdc-ontology-chatgpt-app.mscho715.workers.dev"
+MCP_AUTH_SCOPES = "files:upload files:write"
+OTEL_ENABLED = "true"
+AXIOM_DATASET = "hvdc-mcp-prod"
+KV_CACHE_ENABLED = "true"
+AUTH_REQUIRED = "true"
+
+[[r2_buckets]]
+binding = "HVDC_FILES"
+bucket_name = "hvdc-ontology-files"
+
+[[kv_namespaces]]
+binding = "HVDC_CACHE"
+id = "7b02fb69994543d3ac21fe12a70c9014"
+preview_id = "bbada98cd8c14184ace8b2f4d71c4bc0"
+
+[[d1_databases]]
+binding = "MCP_AUDIT_DB"
+database_name = "hvdc-mcp-audit"
+database_id = "5a934620-4a9a-41c0-908b-f292fab2f0bd"
+migrations_dir = "migrations"
+
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 200, period = 60 }
+
+[[unsafe.bindings]]
+name = "RATE_LIMITER_IP"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 2000, period = 60 }
+
+[[unsafe.bindings]]
+name = "RATE_LIMITER_TOOL"
+type = "ratelimit"
+namespace_id = "1003"
+simple = { limit = 10, period = 3600 }
+
+# Preview environment (production 격리)
+[env.preview]
+name = "hvdc-ontology-chatgpt-app-preview"
+main = "server/src/worker.ts"
+compatibility_date = "2026-05-13"
+compatibility_flags = ["nodejs_compat"]
+
+[env.preview.vars]
+ALLOWED_ORIGIN = "https://preview-hvdc.vercel.app"
+WIDGET_DOMAIN = "https://hvdc-ontology-chatgpt-app-preview.mscho715.workers.dev"
+MCP_AUTH_SCOPES = "files:upload files:write"
+OTEL_ENABLED = "true"
+AXIOM_DATASET = "hvdc-mcp-preview"
+KV_CACHE_ENABLED = "true"
+AUTH_REQUIRED = "true"
+
+[[env.preview.r2_buckets]]
+binding = "HVDC_FILES"
+bucket_name = "hvdc-ontology-files-preview"
+
+[[env.preview.kv_namespaces]]
+binding = "HVDC_CACHE"
+id = "preview-kv-id-placeholder"
+
+[[env.preview.d1_databases]]
+binding = "MCP_AUDIT_DB"
+database_name = "hvdc-mcp-audit-preview"
+database_id = "preview-d1-id-placeholder"
+migrations_dir = "migrations"
+
