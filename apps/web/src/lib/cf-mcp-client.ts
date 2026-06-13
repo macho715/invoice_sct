@@ -23,6 +23,51 @@ export class McpUnavailableError extends Error {
   constructor(msg: string) { super(msg); this.name = 'McpUnavailableError'; }
 }
 
+// --- Boundary normalization (P0-3) ----------------------------------------
+// The web client and the MCP validation server were authored against drifting
+// contracts (e.g. check_cost_guard returns `line_findings`/`lineNo` while the
+// client expected `lineResults`/`lineId`). Calling `.map` on the wrong key
+// throws "Cannot read properties of undefined (reading 'map')" and surfaces as
+// VALIDATION_FAILED. These helpers tolerate every known variant and never throw
+// on missing/renamed keys, so an unknown shape degrades to [] instead of a 500.
+type CostguardNorm = { line_id: string; band: 'PASS' | 'WARN' | 'HIGH' | 'CRITICAL'; verdict: string; delta_pct: number | null; proofRef: string | null };
+
+function asArray<T = unknown>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
+
+/** Derive a COST-GUARD band when the tool omits an explicit `band`. */
+function deriveBand(lr: any): 'PASS' | 'WARN' | 'HIGH' | 'CRITICAL' {
+  if (lr?.band) return lr.band;
+  const v = String(lr?.verdict ?? '').toUpperCase();
+  if (v === 'ZERO') return 'CRITICAL';
+  if (v === 'AMBER' || v === 'WARN') return 'WARN';
+  if (v === 'PASS') return 'PASS';
+  const rc = lr?.reason_code ?? lr?.reasonCode ?? null;
+  if (rc === 'QTY_X_RATE_MISMATCH') return 'CRITICAL';
+  if (rc) return 'WARN';
+  const d = lr?.deltaPct ?? lr?.variance_pct ?? lr?.delta_pct ?? null;
+  if (typeof d === 'number' && Math.abs(d) > 2) return 'WARN';
+  return 'PASS';
+}
+
+/**
+ * Normalize check_cost_guard output across server variants:
+ * - apps/mcp-server: { line_findings: [{ lineNo, variance_pct, reason_code }] }
+ * - legacy contract:  { lineResults:  [{ lineId, band, deltaPct, proofRef }] }
+ */
+function normCostguard(raw: any): CostguardNorm[] {
+  const arr = asArray<any>(raw?.lineResults ?? raw?.line_findings ?? raw?.lines);
+  return arr.map((lr) => ({
+    line_id: String(lr?.lineId ?? lr?.lineNo ?? lr?.line_id ?? ''),
+    band: deriveBand(lr),
+    verdict: String(lr?.verdict ?? lr?.gate_status ?? 'PASS'),
+    delta_pct: lr?.deltaPct ?? lr?.variance_pct ?? lr?.delta_pct ?? null,
+    proofRef: lr?.proofRef ?? lr?.prism_kernel_proof_ref ?? null
+  }));
+}
+// --------------------------------------------------------------------------
+
 export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; retries: number; backoffMs?: number }): CfMcpClient {
   const { baseUrl, timeoutMs, retries, backoffMs = 1000 } = opts;
   const url = `${baseUrl.replace(/\/$/, '')}/mcp`;
@@ -197,22 +242,28 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
       )];
 
       if (distinctSctCodes.length > 0) {
-        const evidenceMap = await callTool<{ evidence_requirements: Array<{ line_id: string; required_evidence: string[] }> }>('check_evidence_required', { invoice_lines: processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description })), evidence_index: payload.evidence_index ?? [] });
-        toolCalls.push({ tool: 'check_evidence_required', latency_ms: evidenceMap.latency_ms, status: evidenceMap.status });
+        // P0-3: guard like the docResult call above — an unavailable evidence tool
+        // must degrade gracefully, not abort the whole validation.
+        try {
+          const evidenceMap = await callTool<{ evidence_requirements: Array<{ line_id: string; required_evidence: string[] }> }>('check_evidence_required', { invoice_lines: processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description })), evidence_index: payload.evidence_index ?? [] });
+          toolCalls.push({ tool: 'check_evidence_required', latency_ms: evidenceMap.latency_ms, status: evidenceMap.status });
 
-        for (const evReq of evidenceMap.result.evidence_requirements) {
-          evidence_requirements.push({
-            line_id: evReq.line_id,
-            required_evidence: evReq.required_evidence
-          });
+          for (const evReq of asArray<{ line_id: string; required_evidence: string[] }>(evidenceMap.result?.evidence_requirements)) {
+            evidence_requirements.push({
+              line_id: evReq.line_id,
+              required_evidence: asArray<string>(evReq.required_evidence)
+            });
+          }
+        } catch {
+          toolCalls.push({ tool: 'check_evidence_required', latency_ms: 0, status: 'ERROR' });
         }
       }
 
-      const costguard_results = costguard.result.lineResults.map(lr => ({
-        line_id: lr.lineId,
+      const costguard_results = normCostguard(costguard.result).map(lr => ({
+        line_id: lr.line_id,
         band: lr.band,
         verdict: lr.verdict,
-        delta_pct: lr.deltaPct,
+        delta_pct: lr.delta_pct,
         prism_kernel_proof_ref: lr.proofRef,
         fx_policy_id: activeFxPolicyId
       }));
@@ -231,10 +282,10 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         rate_checks,
         evidence_requirements,
         costguard_results,
-        doc_guardian_results: docResult!.result.findings.map(f => ({
-          line_id: f.lineId,
-          code: f.code,
-          severity: f.severity
+        doc_guardian_results: asArray<any>(docResult?.result?.findings).map(f => ({
+          line_id: f?.lineId ?? f?.line_id ?? null,
+          code: f?.code ?? 'EVIDENCE_FINDING',
+          severity: (f?.severity ?? 'AMBER') as 'AMBER' | 'ZERO'
         })),
         gate_results,
         confidence: 0.95,

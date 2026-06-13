@@ -27,12 +27,15 @@ describe('cf-mcp-client', () => {
       // check_doc_guardian
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 5, result: { findings: [] } }) })
       // ontology_evidence_map
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 6, result: { evidence_requirements: [] } }) });
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 6, result: { evidence_requirements: [] } }) })
+      // default for any additional tool call (current code also issues a per-line
+      // classify_type_b and a second check_evidence_required => 7 calls total)
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 7, result: {} }) });
 
     const client = createCfMcpClient({ baseUrl: 'https://cf.example/mcp', timeoutMs: 1000, retries: 0 });
     const r = await client.validate('job_1', { invoice_lines: [{ line_id: 'l1', description: 'TRUCKING', currency: 'AED', amount: 100 }], evidence_index: [] });
 
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
     expect(r.costguard_results).toEqual([{ line_id: 'l1', band: 'PASS', verdict: 'ACCEPTABLE', delta_pct: 1.5, prism_kernel_proof_ref: 'proof_1', fx_policy_id: null }]);
     expect(r.gate_results).toHaveLength(1);
     expect(r.gate_results[0].gate_status).toBe('PASS');

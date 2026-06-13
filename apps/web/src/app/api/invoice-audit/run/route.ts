@@ -70,6 +70,24 @@ export async function POST(req: Request): Promise<Response> {
   });
   await STORE.setNormalizedInvoice(body.job_id, parseRes.normalized as any);
 
+  // P0-4: parser extracted zero invoice lines (empty/unmapped invoice, or PDF text
+  // with no structured lines). Validating [] would yield empty COST-GUARD results and
+  // a false PASS, so short-circuit to AMBER and route to human review instead.
+  const parsedLines = ((parseRes.normalized as { invoice_lines?: unknown[] })?.invoice_lines) ?? [];
+  if (parsedLines.length === 0) {
+    const actionItems = [{
+      action_id: `act_nolines_${body.job_id}`,
+      severity: 'AMBER' as const,
+      line_id: '',
+      issue_type: 'NO_INVOICE_LINES_EXTRACTED',
+      required_action: 'Parser extracted 0 invoice lines — verify file/column mapping or supply a structured invoice'
+    }];
+    await STORE.setResult(body.job_id, { gate_id: `gate_nolines_${body.job_id}`, job_id: body.job_id, verdict: 'AMBER', line_results: [], action_items: actionItems } as any);
+    await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: 'AMBER' });
+    await STORE.appendTrace(body.job_id, { step: 'DECISION', input_ref: parseRes.parse_result_id, output_ref: 'NO_INVOICE_LINES_EXTRACTED', attributedTo: 'run-route:guard' });
+    return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: 'AMBER', action_items: actionItems }, { status: 202 });
+  }
+
   const mergedEvidence = [...((parseRes.normalized as any)?.evidence_candidates ?? [])];
   for (const evFile of evidenceFiles) {
     try {
