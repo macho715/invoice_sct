@@ -1,14 +1,8 @@
 import { notFound } from 'next/navigation';
-import { headers } from 'next/headers';
 
 async function fetchStatus(jobId: string) {
-  let base = process.env.NEXT_PUBLIC_BASE_URL;
-  if (!base) {
-    const h = await headers();
-    const host = h.get('host') ?? 'localhost:3000';
-    const proto = h.get('x-forwarded-proto') ?? 'http';
-    base = `${proto}://${host}`;
-  }
+  const base = process.env.NEXT_PUBLIC_BASE_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
   const r = await fetch(`${base}/api/audit/status?job_id=${jobId}`, { cache: 'no-store' });
   if (!r.ok) return null;
   return r.json() as Promise<{ status: string; verdict: string | null; last_step: string | null }>;
