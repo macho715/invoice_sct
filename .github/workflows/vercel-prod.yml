@@ -57,7 +57,7 @@ jobs:
     if: always() && needs.deploy.result == 'success'
     steps:
       - name: Create deployment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             await github.rest.repos.createDeployment({
