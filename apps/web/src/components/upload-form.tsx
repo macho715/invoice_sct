@@ -17,6 +17,15 @@ export default function UploadForm() {
       fd.set('file', file);
       const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
       const isLarge = file.size > LARGE_FILE_THRESHOLD;
+      // P0-5 interim: the large-upload path (/api/files/ingest/large) is not fully
+      // wired (route requires jobId and its token response has no job_id, so the
+      // redirect lands on /jobs/undefined). Block >4.5MB with a clear message until
+      // it is reimplemented with @vercel/blob/client upload().
+      if (isLarge) {
+        setErr('대용량 업로드(>4.5MB)는 아직 연결되지 않았습니다. 현재는 4.5MB 이하 파일을 사용하세요.');
+        setBusy(false);
+        return;
+      }
       const endpoint = isLarge ? '/api/files/ingest/large' : '/api/files/ingest';
       const fetchOpts: RequestInit = isLarge
         ? {
