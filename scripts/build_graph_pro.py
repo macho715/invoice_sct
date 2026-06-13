@@ -165,7 +165,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;height:100vh;overflow:hidden;font-size:13px;}
   #graph{flex:1;position:relative;}
-  #topbar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;gap:8px;align-items:center;padding:10px 14px;background:linear-gradient(180deg,rgba(12,12,22,.92),rgba(12,12,22,0));pointer-events:none;flex-wrap:wrap;}
+  #topbar{position:absolute;top:0;left:0;right:320px;z-index:5;display:flex;gap:8px;align-items:center;padding:10px 14px;background:linear-gradient(180deg,rgba(12,12,22,.92),rgba(12,12,22,0));pointer-events:none;flex-wrap:wrap;}
   #topbar>*{pointer-events:auto;}
   .pill{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none;transition:.15s;}
   .pill:hover{border-color:var(--accent);color:var(--txt);}
@@ -189,7 +189,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .nl{display:block;padding:4px 7px;margin:2px 0;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid #333;}
   .nl:hover{background:var(--panel2);}
   .nl .rel{color:var(--muted);font-size:10px;}
-  #legend{flex:1;overflow-y:auto;}
+  #legend-sec{display:flex;flex-direction:column;flex:1;min-height:120px;}
+  #legend{flex:1;overflow-y:auto;min-height:60px;}
   .lg{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;}
   .lg .dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
   .lg .ct{color:var(--muted);font-size:11px;margin-left:auto;}
@@ -202,15 +203,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </style>
 </head>
 <body>
-<div id="graph">
-  <div id="topbar">
-    <span class="pill on" id="t-color">색상: 파일타입</span>
-    <span class="pill on" id="t-inf">INFERRED 표시</span>
-    <span class="pill" id="t-bridge">🌉 Bridges 강조</span>
-    <span class="pill" id="t-phys">물리엔진 ON</span>
-    <span class="pill" id="t-fit">전체보기</span>
-    <div id="relbar"></div>
-  </div>
+<div id="graph"></div>
+<div id="topbar">
+  <span class="pill on" id="t-color">색상: 파일타입</span>
+  <span class="pill on" id="t-inf">INFERRED 표시</span>
+  <span class="pill" id="t-bridge">🌉 Bridges 강조</span>
+  <span class="pill" id="t-phys">물리엔진 ON</span>
+  <span class="pill" id="t-fit">전체보기</span>
+  <div id="relbar"></div>
 </div>
 <div id="sidebar">
   <div class="sec"><h3>검색</h3><input id="search" placeholder="노드 검색…" autocomplete="off"><div id="search-results"></div></div>
@@ -233,6 +233,7 @@ let showInferred=true;
 let bridgeMode=false;
 let physics=true;
 const relOff=new Set();      // hidden relations
+const $=id=>document.getElementById(id);   // defined early so async callbacks (setTimeout) never hit TDZ
 
 const visNodes=new vis.DataSet(DATA.nodes.map(n=>nodeView(n)));
 const visEdges=new vis.DataSet(DATA.edges.map((e,i)=>edgeView(e,i)));
@@ -265,10 +266,9 @@ const network=new vis.Network(container,{nodes:visNodes,edges:visEdges},{
 });
 network.once('afterDrawing',()=>network.fit({animation:false}));
 // auto-freeze physics after it settles so the layout stops drifting
-setTimeout(()=>{ if(physics){physics=false;$('t-phys').classList.remove('on');$('t-phys').textContent='물리엔진 OFF';network.setOptions({physics:{enabled:false}});network.fit({animation:true});} },6000);
+setTimeout(()=>{ const tp=$('t-phys'); if(physics&&tp){physics=false;tp.classList.remove('on');tp.textContent='물리엔진 OFF';network.setOptions({physics:{enabled:false}});network.fit({animation:true});} },6000);
 
 // ---- top bar ----
-const $=id=>document.getElementById(id);
 $('t-color').onclick=()=>{colorMode=colorMode==='type'?'community':'type';
   $('t-color').textContent='색상: '+(colorMode==='type'?'파일타입':'커뮤니티');
   $('t-color').classList.toggle('on',true);

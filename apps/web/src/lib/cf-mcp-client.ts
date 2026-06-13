@@ -5,7 +5,8 @@ export interface CfMcpClient {
   validate(jobId: string, payload: { invoice_lines: unknown[]; evidence_index: unknown[]; rule_version?: string }): Promise<{
     sct_trace_id: string;
     cf_mcp_tool_calls: Array<{ tool: string; latency_ms: number; status: 'OK' | 'ERROR' | 'TIMEOUT' }>;
-    type_b_results: Array<{ line_id: string; type_b: string | null }>;
+    type_b_results: Array<{ line_id: string; type_b: string; confidence: number }>;
+    hs_uae_results: Array<{ line_id: string; verdict: 'PASS' | 'AMBER' | 'ZERO'; boe_found: boolean; reason_code: string | null }>;
     rate_checks: Array<{ line_id: string; rate_status: string; validity_status: 'VALID'|'EXPIRED'|'PENDING'|null }>;
     evidence_requirements: Array<{ line_id: string; required_evidence: string[] }>;
     costguard_results: Array<{ line_id: string; band: 'PASS'|'WARN'|'HIGH'|'CRITICAL'; verdict: string; delta_pct: number | null; prism_kernel_proof_ref: string | null; fx_policy_id?: string | null }>;
@@ -100,9 +101,10 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
       const typeB = await callTool<{ classifications: Array<{ line_id: string; type_b: string; sct_code: string; confidence: number }> }>('dryrun_type_b_classify', { lines: classifyLines });
       toolCalls.push({ tool: 'dryrun_type_b_classify', latency_ms: typeB.latency_ms, status: typeB.status });
 
-      const type_b_results: Array<{ line_id: string; type_b: string | null }> = typeB.result.classifications.map(c => ({
+      const type_b_results: Array<{ line_id: string; type_b: string; confidence: number }> = typeB.result.classifications.map(c => ({
         line_id: c.line_id,
-        type_b: c.type_b ?? null
+        type_b: c.type_b ?? 'UNKNOWN',
+        confidence: c.confidence ?? 0.0
       }));
 
       // C-02: dryrun_rate_lookup — one call per line, failures fall back gracefully
@@ -143,6 +145,36 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         }))
       });
       toolCalls.push({ tool: 'check_cost_guard', latency_ms: costguard.latency_ms, status: costguard.status });
+
+      for (const line of processedLines as any[]) {
+        try {
+          const ctb = await callTool<{ type_b: string; confidence: number }>('classify_type_b', { line_id: line.line_id, description: line.description });
+          toolCalls.push({ tool: 'classify_type_b', latency_ms: ctb.latency_ms, status: ctb.status });
+          const idx = type_b_results.findIndex(t => t.line_id === line.line_id);
+          if (idx >= 0) {
+            type_b_results[idx] = { line_id: line.line_id, type_b: ctb.result.type_b, confidence: ctb.result.confidence };
+          } else {
+            type_b_results.push({ line_id: line.line_id, type_b: ctb.result.type_b, confidence: ctb.result.confidence });
+          }
+        } catch {
+          toolCalls.push({ tool: 'classify_type_b', latency_ms: 0, status: 'ERROR' });
+        }
+      }
+
+      const evidenceDocs = (payload.evidence_index as any[] | undefined) ?? [];
+      const hs_uae_results: Array<{ line_id: string; verdict: 'PASS' | 'AMBER' | 'ZERO'; boe_found: boolean; reason_code: string | null }> = [];
+      for (const line of processedLines as any[]) {
+        if (line.charge_code === 'CUSTOMS') {
+          try {
+            const hs = await callTool<{ verdict: 'PASS' | 'AMBER' | 'ZERO'; boe_found: boolean; reason_code: string | null }>('check_hs_uae_compliance', { line_id: line.line_id, evidence_docs: evidenceDocs });
+            toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: hs.latency_ms, status: hs.status });
+            hs_uae_results.push({ line_id: line.line_id, verdict: hs.result.verdict, boe_found: hs.result.boe_found, reason_code: hs.result.reason_code });
+          } catch {
+            toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: 0, status: 'ERROR' });
+            hs_uae_results.push({ line_id: line.line_id, verdict: 'AMBER', boe_found: false, reason_code: 'HS_UAE_TOOL_UNAVAILABLE' });
+          }
+        }
+      }
 
       const doc = await callTool<{ findings: Array<{ lineId: string | null; code: string; severity: 'AMBER' | 'ZERO' }> }>('check_doc_guardian', { jobId, evidence: payload.evidence_index });
       toolCalls.push({ tool: 'check_doc_guardian', latency_ms: doc.latency_ms, status: doc.status });
@@ -190,6 +222,7 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         sct_trace_id,
         cf_mcp_tool_calls: toolCalls,
         type_b_results,
+        hs_uae_results,
         rate_checks,
         evidence_requirements,
         costguard_results,

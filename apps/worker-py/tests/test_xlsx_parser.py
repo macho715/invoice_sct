@@ -55,3 +55,51 @@ def test_raises_when_no_usable_line():
     raw = _make_xlsx(['Description','Qty','Rate','Amount','Currency'], [[None,None,None,None,None]])
     with pytest.raises(ValueError):
         parse_xlsx_bytes(raw, file_id='f1', file_name='inv.xlsx', parser_version='parser-0.1.0')
+
+def test_extracts_header_fields():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Invoice'
+    ws.append(['Invoice No:', 'INV-2026-001'])
+    ws.append(['Vendor:', 'DSV Solutions'])
+    ws.append(['Date:', '02/06/2026'])
+    ws.append([])
+    ws.append(['Description', 'Qty', 'Rate', 'Amount'])
+    ws.append(['THC', 1, 75.0, 75.0])
+    buf = io.BytesIO()
+    wb.save(buf)
+    raw = buf.getvalue()
+    ni = parse_xlsx_bytes(raw, file_id='f1', file_name='inv.xlsx', parser_version='parser-0.1.0')
+    assert ni.invoice_header.invoice_no == 'INV-2026-001'
+    assert ni.invoice_header.vendor == 'DSV Solutions'
+    assert ni.invoice_header.issue_date == '02/06/2026'
+    assert len(ni.invoice_lines) == 1
+
+def test_extracts_header_fields_alt_labels():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Invoice'
+    ws.append(['Inv No', 'INV-999'])
+    ws.append(['Supplier', 'Mammoet'])
+    ws.append(['Issue Date', '2026-03-15'])
+    ws.append([])
+    ws.append(['Description', 'Amount'])
+    ws.append(['TRANSPORT', 500.0])
+    buf = io.BytesIO()
+    wb.save(buf)
+    raw = buf.getvalue()
+    ni = parse_xlsx_bytes(raw, file_id='f2', file_name='inv2.xlsx', parser_version='parser-0.1.0')
+    assert ni.invoice_header.invoice_no == 'INV-999'
+    assert ni.invoice_header.vendor == 'Mammoet'
+    assert ni.invoice_header.issue_date == '2026-03-15'
+
+def test_header_fields_none_when_missing():
+    raw = _make_xlsx(
+        ['Description', 'Qty', 'Rate', 'Amount', 'Currency'],
+        [['TRUCKING', 2, 50.0, 100.0, 'AED']]
+    )
+    ni = parse_xlsx_bytes(raw, file_id='f1', file_name='inv.xlsx', parser_version='parser-0.1.0')
+    assert ni.invoice_header.invoice_no is None
+    assert ni.invoice_header.vendor is None
+    assert ni.invoice_header.issue_date is None
+    assert len(ni.invoice_lines) == 1

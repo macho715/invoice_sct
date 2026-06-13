@@ -9,7 +9,7 @@ describe('MCP Router', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.status).toBe('ok');
-      expect(body.tools).toBe(13);
+      expect(body.tools).toBe(14);
     });
   });
 
@@ -25,7 +25,7 @@ describe('MCP Router', () => {
       const body = await res.json();
       expect(body.jsonrpc).toBe('2.0');
       expect(body.id).toBe(1);
-      expect(body.result.tools).toHaveLength(13);
+      expect(body.result.tools).toHaveLength(14);
 
       const toolNames = body.result.tools.map((t: { name: string }) => t.name);
       const expectedNames = MCP_TOOLS.map(t => t.name);
@@ -108,3 +108,4 @@ describe('MCP Router', () => {
     });
   });
 });
+

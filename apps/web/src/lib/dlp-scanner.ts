@@ -9,7 +9,11 @@ export type DlpViolationType =
   | 'PHONE'
   | 'API_KEY'
   | 'CREDENTIAL'
-  | 'PII';
+  | 'PII'
+  | 'VESSEL_VOYAGE'
+  | 'APPROVAL_TEXT'
+  | 'INTERNAL_AMOUNT'
+  | 'DUPLICATE_INVOICE';
 
 export interface DlpViolation {
   type: DlpViolationType;
@@ -81,6 +85,42 @@ const PATTERNS: PatternEntry[] = [
   {
     type: 'PII',
     pattern: /\b[A-Z]\d{8,9}\b/,
+  },
+  {
+    type: 'VESSEL_VOYAGE',
+    pattern: /\b(?:MV|MT|SS|M[VY])\s+[A-Z][A-Za-z\s]+/,
+  },
+  {
+    type: 'VESSEL_VOYAGE',
+    pattern: /[Vv]oyage\s*(?:No|Number|#)?[:\s]*[A-Z0-9]{4,12}/,
+  },
+  {
+    type: 'VESSEL_VOYAGE',
+    pattern: /[Vv]essel\s*(?:Name)?[:\s]*[A-Z][A-Za-z\s]{3,30}/,
+  },
+  {
+    type: 'APPROVAL_TEXT',
+    pattern: /(?:i\s+approve|approved\s+by|authorized\s+by|electronically\s+signed|digitally\s+signed)/i,
+  },
+  {
+    type: 'APPROVAL_TEXT',
+    pattern: /signature\s*(?:of|by)?[:\s]*[A-Z][a-z]+/i,
+  },
+  {
+    type: 'INTERNAL_AMOUNT',
+    pattern: /(?:internal\s+cost|cost\s+price|purchase\s+price|wholesale|dealer\s+price|net\s+cost)/i,
+  },
+  {
+    type: 'INTERNAL_AMOUNT',
+    pattern: /margin[:\s]*[\d,.]+/i,
+  },
+  {
+    type: 'DUPLICATE_INVOICE',
+    pattern: /(?:duplicate\s+of|dup\s+of|same\s+as\s+inv|copy\s+of\s+invoice|original\s+inv)/i,
+  },
+  {
+    type: 'DUPLICATE_INVOICE',
+    pattern: /(?:already\s+paid|previously\s+billed|resubmit|reissue)/i,
   },
 ];
 

@@ -16,6 +16,12 @@ HEADER_ALIASES: dict[str, list[str]] = {
     'charge_component': ['charge component', 'for_charge_component', 'type', 'type b', 'type_b', 'charge type', 'category']
 }
 
+HEADER_FIELD_LABELS: dict[str, list[str]] = {
+    'invoice_no':  ['invoice no', 'invoice #', 'inv no', 'invoice number'],
+    'vendor':      ['vendor', 'supplier', 'billed by', 'from', 'vendor name', 'supplier name'],
+    'issue_date':  ['date', 'issue date', 'invoice date', 'date of issue'],
+}
+
 def _detect_headers(header_row: list) -> dict[str, int]:
     """Map canonical field ??column index. Returns empty dict if no canonical field found."""
     norm = [str(c or '').strip().lower() for c in header_row]
@@ -26,6 +32,31 @@ def _detect_headers(header_row: list) -> dict[str, int]:
                 out[canon] = i
                 break
     return out
+
+def _detect_header_fields(rows: list, max_scan: int = 10) -> dict[str, str | None]:
+    result: dict[str, str | None] = {'invoice_no': None, 'vendor': None, 'issue_date': None}
+    found: set[str] = set()
+    for r_idx in range(min(max_scan, len(rows))):
+        row = rows[r_idx]
+        for c_idx, cell in enumerate(row):
+            if cell is None:
+                continue
+            text = str(cell).strip().lower().rstrip(':')
+            for field, aliases in HEADER_FIELD_LABELS.items():
+                if field in found:
+                    continue
+                if text in aliases:
+                    value = None
+                    if c_idx + 1 < len(row):
+                        value = _cell_str(row[c_idx + 1])
+                    if value is None and r_idx + 1 < len(rows):
+                        below_row = rows[r_idx + 1]
+                        if c_idx < len(below_row):
+                            value = _cell_str(below_row[c_idx])
+                    if value:
+                        result[field] = value
+                        found.add(field)
+    return result
 
 def _cell_num(cell) -> float | None:
     if cell is None: return None
@@ -44,13 +75,21 @@ def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise ValueError("empty xlsx")
-    header = rows[0]
-    cmap = _detect_headers(list(header))
-    if 'description' not in cmap or 'amount' not in cmap:
+
+    header_fields = _detect_header_fields(rows)
+
+    header_row_idx: int | None = None
+    cmap: dict[str, int] = {}
+    for i in range(min(10, len(rows))):
+        cmap = _detect_headers(list(rows[i]))
+        if 'description' in cmap and 'amount' in cmap:
+            header_row_idx = i
+            break
+    if header_row_idx is None:
         raise ValueError("xlsx missing required columns (description, amount)")
 
     lines: list[InvoiceLine] = []
-    for r_idx, row in enumerate(rows[1:], start=2):
+    for r_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
         desc = _cell_str(row[cmap['description']]) if 'description' in cmap else None
         amt  = _cell_num(row[cmap['amount']])    if 'amount'    in cmap else None
         if desc is None and amt is None:
@@ -79,7 +118,13 @@ def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version
     header_currency = lines[0].currency
     return NormalizedInvoice(
         invoice_id=f"inv_{file_id}",
-        invoice_header=InvoiceHeader(invoice_no=None, vendor=None, issue_date=None, currency=header_currency, invoice_total=None),
+        invoice_header=InvoiceHeader(
+            invoice_no=header_fields.get('invoice_no'),
+            vendor=header_fields.get('vendor'),
+            issue_date=header_fields.get('issue_date'),
+            currency=header_currency,
+            invoice_total=None
+        ),
         invoice_lines=lines,
         evidence_candidates=[],
         parser_confidence=0.9,

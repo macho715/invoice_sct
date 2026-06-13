@@ -24,8 +24,10 @@ import * as check_cost_guard from './check_cost_guard.js';
 import * as check_hs_uae_compliance from './check_hs_uae_compliance.js';
 import * as build_validation_explanation from './build_validation_explanation.js';
 import * as classify_type_b from './classify_type_b.js';
+import * as check_dem_det from './check_dem_det.js';
 
 export {
+  check_dem_det,
   route_question,
   normalize_invoice_lines,
   check_duplicate_invoice,
@@ -47,6 +49,7 @@ export {
 export type McpToolModule = any;
 
 export const ALL_TOOLS: McpToolModule[] = [
+  check_dem_det,
   route_question,
   normalize_invoice_lines,
   check_duplicate_invoice,
@@ -62,8 +65,8 @@ export const ALL_TOOLS: McpToolModule[] = [
   classify_type_b
 ];
 
-if (ALL_TOOLS.length !== 13) {
-  throw new Error(`Expected 13 tools, got ${ALL_TOOLS.length}`);
+if (ALL_TOOLS.length !== 14) {
+  throw new Error(`Expected 14 tools, got ${ALL_TOOLS.length}`);
 }
 
 // Loose schema typing so MCP_TOOLS can be uniformly listed for /tools/list and
@@ -92,7 +95,8 @@ const DESCRIPTIONS: Record<string, string> = {
   check_cost_guard: 'Runs CostGuard numeric-integrity + standard-rate analysis',
   check_hs_uae_compliance: 'Validates HS/UAE customs compliance (BOE + HS code)',
   build_validation_explanation: 'Generates human-readable explanation for a validation finding',
-  classify_type_b: 'Classifies an invoice line into a TYPE-B category (INSPECTION/CUSTOMS/DO/INLAND/THC/DETENTION/STROAGE/OTHERS)'
+  classify_type_b: 'Classifies an invoice line into a TYPE-B category (INSPECTION/CUSTOMS/DO/INLAND/THC/DETENTION/STROAGE/OTHERS)',
+  check_dem_det: 'Checks DEM/DET (demurrage/detention/storage) charge inputs for dates, tariff, free time, invoice, settlement status'
 };
 
 // Build the unified schema map (preserves the legacy ToolInputSchemas contract).
@@ -109,7 +113,8 @@ export const ToolInputSchemas = {
   check_cost_guard: check_cost_guard.CheckCostGuardInputSchema,
   check_hs_uae_compliance: check_hs_uae_compliance.CheckHsUaeComplianceInputSchema,
   build_validation_explanation: build_validation_explanation.BuildValidationExplanationInputSchema,
-  classify_type_b: classify_type_b.ClassifyTypeBInputSchema
+  classify_type_b: classify_type_b.ClassifyTypeBInputSchema,
+  check_dem_det: check_dem_det.CheckDemDetInputSchema
 } as const;
 
 export const MCP_TOOL_LIST = Object.keys(ToolInputSchemas) as Array<keyof typeof ToolInputSchemas>;
@@ -126,3 +131,4 @@ export const MCP_TOOLS: McpToolDefinition[] = ALL_TOOLS.map((m) => {
     module: m
   };
 });
+

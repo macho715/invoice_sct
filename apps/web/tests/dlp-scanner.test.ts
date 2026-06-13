@@ -43,6 +43,30 @@ describe('scanForDlpViolations', () => {
     expect(result.passed).toBe(false);
     expect(result.violations.some(v => v.type === 'SHIPMENT_NUMBER')).toBe(true);
   });
+
+  it('detects vessel voyage patterns', () => {
+    const result = scanForDlpViolations('Vessel: MV Ocean Explorer Voyage No: ABC1234567');
+    expect(result.passed).toBe(false);
+    expect(result.violations.some(v => v.type === 'VESSEL_VOYAGE')).toBe(true);
+  });
+
+  it('detects approval text', () => {
+    const result = scanForDlpViolations('I approve this invoice. Signature of John');
+    expect(result.passed).toBe(false);
+    expect(result.violations.some(v => v.type === 'APPROVAL_TEXT')).toBe(true);
+  });
+
+  it('detects internal amount headers', () => {
+    const result = scanForDlpViolations('Internal Cost for this shipment is margin: 1,250.00');
+    expect(result.passed).toBe(false);
+    expect(result.violations.some(v => v.type === 'INTERNAL_AMOUNT')).toBe(true);
+  });
+
+  it('detects duplicate invoice markers', () => {
+    const result = scanForDlpViolations('This is a duplicate of INV-001 and was already paid');
+    expect(result.passed).toBe(false);
+    expect(result.violations.some(v => v.type === 'DUPLICATE_INVOICE')).toBe(true);
+  });
 });
 
 describe('assertDlpClean', () => {

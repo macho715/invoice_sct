@@ -42,7 +42,7 @@ describe('human-gate evaluator', () => {
   it('evaluates CostGuard HIGH/CRITICAL band trigger (HGT_02)', () => {
     const validation: SctValidationResult = {
       validation_id: 'v1', job_id: 'j1', sct_trace_id: 't1', cf_mcp_tool_calls: [],
-      type_b_results: [], rate_checks: [], evidence_requirements: [],
+      type_b_results: [], hs_uae_results: [], rate_checks: [], evidence_requirements: [],
       costguard_results: [{ line_id: 'l1', band: 'HIGH', verdict: 'ZERO', delta_pct: 10.0 }],
       doc_guardian_results: [], gate_results: [], confidence: 1.0, reason_codes: [], warnings: []
     };
@@ -66,7 +66,7 @@ describe('human-gate evaluator', () => {
   it('evaluates Marine Closure missing evidence block trigger (HGT_05)', () => {
     const validation: SctValidationResult = {
       validation_id: 'v1', job_id: 'j1', sct_trace_id: 't1', cf_mcp_tool_calls: [],
-      type_b_results: [], rate_checks: [], evidence_requirements: [], costguard_results: [],
+      type_b_results: [], hs_uae_results: [], rate_checks: [], evidence_requirements: [], costguard_results: [],
       doc_guardian_results: [{ code: 'MOSB_EVIDENCE_MISSING', severity: 'ZERO' }],
       gate_results: [], confidence: 1.0, reason_codes: [], warnings: []
     };
@@ -98,7 +98,7 @@ describe('human-gate evaluator', () => {
     };
     const validation: SctValidationResult = {
       validation_id: 'v1', job_id: 'j1', sct_trace_id: 't1', cf_mcp_tool_calls: [],
-      type_b_results: [], rate_checks: [],
+      type_b_results: [], hs_uae_results: [], rate_checks: [],
       evidence_requirements: [{ line_id: 'l1', required_evidence: ['COMPLIANCE'] }],
       costguard_results: [], doc_guardian_results: [], gate_results: [], confidence: 1.0, reason_codes: [], warnings: []
     };

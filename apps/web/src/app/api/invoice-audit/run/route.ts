@@ -94,15 +94,20 @@ export async function POST(req: Request): Promise<Response> {
 
   for (const tc of sct.cf_mcp_tool_calls) {
     await STORE.appendTrace(body.job_id, {
-      step: tc.tool === 'check_cost_guard' ? 'COSTGUARD' : tc.tool === 'check_doc_guardian' ? 'DOC_GUARDIAN' : 'VALIDATE',
+      step: tc.tool === 'check_cost_guard' ? 'COSTGUARD' : tc.tool === 'check_doc_guardian' ? 'DOC_GUARDIAN' : tc.tool === 'classify_type_b' ? 'VALIDATE' : tc.tool === 'check_hs_uae_compliance' ? 'VALIDATE' : 'VALIDATE',
       input_ref: parseRes.parse_result_id, output_ref: tc.tool, latency_ms: tc.latency_ms, attributedTo: `cf-mcp:${tc.tool}`
     });
   }
-  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), sct.doc_guardian_results.map(d => ({ line_id: d.line_id, code: d.code, severity: d.severity })));
+  const typeBClassCount = sct.type_b_results.reduce<Record<string, number>>((acc, t) => { acc[t.type_b] = (acc[t.type_b] || 0) + 1; return acc; }, {});
+  const evidenceFindings = [...sct.doc_guardian_results.map(d => ({ line_id: d.line_id, code: d.code, severity: d.severity }))];
+  for (const hs of sct.hs_uae_results) {
+    evidenceFindings.push({ line_id: hs.line_id, code: hs.reason_code ?? 'HS_UAE_CHECK', severity: hs.verdict === 'ZERO' ? 'ZERO' : 'AMBER' });
+  }
+  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), evidenceFindings);
   const normalized = parseRes.normalized as any;
   const invoiceTotal = normalized?.invoice_header?.invoice_total ?? null;
   const lineAuditTotal = (normalized?.invoice_lines as any[] | undefined)?.reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0) ?? 0;
-  const typeBTotal: number | null = null;
+  const typeBTotal: number | null = Object.keys(typeBClassCount).length > 0 ? Object.values(typeBClassCount).reduce((a, b) => a + b, 0) : null;
   const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal);
   let finalVerdict = isPdfLowConf ? 'AMBER' : gate.verdict;
   const actionItems = [...(gate.action_items || [])];

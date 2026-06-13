@@ -86,7 +86,8 @@ export const SctValidationResultSchema = z.object({
     request_ref: z.string().nullish(),
     response_ref: z.string().nullish()
   })),
-  type_b_results: z.array(z.object({ line_id: z.string(), type_b: z.string().nullish() })),
+  type_b_results: z.array(z.object({ line_id: z.string(), type_b: z.string(), confidence: z.number() })),
+  hs_uae_results: z.array(z.object({ line_id: z.string(), verdict: VerdictSchema, boe_found: z.boolean(), reason_code: z.string().nullish() })),
   rate_checks: z.array(z.object({ line_id: z.string(), rate_status: z.string(), validity_status: z.enum(['VALID','EXPIRED','PENDING']).nullish() })),
   evidence_requirements: z.array(z.object({ line_id: z.string(), required_evidence: z.array(z.string()) })),
   costguard_results: z.array(z.object({
