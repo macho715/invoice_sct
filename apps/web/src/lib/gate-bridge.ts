@@ -27,6 +27,13 @@ export function bandToVerdict(band: CostGuardBand): Verdict {
   }
 }
 
+export function checkReconciliation(invoiceTotal: number | null, lineAuditTotal: number, typeBTotal: number | null, tolerance: number = 0.01): { ok: boolean; verdict: Verdict; reason: string | null } {
+  if (invoiceTotal === null) return { ok: false, verdict: 'AMBER', reason: 'FINAL_SUBTOTAL_MISSING' };
+  if (Math.abs(invoiceTotal - lineAuditTotal) > tolerance) return { ok: false, verdict: 'AMBER', reason: 'LINE_TOTAL_MISMATCH' };
+  if (typeBTotal !== null && Math.abs(lineAuditTotal - typeBTotal) > tolerance) return { ok: false, verdict: 'ZERO', reason: 'TYPEB_TOTAL_MISMATCH' };
+  return { ok: true, verdict: 'PASS', reason: null };
+}
+
 export function buildGateResult(jobId: string, lines: CostGuardLine[], evidenceFindings: EvidenceFinding[] = []) {
   const line_results = lines.map(l => ({
     line_id: l.line_id,

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createJobStore, STORE } from '@/lib/job-store';
 import { createParserClient } from '@/lib/parser-client';
 import { createCfMcpClient, McpUnavailableError } from '@/lib/cf-mcp-client';
-import { buildGateResult } from '@/lib/gate-bridge';
+import { buildGateResult, checkReconciliation } from '@/lib/gate-bridge';
 import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
 import { getSignedDownloadUrl } from '@/lib/blob';
 
@@ -99,8 +99,24 @@ export async function POST(req: Request): Promise<Response> {
     });
   }
   const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), sct.doc_guardian_results.map(d => ({ line_id: d.line_id, code: d.code, severity: d.severity })));
-  const finalVerdict = isPdfLowConf ? 'AMBER' : gate.verdict;
+  const normalized = parseRes.normalized as any;
+  const invoiceTotal = normalized?.invoice_header?.invoice_total ?? null;
+  const lineAuditTotal = (normalized?.invoice_lines as any[] | undefined)?.reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0) ?? 0;
+  const typeBTotal: number | null = null;
+  const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal);
+  let finalVerdict = isPdfLowConf ? 'AMBER' : gate.verdict;
   const actionItems = [...(gate.action_items || [])];
+  if (!recon.ok && recon.verdict !== 'PASS') {
+    const VERDICT_RANK: Record<string, number> = { PASS: 0, AMBER: 1, ZERO: 2, FAILED: 3 };
+    if (VERDICT_RANK[recon.verdict] > VERDICT_RANK[finalVerdict]) finalVerdict = recon.verdict;
+    actionItems.push({
+      action_id: `act_recon_${body.job_id}`,
+      severity: recon.verdict,
+      line_id: '',
+      issue_type: recon.reason ?? 'RECONCILIATION',
+      required_action: recon.verdict === 'ZERO' ? 'TYPE-B total mismatch — Contract/Admin review required' : 'Line audit total mismatch — review line items'
+    });
+  }
   if (isPdfLowConf) {
     // P3C §6.2: push explicit action per plan snippet
     actionItems.push({

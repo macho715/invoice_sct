@@ -13,10 +13,10 @@ def test_passes_within_tolerance_0_01():
     validate_numeric_integrity([line])
     assert line.numeric_integrity_status == 'PASS'
 
-def test_amber_when_exceeds_tolerance():
+def test_zero_when_exceeds_tolerance():
     line = InvoiceLine(line_id='l1', description='TRUCKING', currency='AED', amount=110.0, qty=2, rate=50.0)
     validate_numeric_integrity([line])
-    assert line.numeric_integrity_status == 'AMBER'
+    assert line.numeric_integrity_status == 'ZERO'
     assert line.numeric_delta == 10.0
 
 def test_skips_when_qty_or_rate_missing():
