@@ -97,21 +97,22 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
       const route = await callTool<{ domain: string; requiredCorpus: string[] }>('route_question', { question: `audit:${jobId}`, userRole: 'ops_user' });
       toolCalls.push({ tool: 'route_question', latency_ms: route.latency_ms, status: route.status });
 
-      // C-02: dryrun_type_b_classify — classify each line into SCT Type-B category
-      const classifyLines = processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description }));
-      const typeB = await callTool<{ classifications: Array<{ line_id: string; type_b: string; sct_code: string; confidence: number }> }>('classify_type_b', { lines: classifyLines });
-      toolCalls.push({ tool: 'classify_type_b', latency_ms: typeB.latency_ms, status: typeB.status });
+      const type_b_results: Array<{ line_id: string; type_b: string; confidence: number }> = [];
 
-      const type_b_results: Array<{ line_id: string; type_b: string; confidence: number }> = typeB.result.classifications.map(c => ({
-        line_id: c.line_id,
-        type_b: c.type_b ?? 'UNKNOWN',
-        confidence: c.confidence ?? 0.0
-      }));
+      let batchClassifications: Array<{ line_id: string; type_b: string; sct_code: string; confidence: number }> = [];
+      try {
+        const classifyLines = processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description }));
+        const typeB = await callTool<{ classifications: Array<{ line_id: string; type_b: string; sct_code: string; confidence: number }> }>('classify_type_b', { lines: classifyLines });
+        toolCalls.push({ tool: 'classify_type_b', latency_ms: typeB.latency_ms, status: typeB.status });
+        batchClassifications = typeB.result?.classifications ?? [];
+      } catch {
+        toolCalls.push({ tool: 'classify_type_b', latency_ms: 0, status: 'ERROR' });
+      }
 
       // C-02: dryrun_rate_lookup — one call per line, failures fall back gracefully
       const rate_checks: Array<{ line_id: string; rate_status: string; validity_status: 'VALID'|'EXPIRED'|'PENDING'|null }> = [];
       for (const line of processedLines as any[]) {
-        const classEntry = typeB.result.classifications.find(c => c.line_id === line.line_id);
+        const classEntry = batchClassifications.find(c => c.line_id === line.line_id);
         const charge = line.description ?? classEntry?.type_b ?? '';
         const unit = line.unit ?? 'per shipment';
         try {
@@ -190,7 +191,7 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
       // C-02: ontology_evidence_map — called once with all distinct SCT codes from type_b results
       const evidence_requirements: Array<{ line_id: string; required_evidence: string[] }> = [];
       const distinctSctCodes = [...new Set(
-        typeB.result.classifications
+        batchClassifications
           .map(c => c.sct_code)
           .filter((code): code is string => Boolean(code))
       )];
