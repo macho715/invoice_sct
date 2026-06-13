@@ -4,6 +4,7 @@ import { createParserClient } from '@/lib/parser-client';
 import { createCfMcpClient, McpUnavailableError } from '@/lib/cf-mcp-client';
 import { buildGateResult } from '@/lib/gate-bridge';
 import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
+import { getSignedDownloadUrl } from '@/lib/blob';
 
 export const runtime = 'nodejs';
 void createJobStore;
@@ -26,11 +27,12 @@ export async function POST(req: Request): Promise<Response> {
   const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? 'http://127.0.0.1:8000', token: process.env.PARSER_WORKER_TOKEN ?? 'dev' });
   let parseRes;
   try {
+    const blobUrl = await getSignedDownloadUrl(file.blob_ref);
     const basePayload = {
       blob_ref: file.blob_ref, file_id: file.file_id, job_id: body.job_id,
       file_type: file.file_type as 'xlsx' | 'md' | 'txt' | 'pdf',
       parser_version: job.parser_version,
-      blob_url: (file as { blob_url?: string }).blob_url ?? `http://placeholder/${file.blob_ref}`
+      blob_url: blobUrl
     };
     if (file.file_type === 'pdf') {
       parseRes = await parser.parsePdfText(basePayload);  // P3B
@@ -39,6 +41,7 @@ export async function POST(req: Request): Promise<Response> {
     }
   } catch (e) {
     const msg = (e as Error).message || '';
+    await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
     if (msg.includes('PARSE_PDF_UNSUPPORTED') || msg.includes('PARSE_PDF_LOW_CONFIDENCE')) {
       const code: ErrorCode = msg.includes('PARSE_PDF_UNSUPPORTED') ? 'PARSE_PDF_UNSUPPORTED' : 'PARSE_PDF_LOW_CONFIDENCE';
       return err(code, msg);

@@ -28,28 +28,50 @@ def parse(req: ParseRequest) -> ParseResponse:
         raise HTTPException(status_code=502, detail=f'BLOB_FETCH_FAILED: {e!s}')
 
     source_data: list[SourceDataRow] = []
-    if req.file_type == 'xlsx':
-        ni = parse_xlsx_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
-    elif req.file_type == 'md':
-        ni = parse_md_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
-    elif req.file_type == 'txt':
-        ni = parse_txt_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
-    elif req.file_type == 'pdf':
-        # P3A: pdfplumber extraction -> adapt to Normalized (evidence + conf). Full PdfParseResponse available for P3B+ merge/trace.
-        pdf_res = parse_pdf_text_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
-        if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) or 'PDF_TOO_LARGE' in (pdf_res.parser_issues or []):
-            # P3B §5.3 / §4.3: encrypted PDF -> 415 PARSE_PDF_UNSUPPORTED (large -> 422)
-            status = 415 if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) else 422
-            raise HTTPException(status_code=status, detail='PARSE_PDF_UNSUPPORTED')
-        # Basic adaptation for P3A (P3B will do richer merge to lines + pdf_metadata)
-        ni = NormalizedInvoice(
-            invoice_id=f"inv_{req.file_id}",
-            invoice_header=InvoiceHeader(invoice_no=None, vendor=None, issue_date=None, currency='AED', invoice_total=None),
-            invoice_lines=[],
-            evidence_candidates=pdf_res.evidence_candidates or [],
-            parser_confidence=pdf_res.parser_confidence,
-            parser_version=pdf_res.parser_version,
-        )
+    try:
+        if req.file_type == 'xlsx':
+            ni = parse_xlsx_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
+        elif req.file_type == 'md':
+            ni = parse_md_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
+        elif req.file_type == 'txt':
+            ni = parse_txt_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
+        elif req.file_type == 'pdf':
+            # P3A: pdfplumber extraction -> adapt to Normalized (evidence + conf). Full PdfParseResponse available for P3B+ merge/trace.
+            pdf_res = parse_pdf_text_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
+            if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) or 'PDF_TOO_LARGE' in (pdf_res.parser_issues or []):
+                # P3B §5.3 / §4.3: encrypted PDF -> 415 PARSE_PDF_UNSUPPORTED (large -> 422)
+                status = 415 if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) else 422
+                raise HTTPException(status_code=status, detail='PARSE_PDF_UNSUPPORTED')
+            # Basic adaptation for P3A (P3B will do richer merge to lines + pdf_metadata)
+            ni = NormalizedInvoice(
+                invoice_id=f"inv_{req.file_id}",
+                invoice_header=InvoiceHeader(invoice_no=None, vendor=None, issue_date=None, currency='AED', invoice_total=None),
+                invoice_lines=[],
+                evidence_candidates=pdf_res.evidence_candidates or [],
+                parser_confidence=pdf_res.parser_confidence,
+                parser_version=pdf_res.parser_version,
+            )
+        elif req.file_type == 'pdf_json':
+            from app.parsers.pdf_json import parse_pdf_json_bytes
+            pdf_res = parse_pdf_json_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
+            if 'PDF_JSON_PARSE_FAILED' in (pdf_res.parser_issues or []):
+                raise HTTPException(status_code=422, detail='PARSE_PDF_JSON_FAILED')
+            ni = NormalizedInvoice(
+                invoice_id=f"inv_{req.file_id}",
+                invoice_header=InvoiceHeader(invoice_no=None, vendor=None, issue_date=None, currency='AED', invoice_total=None),
+                invoice_lines=[],
+                evidence_candidates=pdf_res.evidence_candidates or [],
+                parser_confidence=pdf_res.parser_confidence,
+                parser_version=pdf_res.parser_version,
+            )
+        else:
+            raise HTTPException(status_code=422, detail=f'UNSUPPORTED_FILE_TYPE: {req.file_type}')
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f'PARSE_XLSX_FAILED: {e!s}') from e
+
+    if req.file_type == 'pdf':
         # Phase 3 reviewer feedback + domestic fullset + SHPT 01 folder 이식: 완전 pdf_source_data population from actual text_spans + SHPT doc mapping
         # Ported from 01_DSV_SHPT rules_enhanced/joiners/enhanced_audit: SHPT shipment doc mapping (HVDC-ADOPT pattern, doc_type BOE/DO/DN, portal/gate metadata)
         for span in (pdf_res.text_spans or []):
@@ -75,19 +97,7 @@ def parse(req: ParseRequest) -> ParseResponse:
         # (keeps ParseResponse shape for now; P3B+ can evolve to richer payload)
         # Note: pdf details (spans/tables/ issues / is_text_based / page_count) carried in pdf_res for client that asks pdf-specific.
         # For now, to keep ParseResponse shape, we rely on evidence + confidence in normalized. P3C trace will use page info via updated paths.
-    elif req.file_type == 'pdf_json':
-        from app.parsers.pdf_json import parse_pdf_json_bytes
-        pdf_res = parse_pdf_json_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
-        if 'PDF_JSON_PARSE_FAILED' in (pdf_res.parser_issues or []):
-            raise HTTPException(status_code=422, detail='PARSE_PDF_JSON_FAILED')
-        ni = NormalizedInvoice(
-            invoice_id=f"inv_{req.file_id}",
-            invoice_header=InvoiceHeader(invoice_no=None, vendor=None, issue_date=None, currency='AED', invoice_total=None),
-            invoice_lines=[],
-            evidence_candidates=pdf_res.evidence_candidates or [],
-            parser_confidence=pdf_res.parser_confidence,
-            parser_version=pdf_res.parser_version,
-        )
+    if req.file_type == 'pdf_json':
         for span in (pdf_res.text_spans or []):
             if not getattr(span, 'text', None):
                 continue
@@ -102,9 +112,6 @@ def parse(req: ParseRequest) -> ParseResponse:
                 pdf_page=span.page,
                 text_span_hash=f"sha256:{h}",
             ))
-    else:
-        raise HTTPException(status_code=422, detail=f'UNSUPPORTED_FILE_TYPE: {req.file_type}')
-
     validate_numeric_integrity(ni.invoice_lines)
 
     parse_result_id = 'pr_' + hashlib.sha1(f"{req.job_id}|{req.file_id}|{req.parser_version}".encode()).hexdigest()[:12]

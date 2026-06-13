@@ -76,9 +76,19 @@ export async function getSignedDownloadUrl(blobRef: string): Promise<string> {
 
   if (blobRef.startsWith('blob:')) {
     const pathname = blobRef.slice('blob:'.length);
-    const { getDownloadUrl } = await import('@vercel/blob');
-    const url = await getDownloadUrl(pathname);
-    return url;
+    const { issueSignedToken, presignUrl } = await import('@vercel/blob');
+    const access = resolveBlobAccess();
+    const token = await issueSignedToken({
+      pathname,
+      operations: ['get'],
+      validUntil: Date.now() + 15 * 60 * 1000,
+    });
+    const { presignedUrl } = await presignUrl(token, {
+      operation: 'get',
+      pathname,
+      access,
+    });
+    return presignedUrl;
   }
 
   throw new Error(`Unknown blob_ref scheme: ${blobRef}`);
