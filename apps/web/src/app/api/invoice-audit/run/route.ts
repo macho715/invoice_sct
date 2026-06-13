@@ -121,6 +121,15 @@ export async function POST(req: Request): Promise<Response> {
       rule_version: job.rule_version
     });
   } catch (e: any) {
+    // Mirror the parse catch: persist FAILED so the job does not get stuck in
+    // VALIDATING (which would reject re-runs with "cannot run from status VALIDATING").
+    await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
+    await STORE.appendTrace(body.job_id, {
+      step: 'VALIDATE',
+      input_ref: parseRes.parse_result_id,
+      output_ref: e?.code ?? 'VALIDATION_FAILED',
+      attributedTo: 'cf-mcp:error'
+    }).catch(() => undefined);
     if (e instanceof McpUnavailableError) return err('MCP_UNAVAILABLE', e.message);
     const code = e.code || 'VALIDATION_FAILED';
     return err(code as ErrorCode, e.message);
