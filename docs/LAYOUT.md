@@ -231,6 +231,23 @@ The MCP validation tool set is under `apps/mcp-server/src/tools/`.
 - `check_fx_policy.ts`
 - `check_cost_guard.ts`
 - `build_validation_explanation.ts`
+- `classify_type_b.ts` (2026-06-13: Track 1 TYPE-B priority port)
+- `check_hs_uae_compliance.ts` (2026-06-13: BOE + HS code validation)
+- `check_dem_det.ts` (2026-06-13: DEM/DET evidence check)
+
+Total: 14 tools.
+
+### DSV Waybill Parser (2026-06-13)
+
+- `apps/worker-py/app/parsers/dsv_waybill.py` — DSV Waybill field extraction (8 core functions, 28 tests)
+- `apps/worker-py/tests/fixtures/dsv-waybill-001.txt` — DSV fixture
+- `apps/worker-py/tests/test_dsv_waybill.py` — 28 DSV-specific tests
+
+### SESS-005 Cross-Validation Artifacts
+
+- `20260613_cross_validation_report.md` — Track 1 vs Track 2 gate coverage report
+- `20260613_dsv_waybill_port_plan.md` — DSV parser port implementation plan
+- `20260613_p2_gap_design.md` — P2 gap design document
 
 ### Local and Generated Files
 

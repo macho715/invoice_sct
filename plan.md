@@ -1,5 +1,8 @@
 # shpiment 원본 동기화 계획
 
+> **Status (2026-06-13)**: SESS-005 완료. Cross-validation 완료, P0/P1/P2 13갭 해결.
+> Track 1 9게이트 중 8게이트 FULL 정합. 잔여 1건: Harness/RTM (P3, CI 의존).
+
 ## Phase 1: Business Review
 
 ### 1.1 문제 정의
@@ -39,3 +42,17 @@
 ### 1.4 승인 요청
 
 [ ] Phase 1 승인
+
+## SESS-005 Execution Summary (2026-06-13)
+
+```mermaid
+flowchart LR
+  PLAN[shpiment sync plan] --> CV[Cross-validation]
+  CV --> P0[P0: rate + evidence fix]
+  CV --> P1[P1: numeric + recon + seed]
+  CV --> P2[P2: DSV port + TYPE-B + HS/UAE + DLP]
+  P0 --> QA[368 tests PASS]
+  P1 --> QA
+  P2 --> QA
+  QA --> DONE[8/9 gates FULL]
+```

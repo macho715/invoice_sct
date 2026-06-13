@@ -222,3 +222,52 @@ These tools support the invoice audit gate model. ZERO findings block final appr
 - Use signed download URLs when the worker fetches private Blob objects.
 - Do not paste original invoice text, signed URLs, Blob object keys, TRN, BOE, BL, container numbers, raw rates, emails, phone numbers, approval text, or tokens into docs.
 - Treat workbook exports as controlled audit artifacts. Keep the 13-sheet contract intact.
+
+## SESS-005 Cross-Validation Update — 2026-06-13
+
+This section reflects the SESS-005 cross-validation and P0/P1/P2 gap-patching changes. Earlier sections remain as historical context.
+
+### Updated MCP Tools (14)
+
+Expanded from 11 to 14 tools. New tools:
+
+| Tool | Purpose | Track 1 Gate |
+|------|---------|-------------|
+| `classify_type_b` | 8-class priority TYPE-B classification | Ontology/Type-B Matrix |
+| `check_hs_uae_compliance` | BOE presence + HS code validation | Gate 6: HS/UAE |
+| `check_dem_det` | DEM/DET evidence requirement check | Gate 7: DEM/DET |
+
+### Updated Gate Bridge
+
+- `buildGateResult` now accepts `evidenceFindings` (doc_guardian → ZERO/AMBER escalation)
+- `checkReconciliation()` enforces 3-way tie-out: Final Subtotal = Line_Audit = TYPE-B (±0.01)
+- `checkDlpExport()` blocks export on DLP violations (16 P2 categories)
+
+### Updated Parsers
+
+- DSV Waybill parser (`dsv_waybill.py`): 8 core functions ported from Track 1 v1.4.1, 28 tests
+- xlsx parser: InvoiceHeader extraction (invoice_no, vendor, issue_date) + 4 new columns (shipment_ref, job_number, rate_basis, for_charge_component)
+
+### Verification Baseline (2026-06-13)
+
+- Worker-PY: 95 tests PASS
+- MCP Server: 186 tests PASS (16 test files, 14 tools)
+- Web: 107 tests PASS, typecheck 0 errors
+- Cross-validation: Track 1 9 gates → 8 FULL, 1 P3
+
+```mermaid
+flowchart TB
+  subgraph "SESS-005 Changes"
+    DSV[DSV Waybill Parser] --> PT[pdf_text.py enrichment]
+    TB[classify_type_b] --> CF[cf-mcp-client pipeline]
+    HS[check_hs_uae_compliance] --> CF
+    DD[check_dem_det] --> MCP[MCP Server 14 tools]
+    GB[gate-bridge] --> RECON[3-way reconciliation]
+    GB --> DLP[DLP export gate]
+    XL[xlsx header extraction] --> NI[NormalizedInvoice]
+  end
+  CF --> V[Validation Flow]
+  V --> GB
+  GB --> VERDICT[PASS/AMBER/ZERO]
+  DLP --> EXP[Export Gate]
+```
