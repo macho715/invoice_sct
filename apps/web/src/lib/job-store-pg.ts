@@ -22,7 +22,8 @@ function getPool(): PgPool | null {
     connectionString,
     max: Number(process.env.PG_POOL_MAX ?? 10),
     idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 30_000),
-    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 5_000)
+    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 5_000),
+    ssl: connectionString.includes('sslmode=require') || connectionString.includes('neon.tech') ? { rejectUnauthorized: false } : undefined
   });
 
   _pool.on('error', (err) => {
@@ -30,6 +31,20 @@ function getPool(): PgPool | null {
   });
 
   return _pool;
+}
+
+export async function verifyPgConnection(): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return false;
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    return true;
+  } catch (err) {
+    console.error('[job-store-pg] connection verification failed:', err);
+    return false;
+  }
 }
 
 export async function closePgPool(): Promise<void> {

@@ -159,14 +159,22 @@ export function createJobStore(): JobStore {
       if (!j) return undefined;
       const next: Job = { ...j, ...patch, updated_at: nowIso() };
       jobs.set(jobId, next);
+      await syncJobToMcp(next);
       return next;
     },
     async addSourceFile(jobId, sf) {
       const arr = files.get(jobId) ?? [];
       arr.push(sf);
       files.set(jobId, arr);
+      await callJobStoreTool('save_job_store_data', { entityType: 'source_files', jobId, data: { files: arr } });
     },
-    async listSourceFiles(jobId) { return files.get(jobId) ?? []; },
+    async listSourceFiles(jobId) {
+      const local = files.get(jobId);
+      if (local && local.length > 0) return local;
+      const mcpData = await callJobStoreTool<{ result?: { files: SourceFile[] } }>('get_job_store_data', { entityType: 'source_files', jobId });
+      if (mcpData?.result?.files) return mcpData.result.files;
+      return local ?? [];
+    },
     async appendTrace(jobId, t) {
       const entry: AuditTraceEntry = {
         trace_id: newId('trace'),
