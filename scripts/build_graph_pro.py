@@ -220,6 +220,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div id="stats"></div>
 </div>
 <script>
+window.onerror=function(m,src,ln,col,err){var s=document.getElementById('stats');if(s){s.style.color='#ff6b6b';s.style.whiteSpace='normal';s.textContent='JS ERROR: '+m+' @line '+ln+':'+col;}return false;};
 const DATA = __DATA__;
 const TYPE_COLORS = DATA.typeColors;
 const byId = Object.fromEntries(DATA.nodes.map(n=>[n.id,n]));

@@ -1,0 +1,41 @@
+DSV SOLUTIONS - ROAD FREIGHT
+
+Delivery Note/Waybill # 0126-04466AUH
+
+Routing and Destination
+Loading Address: DSV Mussafah Yard M44
+Destination: Mirfa Site
+
+CONSIGNMENT INFORMATION
+Order Number: 0126-04466AUH
+Job Number: HVDC-DSV-HE-MOSB-335
+PO Number: PO-2026-001234
+Loading Point: DSV Mussafah Yard
+Loading Country: UAE
+
+Printed Date: 02/06/2026
+DO #: DO-2026-005678
+DO Validity: 02/06/2026
+Cust. Ref. #: CUST-887766
+BOL #: **[REDACTED-BL]**
+
+Req. Truck Type: Flatbed 40ft
+Head Plate: **[REDACTED-VEHICLE]**
+Trailer Plate: **[REDACTED-VEHICLE]**
+Trailer Type: Flatbed
+Driver Name: **[REDACTED-PII]**
+Employee #: **[REDACTED-PII]**
+
+Trip No.: TRIP-2026-0445
+
+Arrival for Loading Date/Time: 02/06/2026 08:30
+Loading Started Date/Time: 02/06/2026 09:15
+Loading Finish Date/Time: 02/06/2026 11:45
+Asset Release Date & Time: 02/06/2026 12:00
+
+Arrival for Offloading Date/Time: 02/06/2026 14:30
+Offloading Started Date/Time: 02/06/2026 14:45
+Offloading Ended Date/Time: 02/06/2026 16:30
+Asset Release Date & Time: 02/06/2026 16:45
+
+HVDC-ADOPT-MOSB-335

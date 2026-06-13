@@ -13,6 +13,8 @@ from io import BytesIO
 from statistics import mean
 from typing import Optional, Dict, Any
 
+from app.parsers.dsv_waybill import is_dsv_waybill_text, parse_dsv_waybill_from_text
+
 import pdfplumber
 
 from app.schemas import (
@@ -76,6 +78,7 @@ def parse_pdf_text_bytes(
     text_spans: list[PdfTextSpan] = []
     table_candidates: list[PdfTableCandidate] = []
     evidence: list[EvidenceCandidate] = []
+    all_page_texts: list[str] = []
     page_confs: list[float] = []
     is_text_based = False
     page_count = 0
@@ -99,6 +102,7 @@ def parse_pdf_text_bytes(
             page_count = len(pdf.pages)
             for p_idx, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text() or ""
+                all_page_texts.append(text)
                 chars = getattr(page, "chars", []) or []
                 if text.strip():
                     is_text_based = True
@@ -151,6 +155,48 @@ def parse_pdf_text_bytes(
                 except Exception:
                     # table extraction optional; continue
                     pass
+
+            full_text = "\n".join(all_page_texts)
+            if is_dsv_waybill_text(full_text):
+                parsed = parse_dsv_waybill_from_text(full_text)
+                fields = parsed.get("fields", {}) or {}
+                for key in ("waybill_no", "printed_date", "do_no", "cust_ref", "bol_no", "order_no", "job_no", "po_no", "head_plate", "trailer_plate", "driver_name", "trip_no"):
+                    value = fields.get(key)
+                    if value is not None:
+                        evidence.append(
+                            EvidenceCandidate(
+                                source_file_id=file_id,
+                                text_span=str(value),
+                                matched_reference=str(value)[:100],
+                                confidence=0.85,
+                                doc_kind="DSV_WAYBILL",
+                            )
+                        )
+                lane = parsed.get("lane", {}) or {}
+                for lane_key in ("origin_raw", "destination_raw", "origin_norm", "destination_norm"):
+                    value = lane.get(lane_key)
+                    if value is not None:
+                        evidence.append(
+                            EvidenceCandidate(
+                                source_file_id=file_id,
+                                text_span=str(value),
+                                matched_reference=str(value)[:100],
+                                confidence=0.85,
+                                doc_kind="DSV_WAYBILL",
+                            )
+                        )
+                timeline = parsed.get("timeline", {}) or {}
+                for tl_key, tl_value in timeline.items():
+                    if tl_value is not None:
+                        evidence.append(
+                            EvidenceCandidate(
+                                source_file_id=file_id,
+                                text_span=str(tl_value),
+                                matched_reference=str(tl_value)[:100],
+                                confidence=0.85,
+                                doc_kind="DSV_WAYBILL",
+                            )
+                        )
 
     except Exception as e:
         msg = str(e).lower()
