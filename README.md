@@ -18,6 +18,8 @@ The MVP has working local components for upload, job status, parser dispatch, va
 
 Production deployment uses Vercel for the web app, Vercel Blob for file storage, and Neon Postgres through `DATABASE_URL` for persistence.
 
+**Live**: [sct-ontology-invoice-audit.vercel.app](https://sct-ontology-invoice-audit-bf6vjnjbi-chas-projects-08028e73.vercel.app)
+
 GitHub Actions release gates may be skipped when billing prevents CI execution. In that case, run the local checks listed below and record the result in the handoff or release notes.
 
 ## Repository Layout
