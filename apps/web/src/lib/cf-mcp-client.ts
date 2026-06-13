@@ -36,7 +36,7 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
       try {
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'accept': 'application/json, text/event-stream' },
           body: JSON.stringify({ jsonrpc: '2.0', id: randomUUID(), method: 'tools/call', params: { name, arguments: args } }),
           signal: controller.signal
         });
