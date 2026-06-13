@@ -1,0 +1,606 @@
+{
+  "gpts_excel_file_defaults": {
+    "apply_first": true,
+    "priority": "must_apply_before_creating_any_excel_sheet_or_table",
+    "font": {
+      "family": "Calibri",
+      "size": 10
+    },
+    "alignment": {
+      "horizontal": "center",
+      "vertical": "middle"
+    },
+    "number_formats": {
+      "thousands_decimal": "#,##0.00",
+      "decimal": "0.00",
+      "date": "yyyy-mm-dd",
+      "date_example": "2026-05-02"
+    },
+    "layout": {
+      "row_height": "autofit",
+      "column_width": "autofit",
+      "wrap_text": false
+    },
+    "korean_instruction": "GPTS 엑셀파일 제작시 글자 Calibri, 글자크기 10, 텍스트 맞춤 가로 가운데/세로 가운데, 숫자 형식 1,234.00 및 123.00, 날짜 형식 2026-05-02, 행높이 자동 맞춤, 열너비 자동 맞춤, 자동줄바꿈 사용하지 않음.",
+    "english_instruction": "When creating GPTS Excel files, always use Calibri font, font size 10, horizontal center alignment, vertical middle alignment, number formats 1,234.00 and 123.00, date format yyyy-mm-dd such as 2026-05-02, autofit row height, autofit column width, and do not use wrap text.",
+    "md_as_pdf_policy": "Treat .md/.markdown POD files as PDF-equivalent text evidence (MD_AS_PDF_TEXT).",
+    "fixed_output_policy": "All generated workbooks must apply this format profile and fixed items column order."
+  },
+  "generated_at": "2026-06-07T12:33:07Z",
+  "file_name_suggestion": "table_structure.json",
+  "purpose": "Replicate the workbook table structure with the same sheet names, ranges, column order, and header names.",
+  "copy_instruction": "Copy all values from column B except row 1, join with line breaks, and save as table_structure.json.",
+  "workbook_structure": [
+    {
+      "sheet_name": "items",
+      "used_range": "items!A1:BF29",
+      "row_count": 29,
+      "column_count": 58,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "A",
+          "field_name": "S/N"
+        },
+        {
+          "index": 2,
+          "excel_column": "B",
+          "field_name": "shipment_ref"
+        },
+        {
+          "index": 3,
+          "excel_column": "C",
+          "field_name": "Job #"
+        },
+        {
+          "index": 4,
+          "excel_column": "D",
+          "field_name": "Operation Type"
+        },
+        {
+          "index": 5,
+          "excel_column": "E",
+          "field_name": "origin"
+        },
+        {
+          "index": 6,
+          "excel_column": "F",
+          "field_name": "destination"
+        },
+        {
+          "index": 7,
+          "excel_column": "G",
+          "field_name": "qty"
+        },
+        {
+          "index": 8,
+          "excel_column": "H",
+          "field_name": "vehicle"
+        },
+        {
+          "index": 9,
+          "excel_column": "I",
+          "field_name": "Applied rate"
+        },
+        {
+          "index": 10,
+          "excel_column": "J",
+          "field_name": "Rate (AED)"
+        },
+        {
+          "index": 11,
+          "excel_column": "K",
+          "field_name": "rate_usd"
+        },
+        {
+          "index": 12,
+          "excel_column": "L",
+          "field_name": "Amount (US$)"
+        },
+        {
+          "index": 13,
+          "excel_column": "M",
+          "field_name": "Total (US$)"
+        },
+        {
+          "index": 14,
+          "excel_column": "N",
+          "field_name": "rate_usd_input"
+        },
+        {
+          "index": 15,
+          "excel_column": "O",
+          "field_name": "rate_aed_input"
+        },
+        {
+          "index": 16,
+          "excel_column": "P",
+          "field_name": "distance_km"
+        },
+        {
+          "index": 17,
+          "excel_column": "Q",
+          "field_name": "unit"
+        },
+        {
+          "index": 18,
+          "excel_column": "R",
+          "field_name": "origin_norm"
+        },
+        {
+          "index": 19,
+          "excel_column": "S",
+          "field_name": "origin_norm_source"
+        },
+        {
+          "index": 20,
+          "excel_column": "T",
+          "field_name": "destination_norm"
+        },
+        {
+          "index": 21,
+          "excel_column": "U",
+          "field_name": "destination_norm_source"
+        },
+        {
+          "index": 22,
+          "excel_column": "V",
+          "field_name": "ref_rate_usd"
+        },
+        {
+          "index": 23,
+          "excel_column": "W",
+          "field_name": "ref_method"
+        },
+        {
+          "index": 24,
+          "excel_column": "X",
+          "field_name": "ref_lane_alias"
+        },
+        {
+          "index": 25,
+          "excel_column": "Y",
+          "field_name": "ref_lane_id"
+        },
+        {
+          "index": 26,
+          "excel_column": "Z",
+          "field_name": "ref_lane_key"
+        },
+        {
+          "index": 27,
+          "excel_column": "AA",
+          "field_name": "ref_confidence"
+        },
+        {
+          "index": 28,
+          "excel_column": "AB",
+          "field_name": "ref_origin_norm"
+        },
+        {
+          "index": 29,
+          "excel_column": "AC",
+          "field_name": "ref_dest_norm"
+        },
+        {
+          "index": 30,
+          "excel_column": "AD",
+          "field_name": "ref_vehicle_norm"
+        },
+        {
+          "index": 31,
+          "excel_column": "AE",
+          "field_name": "executed_ref_rate_usd"
+        },
+        {
+          "index": 32,
+          "excel_column": "AF",
+          "field_name": "executed_ref_method"
+        },
+        {
+          "index": 33,
+          "excel_column": "AG",
+          "field_name": "executed_ref_delta_pct"
+        },
+        {
+          "index": 34,
+          "excel_column": "AH",
+          "field_name": "executed_ref_sample_count"
+        },
+        {
+          "index": 35,
+          "excel_column": "AI",
+          "field_name": "executed_ref_source"
+        },
+        {
+          "index": 36,
+          "excel_column": "AJ",
+          "field_name": "executed_ref_verdict"
+        },
+        {
+          "index": 37,
+          "excel_column": "AK",
+          "field_name": "executed_ref_lane_key"
+        },
+        {
+          "index": 38,
+          "excel_column": "AL",
+          "field_name": "executed_ref_lane_id"
+        },
+        {
+          "index": 39,
+          "excel_column": "AM",
+          "field_name": "executed_ref_source_rows"
+        },
+        {
+          "index": 40,
+          "excel_column": "AN",
+          "field_name": "delta_pct"
+        },
+        {
+          "index": 41,
+          "excel_column": "AO",
+          "field_name": "cg_band"
+        },
+        {
+          "index": 42,
+          "excel_column": "AP",
+          "field_name": "special_status"
+        },
+        {
+          "index": 43,
+          "excel_column": "AQ",
+          "field_name": "verdict"
+        },
+        {
+          "index": 44,
+          "excel_column": "AR",
+          "field_name": "anomaly"
+        },
+        {
+          "index": 45,
+          "excel_column": "AS",
+          "field_name": "short_run_flag"
+        },
+        {
+          "index": 46,
+          "excel_column": "AT",
+          "field_name": "fixed_cost_suspect"
+        },
+        {
+          "index": 47,
+          "excel_column": "AU",
+          "field_name": "risk_score"
+        },
+        {
+          "index": 48,
+          "excel_column": "AV",
+          "field_name": "rbr_trigger"
+        },
+        {
+          "index": 49,
+          "excel_column": "AW",
+          "field_name": "supporting_docs_list"
+        },
+        {
+          "index": 50,
+          "excel_column": "AX",
+          "field_name": "evidence_count"
+        },
+        {
+          "index": 51,
+          "excel_column": "AY",
+          "field_name": "evidence_types"
+        },
+        {
+          "index": 52,
+          "excel_column": "AZ",
+          "field_name": "has_dn"
+        },
+        {
+          "index": 53,
+          "excel_column": "BA",
+          "field_name": "pdf_dn_number"
+        },
+        {
+          "index": 54,
+          "excel_column": "BB",
+          "field_name": "pdf_issue_date"
+        },
+        {
+          "index": 55,
+          "excel_column": "BC",
+          "field_name": "pdf_origin"
+        },
+        {
+          "index": 56,
+          "excel_column": "BD",
+          "field_name": "pdf_destination"
+        },
+        {
+          "index": 57,
+          "excel_column": "BE",
+          "field_name": "pdf_content_summary"
+        },
+        {
+          "index": 58,
+          "excel_column": "BF",
+          "field_name": "pdf_extracted_fields"
+        }
+      ]
+    },
+    {
+      "sheet_name": "summary_band",
+      "used_range": "summary_band!A1:B4",
+      "row_count": 4,
+      "column_count": 2,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "A",
+          "field_name": "cg_band"
+        },
+        {
+          "index": 2,
+          "excel_column": "B",
+          "field_name": "count"
+        }
+      ]
+    },
+    {
+      "sheet_name": "summary_verdict",
+      "used_range": "summary_verdict!A1:B4",
+      "row_count": 4,
+      "column_count": 2,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "A",
+          "field_name": "verdict"
+        },
+        {
+          "index": 2,
+          "excel_column": "B",
+          "field_name": "count"
+        }
+      ]
+    },
+    {
+      "sheet_name": "lane_map_reference",
+      "used_range": "lane_map_reference!A1:G140",
+      "row_count": 140,
+      "column_count": 7,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "A",
+          "field_name": "Lane_ID"
+        },
+        {
+          "index": 2,
+          "excel_column": "B",
+          "field_name": "Origin"
+        },
+        {
+          "index": 3,
+          "excel_column": "C",
+          "field_name": "Destination"
+        },
+        {
+          "index": 4,
+          "excel_column": "D",
+          "field_name": "Vehicle"
+        },
+        {
+          "index": 5,
+          "excel_column": "E",
+          "field_name": "Unit"
+        },
+        {
+          "index": 6,
+          "excel_column": "F",
+          "field_name": "Rate_USD"
+        },
+        {
+          "index": 7,
+          "excel_column": "G",
+          "field_name": "Notes"
+        }
+      ]
+    },
+    {
+      "sheet_name": "pod_reconciliation",
+      "used_range": "pod_reconciliation!A1:N",
+      "row_count": "dynamic",
+      "column_count": 14,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "",
+          "field_name": "S/N"
+        },
+        {
+          "index": 2,
+          "excel_column": "",
+          "field_name": "shipment_ref"
+        },
+        {
+          "index": 3,
+          "excel_column": "",
+          "field_name": "qty_invoice"
+        },
+        {
+          "index": 4,
+          "excel_column": "",
+          "field_name": "md_file_count"
+        },
+        {
+          "index": 5,
+          "excel_column": "",
+          "field_name": "md_waybill_count"
+        },
+        {
+          "index": 6,
+          "excel_column": "",
+          "field_name": "md_trip_no_count"
+        },
+        {
+          "index": 7,
+          "excel_column": "",
+          "field_name": "md_primary_evidence_type"
+        },
+        {
+          "index": 8,
+          "excel_column": "",
+          "field_name": "md_primary_evidence_count"
+        },
+        {
+          "index": 9,
+          "excel_column": "",
+          "field_name": "md_qty_match"
+        },
+        {
+          "index": 10,
+          "excel_column": "",
+          "field_name": "md_match_basis"
+        },
+        {
+          "index": 11,
+          "excel_column": "",
+          "field_name": "exact_shipment_ref_match_count"
+        },
+        {
+          "index": 12,
+          "excel_column": "",
+          "field_name": "md_as_pdf_equivalent"
+        },
+        {
+          "index": 13,
+          "excel_column": "",
+          "field_name": "md_files"
+        },
+        {
+          "index": 14,
+          "excel_column": "",
+          "field_name": "rate_approval_evidence"
+        }
+      ]
+    },
+    {
+      "sheet_name": "md_as_pdf_evidence",
+      "used_range": "md_as_pdf_evidence!A1:O",
+      "row_count": "dynamic",
+      "column_count": 15,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "",
+          "field_name": "file_name"
+        },
+        {
+          "index": 2,
+          "excel_column": "",
+          "field_name": "file_path"
+        },
+        {
+          "index": 3,
+          "excel_column": "",
+          "field_name": "source_format"
+        },
+        {
+          "index": 4,
+          "excel_column": "",
+          "field_name": "doc_type"
+        },
+        {
+          "index": 5,
+          "excel_column": "",
+          "field_name": "row_numbers"
+        },
+        {
+          "index": 6,
+          "excel_column": "",
+          "field_name": "shipment_refs"
+        },
+        {
+          "index": 7,
+          "excel_column": "",
+          "field_name": "waybill_count"
+        },
+        {
+          "index": 8,
+          "excel_column": "",
+          "field_name": "trip_no_count"
+        },
+        {
+          "index": 9,
+          "excel_column": "",
+          "field_name": "first_waybill_no"
+        },
+        {
+          "index": 10,
+          "excel_column": "",
+          "field_name": "issue_date"
+        },
+        {
+          "index": 11,
+          "excel_column": "",
+          "field_name": "origin"
+        },
+        {
+          "index": 12,
+          "excel_column": "",
+          "field_name": "destination"
+        },
+        {
+          "index": 13,
+          "excel_column": "",
+          "field_name": "rate_approval_evidence"
+        },
+        {
+          "index": 14,
+          "excel_column": "",
+          "field_name": "content_summary"
+        },
+        {
+          "index": 15,
+          "excel_column": "",
+          "field_name": "md_as_pdf_equivalent"
+        }
+      ]
+    },
+    {
+      "sheet_name": "_format_profile",
+      "used_range": "_format_profile!A1:B",
+      "row_count": "dynamic",
+      "column_count": 2,
+      "header_row": 1,
+      "data_starts_at_row": 2,
+      "columns": [
+        {
+          "index": 1,
+          "excel_column": "",
+          "field_name": "setting"
+        },
+        {
+          "index": 2,
+          "excel_column": "",
+          "field_name": "value"
+        }
+      ]
+    }
+  ],
+  "patch_version": "20260607_md_as_pdf_format"
+}

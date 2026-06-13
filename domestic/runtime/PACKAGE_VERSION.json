@@ -1,0 +1,19 @@
+{
+  "package_id": "20260607_full_final_ref_lane_link_repair",
+  "generated_at": "2026-06-07T15:42:40",
+  "entry_point": "runtime/gpt_ci_runner.py",
+  "md_as_pdf_policy": "Treat .md/.markdown POD files as PDF-equivalent text evidence (MD_AS_PDF_TEXT).",
+  "fixed_excel_format": true,
+  "runtime_source": "hvdc_domestic_gpts_ci_runtime_20260607_md_as_pdf_format_patch.zip",
+  "ref_rate_usd_link_repair": true,
+  "patched_at": "2026-06-07",
+  "patch_note": "runtime/PATCH_NOTES_20260607_REF_LANE_LINK_REPAIR.md",
+  "ref_lane_id_link_repair": true,
+  "previous_patch_note": "runtime/PATCH_NOTES_20260607_REF_RATE_LINK_REPAIR.md",
+  "patch_version": "20260607_FINAL_ALL_PATCHES",
+  "final_all_patches": [
+    "ref_rate_usd actual internal hyperlinks",
+    "ref_lane_id links to lane_map_reference rows",
+    "md_as_pdf_evidence fields inserted into items sheet/CSV"
+  ]
+}

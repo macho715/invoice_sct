@@ -52,7 +52,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const useDevExportStub = isDevStub()
-    && !process.env.PARSER_WORKER_URL
+    && !process.env.PARSER_WORKER_URL && !process.env.WORKER_URL
     && typeof (globalThis.fetch as unknown as { mock?: unknown })?.mock === 'undefined';
   let exportResult;
 
@@ -77,7 +77,7 @@ export async function POST(req: Request): Promise<Response> {
       return err('EXPORT_FAILED', (e as Error).message);
     }
 
-    const parserUrl = process.env.PARSER_WORKER_URL ?? 'http://127.0.0.1:8000';
+    const parserUrl = process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000';
     let response;
     try {
       response = await fetch(`${parserUrl}/v1/export`, {

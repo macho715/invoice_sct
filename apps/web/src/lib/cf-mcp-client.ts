@@ -42,10 +42,11 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         });
         const latency_ms = Date.now() - start;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json() as { result?: T; error?: { message: string } };
+        const json = await res.json() as { result?: { tool?: string; status?: string; result?: T } | T; error?: { message: string } };
         if (json.error) throw new Error(json.error.message);
         clearTimeout(timer);
-        return { result: json.result as T, latency_ms, status: 'OK' };
+        const payload = ((json.result as any)?.result ?? json.result) as T;
+        return { result: payload, latency_ms, status: 'OK' };
       } catch (e) {
         lastErr = e;
         const latency_ms = Date.now() - start;
@@ -98,8 +99,8 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
 
       // C-02: dryrun_type_b_classify — classify each line into SCT Type-B category
       const classifyLines = processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description }));
-      const typeB = await callTool<{ classifications: Array<{ line_id: string; type_b: string; sct_code: string; confidence: number }> }>('dryrun_type_b_classify', { lines: classifyLines });
-      toolCalls.push({ tool: 'dryrun_type_b_classify', latency_ms: typeB.latency_ms, status: typeB.status });
+      const typeB = await callTool<{ classifications: Array<{ line_id: string; type_b: string; sct_code: string; confidence: number }> }>('classify_type_b', { lines: classifyLines });
+      toolCalls.push({ tool: 'classify_type_b', latency_ms: typeB.latency_ms, status: typeB.status });
 
       const type_b_results: Array<{ line_id: string; type_b: string; confidence: number }> = typeB.result.classifications.map(c => ({
         line_id: c.line_id,
@@ -114,11 +115,11 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         const charge = line.description ?? classEntry?.type_b ?? '';
         const unit = line.unit ?? 'per shipment';
         try {
-          const rateRes = await callTool<{ status: string }>('dryrun_rate_lookup', { charge, unit });
-          toolCalls.push({ tool: 'dryrun_rate_lookup', latency_ms: rateRes.latency_ms, status: rateRes.status });
+          const rateRes = await callTool<{ contracted_rate: number | null; verdict: string; reason_code: string | null }>('check_rate_card', { charge_code: charge, lane: line.lane ?? null, rate_basis: unit, effective_date: null, applied_rate: line.rate ?? null });
+          toolCalls.push({ tool: 'check_rate_card', latency_ms: rateRes.latency_ms, status: rateRes.status });
           rate_checks.push({
             line_id: line.line_id,
-            rate_status: rateRes.result.status,
+            rate_status: rateRes.result.verdict,
             validity_status: null
           });
         } catch {
@@ -176,8 +177,15 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         }
       }
 
-      const doc = await callTool<{ findings: Array<{ lineId: string | null; code: string; severity: 'AMBER' | 'ZERO' }> }>('check_doc_guardian', { jobId, evidence: payload.evidence_index });
-      toolCalls.push({ tool: 'check_doc_guardian', latency_ms: doc.latency_ms, status: doc.status });
+      type DocGuardianResult = { result: { findings: Array<{ lineId: string | null; code: string; severity: 'AMBER' | 'ZERO' }> }; latency_ms: number; status: 'OK' | 'ERROR' | 'TIMEOUT' };
+      let docResult: DocGuardianResult | null = null;
+      try {
+        docResult = await callTool<{ findings: Array<{ lineId: string | null; code: string; severity: 'AMBER' | 'ZERO' }> }>('check_evidence_required', { invoice_lines: processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description })), evidence_index: payload.evidence_index ?? [] });
+        toolCalls.push({ tool: 'check_evidence_required', latency_ms: docResult.latency_ms, status: docResult.status });
+      } catch {
+        toolCalls.push({ tool: 'check_evidence_required', latency_ms: 0, status: 'ERROR' });
+        docResult = { result: { findings: [{ lineId: null, code: 'EVIDENCE_TOOL_UNAVAILABLE', severity: 'AMBER' }] }, latency_ms: 0, status: 'ERROR' };
+      }
 
       // C-02: ontology_evidence_map — called once with all distinct SCT codes from type_b results
       const evidence_requirements: Array<{ line_id: string; required_evidence: string[] }> = [];
@@ -188,18 +196,14 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
       )];
 
       if (distinctSctCodes.length > 0) {
-        const evidenceMap = await callTool<{ evidence_requirements: Array<{ sct_code: string; required_evidence: string[] }> }>('ontology_evidence_map', { sct_codes: distinctSctCodes });
-        toolCalls.push({ tool: 'ontology_evidence_map', latency_ms: evidenceMap.latency_ms, status: evidenceMap.status });
+        const evidenceMap = await callTool<{ evidence_requirements: Array<{ line_id: string; required_evidence: string[] }> }>('check_evidence_required', { invoice_lines: processedLines.map((l: any) => ({ line_id: l.line_id, description: l.description })), evidence_index: payload.evidence_index ?? [] });
+        toolCalls.push({ tool: 'check_evidence_required', latency_ms: evidenceMap.latency_ms, status: evidenceMap.status });
 
-        // Map evidence requirements back to lines via sct_code → line_id
         for (const evReq of evidenceMap.result.evidence_requirements) {
-          const matchingLines = typeB.result.classifications.filter(c => c.sct_code === evReq.sct_code);
-          for (const match of matchingLines) {
-            evidence_requirements.push({
-              line_id: match.line_id,
-              required_evidence: evReq.required_evidence
-            });
-          }
+          evidence_requirements.push({
+            line_id: evReq.line_id,
+            required_evidence: evReq.required_evidence
+          });
         }
       }
 
@@ -226,7 +230,7 @@ export function createCfMcpClient(opts: { baseUrl: string; timeoutMs: number; re
         rate_checks,
         evidence_requirements,
         costguard_results,
-        doc_guardian_results: doc.result.findings.map(f => ({
+        doc_guardian_results: docResult!.result.findings.map(f => ({
           line_id: f.lineId,
           code: f.code,
           severity: f.severity

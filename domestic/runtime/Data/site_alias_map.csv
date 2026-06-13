@@ -1,0 +1,21 @@
+raw_place,normalized_place,place_group,status,notes
+MOSB,AL MASAOOD (MOSB),mosb,active,Seeded from LaneMatcher and April invoice variants
+MOSB YARD,AL MASAOOD (MOSB),mosb,active,Seeded from latest invoice output
+AL MASAOOD,AL MASAOOD (MOSB),mosb,active,ApprovedLaneMap canonical family
+AL MASAOOD MOSB,AL MASAOOD (MOSB),mosb,active,Parentheses-free spelling
+AL MASAOOD (MOSB),AL MASAOOD (MOSB),mosb,active,Canonical spelling
+SAMSUNG MOSB YARD,AL MASAOOD (MOSB),mosb,active,Executed ledger historical spelling
+ESNAAD (MOSB),AL MASAOOD (MOSB),mosb,active,Related MOSB spelling in approved lanes
+DSV M44 WH,M44 WAREHOUSE,m44,active,Invoice abbreviation
+M44 WH,M44 WAREHOUSE,m44,active,Short warehouse abbreviation
+M44 WAREHOUSE,M44 WAREHOUSE,m44,active,Canonical spelling
+DSV M44 WAREHOUSE,M44 WAREHOUSE,m44,active,Executed ledger historical spelling
+SHUWEIHAT,SHUWEIHAT SITE,shuweihat,active,Invoice short form
+SHUWEIHAT SITE,SHUWEIHAT SITE,shuweihat,active,Canonical spelling
+SHUWEIHAT POWER STATION,SHUWEIHAT SITE,shuweihat,active,Executed ledger historical spelling
+MIRFA,MIRFA SITE,mirfa,active,Invoice short form
+MIRFA SITE,MIRFA SITE,mirfa,active,Canonical spelling
+MIRFA PMO SAMSUNG,MIRFA SITE,mirfa,active,Invoice and executed ledger historical spelling
+DSV KIZAD YARD,DSV KIZAD YARD,dsv_kizad,active,Stable yard spelling
+DSV MUSSAFAH YARD,DSV MUSSAFAH YARD,dsv_mussafah,active,Stable yard spelling
+AGILITY M44 WAREHOUSE,M44 WAREHOUSE,m44,review,Potentially same M44 site; keep review until approved

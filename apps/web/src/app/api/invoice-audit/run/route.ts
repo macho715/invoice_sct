@@ -30,7 +30,7 @@ export async function POST(req: Request): Promise<Response> {
   if (files.length === 0) return err('INVALID_STATE', 'no source files');
   await STORE.updateJob(body.job_id, { status: 'PARSING' });
   const file = files[0];
-  const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? 'http://127.0.0.1:8000', token: process.env.PARSER_WORKER_TOKEN ?? 'dev' });
+  const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000', token: process.env.PARSER_WORKER_TOKEN ?? 'dev' });
   let parseRes;
   try {
     const blobUrl = await getSignedDownloadUrl(file.blob_ref);
@@ -82,7 +82,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await STORE.updateJob(body.job_id, { status: 'VALIDATING' });
-  const cf = createCfMcpClient({ baseUrl: process.env.CF_MCP_BASE_URL ?? 'https://hvdc-ontology-chatgpt-app.mscho715.workers.dev', timeoutMs: Number(process.env.CF_MCP_TIMEOUT_MS ?? 5000), retries: 3 });
+  const cf = createCfMcpClient({ baseUrl: process.env.CF_MCP_BASE_URL ?? process.env.MCP_SERVER_URL ?? 'https://hvdc-ontology-chatgpt-app.mscho715.workers.dev', timeoutMs: Number(process.env.CF_MCP_TIMEOUT_MS ?? 5000), retries: 3 });
   let sct;
   try {
     sct = await cf.validate(body.job_id, {
@@ -113,7 +113,12 @@ export async function POST(req: Request): Promise<Response> {
   const normalized = parseRes.normalized as any;
   const invoiceTotal = normalized?.invoice_header?.invoice_total ?? null;
   const lineAuditTotal = (normalized?.invoice_lines as any[] | undefined)?.reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0) ?? 0;
-  const typeBTotal: number | null = Object.keys(typeBClassCount).length > 0 ? Object.values(typeBClassCount).reduce((a, b) => a + b, 0) : null;
+  const typeBTotal: number | null = sct.type_b_results.length > 0
+    ? (normalized?.invoice_lines as any[] | undefined)?.reduce((sum: number, l: any) => {
+        const hasTypeB = sct.type_b_results.some(t => t.line_id === l.line_id);
+        return sum + (hasTypeB ? (Number(l.amount) || 0) : 0);
+      }, 0) ?? 0
+    : null;
   const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal);
   let finalVerdict = isPdfLowConf ? 'AMBER' : gate.verdict;
   const actionItems = [...(gate.action_items || [])];
