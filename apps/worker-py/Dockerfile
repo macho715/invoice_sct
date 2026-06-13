@@ -63,7 +63,7 @@ LABEL org.opencontainers.image.title="invoice-audit-parser" \
 
 # ---- System runtime deps ---------------------------------------------------
 # - libpoppler-cpp: pdfplumber's pdftotext/PDFMiner backend
-# - default-jre-headless: OpenJDK 17 for OpenDataLoader (activated later)
+# - default-jre-headless: OpenJDK 21 for OpenDataLoader (activated later)
 # - fonts: improved CJK rendering for any PDF text extraction
 # - curl: for Fly.io health checks
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -77,12 +77,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         zlib1g \
         fonts-noto-cjk \
         fonts-noto-core \
-        openjdk-17-jre-headless \
+        openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
 # Java is present for OpenDataLoader; not required by current pdfplumber code.
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
     OPENDATALOADER_HOME=/opt/opendataloader \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
