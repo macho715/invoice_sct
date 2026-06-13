@@ -98,7 +98,7 @@ export async function POST(req: Request): Promise<Response> {
       input_ref: parseRes.parse_result_id, output_ref: tc.tool, latency_ms: tc.latency_ms, attributedTo: `cf-mcp:${tc.tool}`
     });
   }
-  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })));
+  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), sct.doc_guardian_results.map(d => ({ line_id: d.line_id, code: d.code, severity: d.severity })));
   const finalVerdict = isPdfLowConf ? 'AMBER' : gate.verdict;
   const actionItems = [...(gate.action_items || [])];
   if (isPdfLowConf) {
