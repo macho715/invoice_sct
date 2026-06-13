@@ -11,6 +11,8 @@ export interface BlobUploadResult {
 }
 
 const DEV_LOCAL_BLOB_DIR = join(process.cwd(), '.dev-blob');
+const BLOB_ACCESS_VALUES = ['private', 'public'] as const;
+type BlobAccess = (typeof BLOB_ACCESS_VALUES)[number];
 
 function isDevStubToken(): boolean {
   const t = process.env.BLOB_READ_WRITE_TOKEN ?? '';
@@ -46,7 +48,8 @@ export async function uploadToBlob(file: File, jobId: string): Promise<BlobUploa
   }
 
   const { put } = await import('@vercel/blob');
-  const res = await put(filename, file, { access: 'private' as any, addRandomSuffix: true });
+  const access = resolveBlobAccess();
+  const res = await put(filename, file, { access, addRandomSuffix: true });
   return {
     blob_ref: `blob:${res.pathname}`,
     sha256,
@@ -54,6 +57,14 @@ export async function uploadToBlob(file: File, jobId: string): Promise<BlobUploa
     mime_type: file.type || 'application/octet-stream',
     blob_url: res.url
   };
+}
+
+function resolveBlobAccess(): BlobAccess {
+  const access = (process.env.BLOB_ACCESS ?? 'private').trim();
+  if (BLOB_ACCESS_VALUES.includes(access as BlobAccess)) {
+    return access as BlobAccess;
+  }
+  throw new Error(`STORAGE_AUTH_FAILED: BLOB_ACCESS must be "private" or "public", got "${access}"`);
 }
 
 export async function getSignedDownloadUrl(blobRef: string): Promise<string> {
