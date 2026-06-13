@@ -18,6 +18,10 @@ jobs:
       actions: read
       contents: read
 
+    env:
+      # P2 — opt into Node 24 runner ahead of 2026-06-16 default
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
     strategy:
       fail-fast: false
       matrix:

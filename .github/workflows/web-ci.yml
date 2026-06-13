@@ -12,6 +12,8 @@ on:
 env:
   NODE_VERSION: "20.x"
   PNPM_VERSION: "9.x"
+  # P2 — opt into Node 24 runner ahead of 2026-06-16 default
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
   group: web-ci-${{ github.workflow }}-${{ github.ref }}

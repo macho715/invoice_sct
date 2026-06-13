@@ -8,6 +8,10 @@ on:
       - 'apps/worker-py/**'
       - '.github/workflows/python-worker-ci.yml'
 
+env:
+  # P2 — opt into Node 24 runner ahead of 2026-06-16 default
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   ci:
     name: Lint, Audit and Test (Python)

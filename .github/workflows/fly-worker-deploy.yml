@@ -15,6 +15,10 @@ concurrency:
   group: fly-worker-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # P2 — opt into Node 24 runner ahead of 2026-06-16 default
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   deploy:
     name: Deploy worker-py to Fly.io
