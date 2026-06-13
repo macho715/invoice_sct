@@ -36,11 +36,13 @@ class InvoiceLine(BaseModel):
     source_ref: dict = Field(default_factory=dict)
 
 class EvidenceCandidate(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='ignore')
     source_file_id: str
     text_span: str
     matched_reference: Optional[str] = None
     confidence: float = Field(ge=0.0, le=1.0)
+    doc_kind: Optional[str] = None
+    waybill_fields: Optional[dict] = Field(default=None)
 
 class NormalizedInvoice(BaseModel):
     model_config = ConfigDict(extra='forbid')
