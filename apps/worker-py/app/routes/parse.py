@@ -78,7 +78,7 @@ def parse(req: ParseRequest) -> ParseResponse:
             if not getattr(span, 'text', None):
                 continue
             h = hashlib.sha256(span.text.encode('utf-8')).hexdigest()[:16]
-            shpt_map = extract_shpt_shipment_doc_mapping(span.text, file_name=req.blob_ref)  # from pdf_text.py port
+            shpt_map = extract_shpt_shipment_doc_mapping(span.text, filename=req.blob_ref)  # from pdf_text.py port
             source_data.append(SourceDataRow(
                 file_id=req.file_id,
                 source_ref=f"pdf_page_{span.page}",
