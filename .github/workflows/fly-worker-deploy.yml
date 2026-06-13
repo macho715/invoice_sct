@@ -10,6 +10,7 @@ on:
     workflows: ["Release Gate (MVP SC-001..SC-013)"]
     types:
       - completed
+  workflow_dispatch:
 
 concurrency:
   group: fly-worker-${{ github.ref }}
@@ -26,8 +27,11 @@ jobs:
     permissions:
       contents: read
       deployments: write
+    # push is already scoped by on.push.paths (apps/worker-py/**); the previous
+    # commits.*.modified re-check was fragile and skipped valid deploys.
     if: >
-      (github.event_name == 'push' && (contains(toJson(github.event.commits.*.added), 'apps/worker-py') || contains(toJson(github.event.commits.*.modified), 'apps/worker-py'))) ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
       - name: Checkout repository
