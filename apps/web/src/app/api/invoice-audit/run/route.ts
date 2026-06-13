@@ -14,8 +14,14 @@ function err(code: ErrorCode, message: string) {
 }
 
 async function parseBody(req: Request): Promise<{ job_id?: string } | null> {
+  const ct = req.headers.get('content-type') ?? '';
+  if (ct.includes('application/json')) {
+    try { return await req.json(); } catch { return null; }
+  }
+  if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) {
+    try { const fd = await req.formData(); const jid = fd.get('job_id'); return jid ? { job_id: String(jid) } : null; } catch { return null; }
+  }
   try { return await req.json(); } catch {}
-  try { const fd = await req.formData(); const jid = fd.get('job_id'); return jid ? { job_id: String(jid) } : null; } catch {}
   return null;
 }
 

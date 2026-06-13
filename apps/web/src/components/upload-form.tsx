@@ -16,8 +16,20 @@ export default function UploadForm() {
       const fd = new FormData();
       fd.set('file', file);
       const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
-      const endpoint = file.size > LARGE_FILE_THRESHOLD ? '/api/files/ingest/large' : '/api/files/ingest';
-      const r = await fetch(endpoint, { method: 'POST', body: fd, headers: { 'x-user-id': 'dev-user' } });
+      const isLarge = file.size > LARGE_FILE_THRESHOLD;
+      const endpoint = isLarge ? '/api/files/ingest/large' : '/api/files/ingest';
+      const fetchOpts: RequestInit = isLarge
+        ? {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-user-id': 'dev-user' },
+            body: JSON.stringify({ filename: file.name, mimeType: file.type, fileSize: file.size })
+          }
+        : {
+            method: 'POST',
+            body: fd,
+            headers: { 'x-user-id': 'dev-user' }
+          };
+      const r = await fetch(endpoint, fetchOpts);
       const body = await r.json();
       if (!r.ok) { setErr(`${body.code}: ${body.message}`); return; }
       router.push(`/invoice-audit/jobs/${body.job_id}`);

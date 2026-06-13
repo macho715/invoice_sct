@@ -47,3 +47,19 @@ __pycache__/
 .vercel
 
 graphify-out/
+
+# === HVDC P2 DLP protection (added 2026-06-14) ===
+# Raw contract rates, internal amounts, PII
+**/private/**
+**/PRIVATE_INTERNAL_NOTICE.md
+**/*.bak
+**/*.v2_bak
+**/*.pre_ruff_fix
+**/tests/validation_runs/TEST_RUN_*.json
+**/tests/validation_runs/.tmp/
+# DSV INTERNAL package (P2) — public repo forbidden
+**/DSV_SHIPMENT_FULL_PACKAGE_v3_2_PRO_INTERNAL/**
+# HVDC templates with potential PII (file audit needed)
+**/HVDC_*Audit_Excel_Format_Template_*.xlsx
+**/HVDC_Domestic_Invoice_Audit_*_*.md
+**/GPTS_CUSTOM_INSTRUCTIONS_*.md
