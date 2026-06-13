@@ -45,3 +45,5 @@ __pycache__/
 .ruff_cache/
 
 .vercel
+
+graphify-out/
