@@ -13,9 +13,15 @@ function err(code: ErrorCode, message: string) {
   return NextResponse.json({ code, message }, { status: httpForError(code) });
 }
 
+async function parseBody(req: Request): Promise<{ job_id?: string } | null> {
+  try { return await req.json(); } catch {}
+  try { const fd = await req.formData(); const jid = fd.get('job_id'); return jid ? { job_id: String(jid) } : null; } catch {}
+  return null;
+}
+
 export async function POST(req: Request): Promise<Response> {
-  let body: { job_id?: string };
-  try { body = await req.json(); } catch { return err('INVALID_STATE', 'invalid json body'); }
+  const body = await parseBody(req);
+  if (!body) return err('INVALID_STATE', 'invalid json body');
   if (!body.job_id) return err('INVALID_STATE', 'job_id required');
   const job = await STORE.getJob(body.job_id);
   if (!job) return err('JOB_NOT_FOUND', 'unknown job_id');
