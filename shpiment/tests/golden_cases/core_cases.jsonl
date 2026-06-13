@@ -1,0 +1,23 @@
+{"case_id": "TC-001", "scenario": "final_approval_without_subtotal", "expected": "ZERO", "requirement_id": "REQ-FINAL-001"}
+{"case_id": "TC-002", "scenario": "type_b_classification", "description": "Customs Inspection Fee at port", "expected": "Inspection", "requirement_id": "REQ-TYPEB-001"}
+{"case_id": "TC-003", "scenario": "type_b_classification", "description": "Storage Charge at Airport after free time", "expected": "STROAGE", "requirement_id": "REQ-TYPEB-002"}
+{"case_id": "TC-004", "scenario": "at_cost_without_evidence", "expected": "AMBER", "requirement_id": "REQ-RATE-ATCOST-001"}
+{"case_id": "TC-005", "scenario": "reconciliation_tie", "final_subtotal": 1000.0, "line_audit_total": 1000.0, "type_b_total": 1000.0, "expected": "PASS", "requirement_id": "REQ-RECON-001"}
+{"case_id": "TC-006", "scenario": "demdet_final_missing_inputs", "expected": "ZERO", "requirement_id": "REQ-DEMDET-001"}
+{"case_id": "TC-007", "scenario": "type_b_classification", "description": "THC charges at port", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-001"}
+{"case_id": "TC-008", "scenario": "type_b_classification", "description": "Loading fee at terminal", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-002"}
+{"case_id": "TC-009", "scenario": "type_b_classification", "description": "Stevedoring charges", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-003"}
+{"case_id": "TC-010", "scenario": "type_b_classification", "description": "Berth fee at Jebel Ali", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-004"}
+{"case_id": "TC-011", "scenario": "type_b_classification", "description": "Road freight from Dubai to Abu Dhabi", "expected": "INLAND", "requirement_id": "REQ-TYPEB-INLAND-001"}
+{"case_id": "TC-012", "scenario": "type_b_classification", "description": "Appointment charge at port gate", "expected": "INLAND", "requirement_id": "REQ-TYPEB-INLAND-002"}
+{"case_id": "TC-013", "scenario": "type_b_classification", "description": "BOE processing for import", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-001"}
+{"case_id": "TC-014", "scenario": "type_b_classification", "description": "Import customs duty on cargo", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-002"}
+{"case_id": "TC-015", "scenario": "type_b_classification", "description": "New code opening fee at SHJ", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-003"}
+{"case_id": "TC-016", "scenario": "type_b_classification", "description": "Customs gate pass issuance", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-004"}
+{"case_id": "TC-017", "scenario": "type_b_classification", "description": "Document delivery order fee", "expected": "DO", "requirement_id": "REQ-TYPEB-DO-001"}
+{"case_id": "TC-018", "scenario": "type_b_classification", "description": "Yard storage at port after free time", "expected": "STROAGE", "requirement_id": "REQ-TYPEB-STROAGE-001"}
+{"case_id": "TC-019", "scenario": "type_b_classification", "description": "Container detention at depot", "expected": "Detention", "requirement_id": "REQ-TYPEB-DETENTION-001"}
+{"case_id": "TC-020", "scenario": "type_b_classification", "description": "Inspection by customs at warehouse", "expected": "Inspection", "requirement_id": "REQ-TYPEB-INSPECTION-001"}
+{"case_id": "TC-021", "scenario": "type_b_classification", "description": "Master DO fee customs", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-P2-OVERRIDE", "note": "Per spec RULE-TB-002 (P2 Customs) > RULE-TB-004 (P3 DO). Bare 'customs' keyword enforces priority."}
+{"case_id": "TC-022", "scenario": "type_b_classification", "description": "Customs duty for cargo", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-P2-001", "note": "Generic customs charge → Customs bucket per spec."}
+{"case_id": "TC-023", "scenario": "type_b_classification", "description": "Detention charge with customs at port", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-P2-PRECEDENCE", "note": "Spec priority: P2 Customs > P6 Detention. Bare 'customs' wins. Documents current classifier behavior; future spec may add phrase-precedence."}

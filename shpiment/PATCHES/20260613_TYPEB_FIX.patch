@@ -1,0 +1,189 @@
+# Auto-generated patch — applied 2026-06-13
+# Fix: TYPE-B classifier 11 missing keywords + 14 broken-path golden cases
+#      + package_self_check __pycache__ rglob fix
+# Apply (after 'cd shpiment'):
+#   git init && git add . && git commit -m "baseline"
+#   git apply PATCHES/20260613_TYPEB_FIX.patch
+#   git add -A && git commit -m "fix(shpiment): TYPE-B classifier 11 keywords + 14 broken-path golden cases"
+# Or (non-git):
+#   patch -p1 < PATCHES/20260613_TYPEB_FIX.patch
+# Backups retained at: scripts/*.bak, tests/golden_cases/*.bak
+
+
+diff --git a/scripts/golden_case_runner.py b/scripts/golden_case_runner.py
+--- a/scripts/golden_case_runner.py
+
++++ b/scripts/golden_case_runner.py
+
+@@ -3,13 +3,13 @@
+
+ from pathlib import Path
+
+ 
+
+ TYPEB_PRIORITY = [
+
+-    ('Inspection', ['customs inspection']),
+
+-    ('Customs', ['customs clearance','bill of entry','customs duty','export customs','shj customs code-opening','customs documentation']),
+
+-    ('DO', ['master do','house do','delivery order','do fee']),
+
+-    ('INLAND', ['transport','truck','inland','fb from','cipca','mosb']),
+
+-    ('THC', ['terminal handling','port handling','tsc','discharging']),
+
+-    ('Detention', ['detention']),
+
+-    ('STROAGE', ['storage','stroage']),
+
++    ('Inspection', ['customs inspection','inspection by customs','customs inspection fee']),
+
++    ('Customs', ['customs clearance','bill of entry','boe','customs duty','export customs','import customs','shj customs code-opening','new code opening fee','customs gate pass','customs documentation']),
+
++    ('DO', ['master do','house do','delivery order','do fee','document delivery order']),
+
++    ('INLAND', ['transport','truck','trucking','inland','fb from','cipca','mosb','road freight','appointment charge']),
+
++    ('THC', ['terminal handling','port handling','thc','tsc','discharging','loading','unloading','berth','stevedoring']),
+
++    ('Detention', ['detention','container detention','line detention']),
+
++    ('STROAGE', ['storage','stroage','yard storage','warehouse storage','port storage']),
+
+ ]
+
+ 
+
+ def classify(desc):
+
+
+diff --git a/scripts/package_self_check.py b/scripts/package_self_check.py
+--- a/scripts/package_self_check.py
+
++++ b/scripts/package_self_check.py
+
+@@ -1,6 +1,10 @@
+
+ #!/usr/bin/env python3
+
+ from __future__ import annotations
+
+ import json, sys
+
++# Defensive: prevent this check script from creating __pycache__ in scripts/ that
+
++# would then be flagged by the very rglob we run below. Run-harness scripts also
+
++# set this; keep it consistent so the check is non-self-defeating.
+
++sys.dont_write_bytecode = True
+
+ from pathlib import Path
+
+ 
+
+ REQUIRED = [
+
+@@ -28,12 +32,28 @@
+
+ ]
+
+ FORBIDDEN_DIRS = ['legacy_v2_source', 'upload_flat', 'spreadsheets', '__pycache__']
+
+ 
+
++# __pycache__ directories under these parent paths are expected (deps/venvs/git)
+
++# and must not be flagged as package-structure violations.
+
++PYCACHE_ALLOWED_PARENTS = (
+
++    'node_modules', '.venv', '.git', 'site-packages',
+
++    'dist', 'build', '.pytest_cache', '.mypy_cache', '.ruff_cache',
+
++)
+
++
+
++
+
++def _is_pycache_path_allowed(rel_str: str) -> bool:
+
++    parts = rel_str.replace('\\', '/').split('/')
+
++    return any(p in PYCACHE_ALLOWED_PARENTS for p in parts)
+
++
+
+ 
+
+ def run(root='.'):
+
+     root = Path(root)
+
+     missing = [p for p in REQUIRED if not (root/p).exists()]
+
+     forbidden = [d for d in FORBIDDEN_DIRS if (root/d).exists()]
+
+-    pycache = [str(p.relative_to(root)) for p in root.rglob('__pycache__')]
+
++    pycache = [
+
++        str(p.relative_to(root))
+
++        for p in root.rglob('__pycache__')
+
++        if not _is_pycache_path_allowed(str(p.relative_to(root)))
+
++    ]
+
+     if pycache:
+
+         forbidden.extend(pycache)
+
+     return {
+
+
+diff --git a/tests/golden_cases/core_cases.jsonl b/tests/golden_cases/core_cases.jsonl
+--- a/tests/golden_cases/core_cases.jsonl
+
++++ b/tests/golden_cases/core_cases.jsonl
+
+@@ -4,3 +4,17 @@
+
+ {"case_id": "TC-004", "scenario": "at_cost_without_evidence", "expected": "AMBER", "requirement_id": "REQ-RATE-ATCOST-001"}
+
+ {"case_id": "TC-005", "scenario": "reconciliation_tie", "final_subtotal": 1000.0, "line_audit_total": 1000.0, "type_b_total": 1000.0, "expected": "PASS", "requirement_id": "REQ-RECON-001"}
+
+ {"case_id": "TC-006", "scenario": "demdet_final_missing_inputs", "expected": "ZERO", "requirement_id": "REQ-DEMDET-001"}
+
++{"case_id": "TC-007", "scenario": "type_b_classification", "description": "THC charges at port", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-001"}
+
++{"case_id": "TC-008", "scenario": "type_b_classification", "description": "Loading fee at terminal", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-002"}
+
++{"case_id": "TC-009", "scenario": "type_b_classification", "description": "Stevedoring charges", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-003"}
+
++{"case_id": "TC-010", "scenario": "type_b_classification", "description": "Berth fee at Jebel Ali", "expected": "THC", "requirement_id": "REQ-TYPEB-THC-004"}
+
++{"case_id": "TC-011", "scenario": "type_b_classification", "description": "Road freight from Dubai to Abu Dhabi", "expected": "INLAND", "requirement_id": "REQ-TYPEB-INLAND-001"}
+
++{"case_id": "TC-012", "scenario": "type_b_classification", "description": "Appointment charge at port gate", "expected": "INLAND", "requirement_id": "REQ-TYPEB-INLAND-002"}
+
++{"case_id": "TC-013", "scenario": "type_b_classification", "description": "BOE processing for import", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-001"}
+
++{"case_id": "TC-014", "scenario": "type_b_classification", "description": "Import customs duty on cargo", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-002"}
+
++{"case_id": "TC-015", "scenario": "type_b_classification", "description": "New code opening fee at SHJ", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-003"}
+
++{"case_id": "TC-016", "scenario": "type_b_classification", "description": "Customs gate pass issuance", "expected": "Customs", "requirement_id": "REQ-TYPEB-CUSTOMS-004"}
+
++{"case_id": "TC-017", "scenario": "type_b_classification", "description": "Document delivery order fee", "expected": "DO", "requirement_id": "REQ-TYPEB-DO-001"}
+
++{"case_id": "TC-018", "scenario": "type_b_classification", "description": "Yard storage at port after free time", "expected": "STROAGE", "requirement_id": "REQ-TYPEB-STROAGE-001"}
+
++{"case_id": "TC-019", "scenario": "type_b_classification", "description": "Container detention at depot", "expected": "Detention", "requirement_id": "REQ-TYPEB-DETENTION-001"}
+
++{"case_id": "TC-020", "scenario": "type_b_classification", "description": "Inspection by customs at warehouse", "expected": "Inspection", "requirement_id": "REQ-TYPEB-INSPECTION-001"}
+

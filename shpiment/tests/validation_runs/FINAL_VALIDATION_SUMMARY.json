@@ -1,0 +1,123 @@
+{
+  "package_name": "shpiment",
+  "version": "v3.2_PRO",
+  "patch_id": "HARNESS-ENG-v3.2-WORKBOOK-OUTPUT-GATE-20260609",
+  "generated_utc": "2026-06-13T20:19:55.437317+00:00",
+  "self_test_runs_required": 3,
+  "self_test_runs_executed": 3,
+  "overall_status": "PASS",
+  "run_statuses": [
+    {
+      "run_id": "TEST_RUN_01",
+      "status": "PASS",
+      "checks": [
+        {
+          "check": "package_self_check",
+          "status": "PASS"
+        },
+        {
+          "check": "rate_master_validate",
+          "status": "PASS"
+        },
+        {
+          "check": "prompt_lint",
+          "status": "PASS"
+        },
+        {
+          "check": "dlp_scan",
+          "status": "PASS"
+        },
+        {
+          "check": "golden_cases",
+          "status": "PASS"
+        },
+        {
+          "check": "workbook_contract_config_validate",
+          "status": "PASS"
+        },
+        {
+          "check": "workbook_output_validate",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "run_id": "TEST_RUN_02",
+      "status": "PASS",
+      "checks": [
+        {
+          "check": "package_self_check",
+          "status": "PASS"
+        },
+        {
+          "check": "rate_master_validate",
+          "status": "PASS"
+        },
+        {
+          "check": "prompt_lint",
+          "status": "PASS"
+        },
+        {
+          "check": "dlp_scan",
+          "status": "PASS"
+        },
+        {
+          "check": "golden_cases",
+          "status": "PASS"
+        },
+        {
+          "check": "workbook_contract_config_validate",
+          "status": "PASS"
+        },
+        {
+          "check": "workbook_output_validate",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "run_id": "TEST_RUN_03",
+      "status": "PASS",
+      "checks": [
+        {
+          "check": "package_self_check",
+          "status": "PASS"
+        },
+        {
+          "check": "rate_master_validate",
+          "status": "PASS"
+        },
+        {
+          "check": "prompt_lint",
+          "status": "PASS"
+        },
+        {
+          "check": "dlp_scan",
+          "status": "PASS"
+        },
+        {
+          "check": "golden_cases",
+          "status": "PASS"
+        },
+        {
+          "check": "workbook_contract_config_validate",
+          "status": "PASS"
+        },
+        {
+          "check": "workbook_output_validate",
+          "status": "PASS"
+        }
+      ]
+    }
+  ],
+  "gate_summary": {
+    "package_structure": "PASS",
+    "rate_master": "PASS",
+    "prompt_lint": "PASS",
+    "dlp_scan": "PASS",
+    "golden_cases": "PASS",
+    "workbook_contract_config": "PASS",
+    "workbook_output_contract": "PASS"
+  },
+  "note": "Workbook output validation is included in contract-only mode for package tests. Use --workbook to validate a generated audit workbook artifact."
+}

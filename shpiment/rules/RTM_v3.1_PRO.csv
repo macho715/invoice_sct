@@ -1,0 +1,24 @@
+﻿Requirement_ID,Gate,Rule_ID,Requirement,Test_ID,Primary_Source,Release_Criterion,Severity
+REQ-001,Source Audit,RULE-SRC-001,Source sheet exclusion respected,TEST-SRC-001,modules/DSV_Invoice_Line_Audit_Automation_v3.1_PRO.md,No excluded/final/output tabs in MasterData,HIGH
+REQ-002,Source Audit,RULE-SRC-002,Formula-like text preserved as text,TEST-SRC-002,docs/DSV-Invoice-Line-Audit-Automation_v3.1_PRO.txt,Formula column text; REV fields values/formulas as specified,MEDIUM
+REQ-003,Source Audit,RULE-MD-001,MasterData has exact 15 columns,TEST-MD-001,docs/DSV-MasterData-Line_Audit-Final-Validator_v3.1_PRO.txt,15-column order verified,HIGH
+REQ-004,Line Audit,RULE-LA-001,Line_Audit A:AL populated with required concepts,TEST-LA-001,modules/DSV_MasterData_Line_Audit_Final_Validator_v3.1_PRO.md,No blank TYPE-A/TYPE-B; required fields present,HIGH
+REQ-005,TYPE-B,RULE-TB-001,TYPE-B priority fixed and STROAGE preserved,TEST-TB-001,spreadsheets/TYPE_B_Rules_v3.1_PRO.csv,customs inspection -> Inspection before Customs,HIGH
+REQ-006,Contract Audit,RULE-CR-001,Contract PASS only for exact charge/route/unit/scope match,TEST-CR-001,modules/DSV_Cost_Guard_Rate_Lookup_v3.1_PRO.md,No auto PASS when scope inferred/duplicate,CRITICAL
+REQ-007,Contract Audit,RULE-CR-002,AT COST/AS PER OFFER requires evidence,TEST-CR-002,rules/Evidence_Confidence_Model_v3.1_PRO.json,Text exceptions return AMBER/ZERO unless supported,CRITICAL
+REQ-008,Final Reconciliation,RULE-FR-001,Final subtotal before VAT ties to Line_Audit and TYPE-B within 0.01 USD,TEST-FR-001,modules/DSV_MasterData_Line_Audit_Final_Validator_v3.1_PRO.md,Critical equation satisfied,CRITICAL
+REQ-009,Final Reconciliation,RULE-FR-002,DSV_ONLY/reconciliation rows visible and auditable,TEST-FR-002,docs/DSV-MasterData-Line_Audit-Final-Validator_v3.1_PRO.txt,Final invoice rows absent from source visible in Line_Audit,HIGH
+REQ-010,Security/DLP,RULE-DLP-001,No private rates/PII in public answers or public package,TEST-DLP-001,rules/Configuration_Management_v3.1_PRO.json,Masked public package excludes private rate master,CRITICAL
+REQ-011,HS/UAE Compliance,RULE-HS-001,HS/UAE/permit/safety final decision needs authoritative evidence,TEST-HS-001,modules/DSV_HS_Risk_ZERO_Gate_v3.1_PRO.md,Return ZERO when evidence insufficient,CRITICAL
+REQ-012,DEM/DET & Storage,RULE-DD-001,DEM/DET/storage settlement requires dates/tariff/freetime/invoice/contract,TEST-DD-001,modules/DSV_DEMDET_Storage_Gate_v3.1_PRO.md,Return ZERO for final settlement with missing critical inputs,CRITICAL
+REQ-013,Actions,RULE-ACT-001,External action sequence enforced,TEST-ACT-001,docs/GPTS_BUILDER_COPYPASTE_INSTRUCTIONS_v3.1_PRO.md,dry-run -> approval -> execute -> audit log -> rollback note,HIGH
+REQ-014,ROUNDUP,RULE-RND-001,ROUNDUP disclosure mandatory when raw values used,TEST-RND-001,docs/DSV_GPTS_TROUBLESHOOTING_v3.1_PRO.md,Mandatory Korean disclosure present,MEDIUM
+REQ-015,Package Integrity,RULE-PKG-001,Manifest SHA256 generated and validators present,TEST-PKG-001,scripts/package_self_check.py,Manifest validates required files and scripts,HIGH
+REQ-016,Traceability,RULE-RTM-001,Critical gates require Requirement_ID/Rule_ID/Test_ID,TEST-RTM-001,spreadsheets/RTM_v3.1_PRO.csv,No critical verdict without mapping,CRITICAL
+REQ-017,Regression,RULE-TEST-001,Golden cases cover core ZERO/AMBER/PASS scenarios,TEST-REG-001,tests/golden_cases/core_cases.jsonl,Golden cases are present and parseable,HIGH
+REQ-018,Configuration Management,RULE-CM-001,Private rate/rule changes require version/change log/approval,TEST-CM-001,rules/Configuration_Management_v3.1_PRO.json,Change metadata present,HIGH
+REQ-019,Public Sharing,RULE-PUB-001,Public package must be masked and free of private contract_rate.json,TEST-PUB-001,scripts/harness_validate_package.py,Public masked package validation passes,CRITICAL
+REQ-020,Evidence Confidence,RULE-EV-001,Evidence confidence score controls PASS readiness,TEST-EV-001,rules/Evidence_Confidence_Model_v3.1_PRO.json,Critical evidence confidence threshold met,HIGH
+REQ-021,Release Gate,RULE-REL-001,Release blocked until validators pass,TEST-REL-001,rules/Release_Gate_v3.1_PRO.json,NO_RELEASE unless self-check/rate/prompt lint pass,CRITICAL
+REQ-022,Prompt Injection,RULE-SEC-002,Uploaded-file instruction override attempts ignored,TEST-SEC-002,rules/Gate_Rules_v3.1_PRO.json,Safety/source hierarchy cannot be overridden,CRITICAL
+REQ-023,GPT Platform,RULE-GPT-001,GPT config respects Actions/Apps/privacy/workspace constraints,TEST-GPT-001,docs/OPENAI_GPTS_REFERENCES_2026-06-09.md,Actions/app constraints documented for setup,MEDIUM

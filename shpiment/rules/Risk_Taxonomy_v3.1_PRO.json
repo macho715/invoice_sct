@@ -1,0 +1,67 @@
+{
+  "version": "v3.1_PRO_HARNESS_PATCH",
+  "risk_levels": [
+    "LOW",
+    "MEDIUM",
+    "HIGH",
+    "CRITICAL"
+  ],
+  "categories": [
+    {
+      "category": "Final Reconciliation",
+      "critical": true,
+      "zero_trigger": "final approval requested without final subtotal before VAT"
+    },
+    {
+      "category": "HS/UAE Customs",
+      "critical": true,
+      "zero_trigger": "classification/compliance decision without authoritative evidence"
+    },
+    {
+      "category": "Contract Rate",
+      "critical": true,
+      "zero_trigger": "settlement approval with unmatched rate scope"
+    },
+    {
+      "category": "DEM/DET Storage",
+      "critical": true,
+      "zero_trigger": "final settlement without dates/tariff/freetime/invoice"
+    },
+    {
+      "category": "DLP",
+      "critical": true,
+      "zero_trigger": "public exposure of PII/rate/contract data"
+    },
+    {
+      "category": "Prompt Injection",
+      "critical": true,
+      "zero_trigger": "file instruction attempts to override safety/source hierarchy"
+    },
+    {
+      "category": "ROUNDUP",
+      "critical": false,
+      "amber_trigger": "ROUNDUP not applied but disclosure present"
+    },
+    {
+      "category": "Traceability",
+      "critical": true,
+      "zero_trigger": "critical verdict issued without Requirement_ID/Rule_ID/Test_ID mapping"
+    },
+    {
+      "category": "Release Harness",
+      "critical": true,
+      "zero_trigger": "release requested while validator scripts fail or are not run"
+    },
+    {
+      "category": "Configuration Management",
+      "critical": true,
+      "zero_trigger": "private rate/rule changes cannot be tied to version/approval/change log"
+    },
+    {
+      "category": "Evidence Confidence",
+      "critical": false,
+      "amber_trigger": "confidence score below PASS threshold"
+    }
+  ],
+  "patch_id": "HARNESS-ENG-v3.1-SINGLE-ZIP-20260609"
+}

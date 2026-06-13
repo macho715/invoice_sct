@@ -1,0 +1,64 @@
+{
+  "version": "v3.1_PRO_HARNESS_PATCH",
+  "patch_id": "HARNESS-ENG-v3.1-SINGLE-ZIP-20260609",
+  "canonical_classes": [
+    "Customs",
+    "DO",
+    "INLAND",
+    "THC",
+    "Inspection",
+    "Detention",
+    "STROAGE",
+    "OTHERS"
+  ],
+  "routing_priority": [
+    {
+      "priority": 1,
+      "pattern": "customs inspection",
+      "type_b": "Inspection"
+    },
+    {
+      "priority": 2,
+      "pattern": "customs clearance|bill of entry|BOE|customs duty|export customs|SHJ customs code-opening",
+      "type_b": "Customs"
+    },
+    {
+      "priority": 3,
+      "pattern": "master DO|house DO|delivery order|DO fee",
+      "type_b": "DO"
+    },
+    {
+      "priority": 4,
+      "pattern": "transport|truck|inland|FB from|CIPCA|MOSB",
+      "type_b": "INLAND"
+    },
+    {
+      "priority": 5,
+      "pattern": "terminal handling|port handling|TSC|discharging",
+      "type_b": "THC"
+    },
+    {
+      "priority": 6,
+      "pattern": "detention",
+      "type_b": "Detention"
+    },
+    {
+      "priority": 7,
+      "pattern": "storage|stroage",
+      "type_b": "STROAGE"
+    },
+    {
+      "priority": 8,
+      "pattern": "*",
+      "type_b": "OTHERS"
+    }
+  ],
+  "required_output_fields": [
+    "SCT_CODE",
+    "SCT_LABEL",
+    "TYPE_B",
+    "confidence",
+    "audit_trace_id"
+  ],
+  "low_confidence_action": "AMBER_REVIEW_TYPE_B"
+}

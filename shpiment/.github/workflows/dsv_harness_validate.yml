@@ -1,0 +1,27 @@
+name: DSV Harness Validate
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'rules/**'
+      - 'tests/**'
+      - '01_GPT_PROJECT_INSTRUCTIONS.md'
+      - '02_COMBINED_SYSTEM_KNOWLEDGE.md'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run DSV harness
+        run: python scripts/run_self_test_3x.py .
+      - name: Upload validation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsv-validation-runs
+          path: tests/validation_runs/*.json

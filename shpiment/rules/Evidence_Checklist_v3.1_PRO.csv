@@ -1,0 +1,10 @@
+﻿Evidence_Type,Applies_To,Required_For_PASS,Common_File,Gate_When_Missing,Notes,Default_Confidence_Score,Requirement_ID,Harness_Note
+Final Subtotal Before VAT,Final Reconciliation,Y,Final issued DSV invoice,AMBER; ZERO if final approval requested,VAT-inclusive total is not substitute unless VAT row intentionally included.,95,REQ-008,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+Contract Rate,Contract Audit,Y for rate-controlled charge,contract_rate.json / signed rate card,AMBER or ZERO for high-value settlement,Charge/route/unit/scope must match.,85,REQ-006,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+Client Approval,Pass-through / outlay / AS PER OFFER,Y,approval email/PDF/MD,AMBER,Approval amount and shipment/ref should match.,80,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+Vendor Invoice,AT COST,Y,vendor invoice/supporting invoice,AMBER; ZERO if settlement approval,Amount/currency/FX basis required.,75,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+BOE / Customs Proof,Customs duty/clearance,Y for customs charge,BOE/payment/customs declaration,ZERO for compliance decision,Do not infer HS/UAE customs basis.,75,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+DO / Delivery Order,DO,Y if non-standard amount,DO receipt/invoice,AMBER,Match by shipment/ref/container.,75,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+Port/Terminal Invoice,THC/terminal,Y,terminal invoice/receipt,AMBER,Port/terminal basis.,75,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+Storage / DEM/DET,STROAGE/Detention,Y,terminal/warehouse invoice/freetime/tariff,AMBER; ZERO if final settlement,"Dates, free time, tariff, approved rate needed.",75,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.
+FX Basis,Currency conversion,Y when AED/USD conversion affects variance,invoice FX/contract FX,AMBER,Default package FX in rate master may be reference only.,75,REQ-020,Use Evidence_Confidence_Model_v3.1_PRO.json for PASS readiness.

@@ -1,0 +1,55 @@
+Field,Purpose,Sensitivity,Validation
+AI_Compare_Basis,Rate master attribute,INTERNAL,optional/context
+AI_Confusion_Flag,Rate master attribute,INTERNAL,optional/context
+AI_Final_Output,Rate master attribute,INTERNAL,optional/context
+AI_Lookup_Path,Rate master attribute,INTERNAL,optional/context
+AI_Rate_Status,Rate master attribute,PRIVATE,optional/context
+AI_Reviewer_Action,Rate master attribute,INTERNAL,optional/context
+AI_Scope_Group,Rate master attribute,INTERNAL,optional/context
+Autofail_Threshold,Rate master attribute,INTERNAL,optional/context
+Cargo_Category,Rate master attribute,INTERNAL,optional/context
+Cargo_Type,Rate master attribute,INTERNAL,optional/context
+Charge_Description,Rate master attribute,INTERNAL,optional/context
+Container_Type,Rate master attribute,INTERNAL,optional/context
+Contract_Key,Rate master attribute,INTERNAL,optional/context
+Contract_Row_ID,Stable row ID for citation,INTERNAL,required for lookup
+Currency_Base,Rate master attribute,INTERNAL,optional/context
+Data_Quality_Note,Rate master attribute,INTERNAL,optional/context
+Data_Quality_Status,Rate master attribute,INTERNAL,optional/context
+Dataset,Rate master attribute,INTERNAL,optional/context
+Destination,Rate master attribute,INTERNAL,optional/context
+Detail_Cargo_Type,Rate master attribute,INTERNAL,optional/context
+Detail_Cargo_Type_1,Rate master attribute,INTERNAL,optional/context
+Duplicate_Count,Rate master attribute,INTERNAL,optional/context
+FX_USD_AED,Rate master attribute,PRIVATE,optional/context
+Flag,Rate master attribute,INTERNAL,optional/context
+GPT_Exception_Action,Rate master attribute,INTERNAL,optional/context
+GPT_Last_Patched,Rate master attribute,INTERNAL,optional/context
+GPT_Match_Priority,Rate master attribute,INTERNAL,optional/context
+GPT_Primary_Key,Composite key for lookup,INTERNAL,required for lookup
+GPT_Rate_Basis,Rate master attribute,PRIVATE,optional/context
+GPT_Search_Text,Rate master attribute,INTERNAL,optional/context
+GPT_Validation_Rule,Rate master attribute,INTERNAL,optional/context
+Height_m,Rate master attribute,INTERNAL,optional/context
+Last_Checked,Rate master attribute,INTERNAL,optional/context
+Length_m,Rate master attribute,INTERNAL,optional/context
+Match_Eligible,Rate master attribute,INTERNAL,optional/context
+Max_MT,Rate master attribute,INTERNAL,optional/context
+Min_MT,Rate master attribute,INTERNAL,optional/context
+Normalized_Charge,Normalized charge description,INTERNAL,required for lookup
+Port,Rate master attribute,INTERNAL,optional/context
+Rate_AED,Contract numeric rate in AED,PRIVATE,optional/context
+Rate_Text,Rate master attribute,PRIVATE,optional/context
+Rate_Type,Rate master attribute,PRIVATE,optional/context
+Rate_USD,Contract numeric rate in USD,PRIVATE,optional/context
+Raw_Rates_USD,Rate master attribute,PRIVATE,optional/context
+Remark,Rate master attribute,INTERNAL,optional/context
+Route_Key,Route/port key,INTERNAL,optional/context
+Source_Line,Rate master attribute,INTERNAL,optional/context
+TYPE_B,Cost bucket,INTERNAL,required for lookup
+Tolerance,Allowed comparison tolerance,INTERNAL,optional/context
+Unit,Billing unit,INTERNAL,required for lookup
+Validation_Tolerance,Rate master attribute,INTERNAL,optional/context
+Width_m,Rate master attribute,INTERNAL,optional/context
+
+Patch_Note,Harness v3.0 adds RTM/Test/CM linkage,INTERNAL,required for release

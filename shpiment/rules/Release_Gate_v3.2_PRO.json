@@ -1,0 +1,79 @@
+{
+  "version": "v3.2_PRO_WORKBOOK_OUTPUT_GATE",
+  "patch_id": "HARNESS-ENG-v3.2-WORKBOOK-OUTPUT-GATE-20260609",
+  "release_status_values": [
+    "PASS_READY",
+    "PASS_WITH_WARNINGS_READY",
+    "NO_RELEASE",
+    "ZERO_BLOCKED"
+  ],
+  "required_commands": [
+    "python scripts/package_self_check.py .",
+    "python scripts/rate_master_validate.py .",
+    "python scripts/prompt_lint.py .",
+    "python scripts/dlp_scan.py .",
+    "python scripts/golden_case_runner.py .",
+    "python scripts/workbook_contract_config_validate.py .",
+    "python scripts/workbook_output_validate.py . --contract-only",
+    "python scripts/harness_validate_package.py ."
+  ],
+  "hard_blockers": [
+    "final_subtotal_before_vat_missing_for_final_approval",
+    "critical_evidence_missing",
+    "private_rate_or_pii_exposure",
+    "hs_uae_customs_decision_without_authoritative_evidence",
+    "demdet_storage_final_settlement_missing_inputs",
+    "rtm_or_test_id_missing_for_critical_gate",
+    "validator_script_failed",
+    "workbook_required_sheet_missing",
+    "workbook_sheet_order_mismatch",
+    "type_b_summary_missing",
+    "line_vs_type_b_delta_nonzero",
+    "evidence_status_blank",
+    "formula_text_live_formula_detected",
+    "dlp_hit_in_public_output"
+  ],
+  "pass_thresholds": {
+    "final_recon_delta_abs_max": 0.01,
+    "critical_evidence_confidence_min": 85,
+    "noncritical_evidence_confidence_min": 60,
+    "contract_numeric_tolerance_usd_default": 0.03,
+    "input_required_max": 3
+  },
+  "workbook_submission_sheets": [
+    "00_Decision",
+    "01_Action_Items",
+    "02_Final_Recon",
+    "03_Type_B_Summary",
+    "04_Line_View",
+    "90_Source_Data",
+    "91_Audit_Detail",
+    "92_Evidence_Issues"
+  ],
+  "workbook_required_sheets": [
+    "00_Decision",
+    "01_Action_Items",
+    "02_Final_Recon",
+    "03_Type_B_Summary",
+    "04_Line_View",
+    "90_Source_Data",
+    "91_Audit_Detail",
+    "92_Evidence_Issues"
+  ],
+  "forbidden_default_sheet": null,
+  "artifact_gates": {
+    "sheet_count_exact": 8,
+    "required_sheet_order_exact": true,
+    "source_line_count_equals_line_audit_count": true,
+    "type_b_classified_count_equals_source_line_count": true,
+    "evidence_status_count_equals_source_line_count": true,
+    "line_total_equals_type_b_total": true,
+    "final_subtotal_required_for_final_pass": true,
+    "freeze_top_row_required": true,
+    "autofilter_required": true,
+    "formula_text_must_be_text": true,
+    "roundup_status_required": true,
+    "dlp_scan_required": true
+  },
+  "roundup_disclosure": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+}

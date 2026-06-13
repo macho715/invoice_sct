@@ -1,0 +1,36 @@
+{
+  "version": "v3.1_PRO_HARNESS_PATCH",
+  "patch_id": "HARNESS-ENG-v3.1-SINGLE-ZIP-20260609",
+  "controlled_items": [
+    "docs",
+    "modules",
+    "rules",
+    "spreadsheets",
+    "private/contract_rate.json",
+    "scripts",
+    "tests"
+  ],
+  "change_classes": {
+    "major": "output contract, gate change, DLP/security rule, release process",
+    "minor": "new rule/module/test/schema",
+    "patch": "typo, docs, non-breaking validator improvement"
+  },
+  "required_change_metadata": [
+    "Change_ID",
+    "Owner",
+    "Reviewer",
+    "Effective_Date",
+    "Reason",
+    "Impacted_Requirement_ID",
+    "Test_ID",
+    "Rollback_Path"
+  ],
+  "private_rate_master": {
+    "path": "private/contract_rate.json",
+    "classification": "PRIVATE_INTERNAL_RATE_MASTER",
+    "public_share": false,
+    "allowed_public_artifact": "rules/contract_rate_PUBLIC_MASKED_SAMPLE.json"
+  },
+  "release_audit_log_required": true,
+  "rollback_source": "legacy_v2_source/"
+}
