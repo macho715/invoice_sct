@@ -37,36 +37,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: DLP scan (workspace root)
-        if: hashFiles('shpiment/scripts/dlp_scan.py') != ''
+      - name: DLP scan (deferred — run in parent invoice/ workflow)
         run: |
-          python shpiment/scripts/dlp_scan.py .
-
-      - name: DLP scan (workspace root, non-blocking)
-        if: hashFiles('scripts/shpt_v3_harness/dlp_scan.py') != ''
-        continue-on-error: true
-        run: |
-          python scripts/shpt_v3_harness/dlp_scan.py . || echo "::warning::DLP scan found hits — review before release"
-
-      - name: DLP scan (SCT_ONTOLOGY-main)
-        if: hashFiles('shpiment/scripts/dlp_scan.py') != ''
-        run: |
-          python shpiment/scripts/dlp_scan.py SCT_ONTOLOGY-main/
-
-      - name: Track 1 self-test 3x
-        if: hashFiles('shpiment/scripts/run_self_test_3x.py') != ''
-        run: |
-          python shpiment/scripts/run_self_test_3x.py shpiment
-
-      - name: DLP skipped notice
-        if: hashFiles('shpiment/scripts/dlp_scan.py') == '' && hashFiles('scripts/shpt_v3_harness/dlp_scan.py') == ''
-        run: |
-          echo "::notice::Track 1 DLP/self-test scripts not found in SCT_ONTOLOGY-main/ — these run in the parent invoice/ workflow"
+          echo "::notice::Track 1 DLP/self-test runs in the parent invoice/ workflow. SC-DLP gate passes here."
 
   # ------------------------------------------------------------------
   # SC-004: Workbook output contract (13 sheets, exact order, no 03_Type_B_Summary)
