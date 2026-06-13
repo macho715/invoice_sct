@@ -34,6 +34,13 @@ export function checkReconciliation(invoiceTotal: number | null, lineAuditTotal:
   return { ok: true, verdict: 'PASS', reason: null };
 }
 
+export function checkDlpExport(violations: Array<{ sheet: string; row: number; col: number; category: string; value: string }>): { verdict: Verdict; reason?: string; details?: number } {
+  if (violations.length > 0) {
+    return { verdict: 'ZERO' as Verdict, reason: 'DLP_HIT_IN_EXPORT', details: violations.length };
+  }
+  return { verdict: 'PASS' as Verdict };
+}
+
 export function buildGateResult(jobId: string, lines: CostGuardLine[], evidenceFindings: EvidenceFinding[] = []) {
   const line_results = lines.map(l => ({
     line_id: l.line_id,

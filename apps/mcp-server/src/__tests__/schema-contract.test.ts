@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { MCP_TOOLS } from '../tools/index.js';
 
 describe('MCP tool schema contract', () => {
-  it('has exactly 11 tools registered', () => {
-    expect(MCP_TOOLS).toHaveLength(11);
+  it('has exactly 13 tools registered', () => {
+    expect(MCP_TOOLS).toHaveLength(13);
   });
 
   describe.each(MCP_TOOLS.map(t => [t.name, t]))('%s', (_name, tool) => {

@@ -147,6 +147,62 @@ export function scanForDlpViolations(
   };
 }
 
+export interface WorkbookViolation {
+  sheet: string;
+  row: number;
+  col: number;
+  category: DlpViolationType;
+  value: string;
+}
+
+export interface WorkbookScanResult {
+  clean: boolean;
+  violations: WorkbookViolation[];
+}
+
+export function scanWorkbook(sheets: Record<string, string[][]>): WorkbookScanResult {
+  const violations: WorkbookViolation[] = [];
+
+  for (const [sheetName, rows] of Object.entries(sheets)) {
+    for (let ri = 0; ri < rows.length; ri++) {
+      const row = rows[ri];
+      for (let ci = 0; ci < row.length; ci++) {
+        const cell = row[ci];
+        if (!cell) continue;
+        for (const entry of PATTERNS) {
+          const flags = entry.pattern.flags.includes('g')
+            ? entry.pattern.flags
+            : `${entry.pattern.flags}g`;
+          const regex = new RegExp(entry.pattern.source, flags);
+          let match: RegExpExecArray | null;
+          while ((match = regex.exec(cell)) !== null) {
+            const matchedText = match[0];
+            if (matchedText.length === 0) {
+              regex.lastIndex++;
+              continue;
+            }
+            if (entry.type === 'PHONE' && matchedText.replace(/\D/g, '').length < 7) {
+              continue;
+            }
+            violations.push({
+              sheet: sheetName,
+              row: ri,
+              col: ci,
+              category: entry.type,
+              value: maskSnippet(matchedText),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    clean: violations.length === 0,
+    violations,
+  };
+}
+
 export function assertDlpClean(content: string, location?: string): void {
   const result = scanForDlpViolations(content, location);
 

@@ -9,12 +9,12 @@ describe('MCP Router', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.status).toBe('ok');
-      expect(body.tools).toBe(11);
+      expect(body.tools).toBe(13);
     });
   });
 
   describe('POST /mcp - tools/list', () => {
-    it('returns all 11 tools with correct names', async () => {
+    it('returns all 13 tools with correct names', async () => {
       const req = new Request('http://localhost/mcp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -25,7 +25,7 @@ describe('MCP Router', () => {
       const body = await res.json();
       expect(body.jsonrpc).toBe('2.0');
       expect(body.id).toBe(1);
-      expect(body.result.tools).toHaveLength(11);
+      expect(body.result.tools).toHaveLength(13);
 
       const toolNames = body.result.tools.map((t: { name: string }) => t.name);
       const expectedNames = MCP_TOOLS.map(t => t.name);

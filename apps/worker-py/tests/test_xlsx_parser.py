@@ -16,10 +16,10 @@ def _make_xlsx(headers, rows):
 
 def test_parses_basic_invoice_lines():
     raw = _make_xlsx(
-        ['Description', 'Qty', 'Rate', 'Amount', 'Currency'],
+        ['Description', 'Qty', 'Rate', 'Amount', 'Currency', 'Shipment Ref', 'Job No', 'Unit'],
         [
-            ['TRUCKING', 2, 50.0, 100.0, 'AED'],
-            ['THC',      1, 75.0,  75.0, 'AED'],
+            ['TRUCKING', 2, 50.0, 100.0, 'AED', 'HV-001', 'J-123', 'PER_MT'],
+            ['THC',      1, 75.0,  75.0, 'AED', 'HV-001', 'J-124', 'PER_TEU'],
         ]
     )
     ni = parse_xlsx_bytes(raw, file_id='f1', file_name='inv.xlsx', parser_version='parser-0.1.0')
@@ -27,6 +27,10 @@ def test_parses_basic_invoice_lines():
     l0 = ni.invoice_lines[0]
     assert l0.description == 'TRUCKING' and l0.qty == 2 and l0.rate == 50.0 and l0.amount == 100.0
     assert l0.currency == 'AED'
+    assert l0.shipment_ref == 'HV-001'
+    assert l0.job_number == 'J-123'
+    assert l0.rate_basis == 'PER_MT'
+    assert l0.for_charge_component is None
     assert ni.invoice_header.currency == 'AED'
     assert ni.parser_version == 'parser-0.1.0'
 

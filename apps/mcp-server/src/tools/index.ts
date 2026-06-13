@@ -1,5 +1,5 @@
 /**
- * MCP Validation Server - 11 tools registry (Q-003 resolution).
+ * MCP Validation Server - 12 tools registry (Q-003 resolution).
  *
  * Each tool module exports:
  *   - ToolName: const literal string for the tool's identifier
@@ -21,7 +21,9 @@ import * as check_evidence_required from './check_evidence_required.js';
 import * as check_tax_vat from './check_tax_vat.js';
 import * as check_fx_policy from './check_fx_policy.js';
 import * as check_cost_guard from './check_cost_guard.js';
+import * as check_hs_uae_compliance from './check_hs_uae_compliance.js';
 import * as build_validation_explanation from './build_validation_explanation.js';
+import * as classify_type_b from './classify_type_b.js';
 
 export {
   route_question,
@@ -34,7 +36,9 @@ export {
   check_tax_vat,
   check_fx_policy,
   check_cost_guard,
-  build_validation_explanation
+  check_hs_uae_compliance,
+  build_validation_explanation,
+  classify_type_b
 };
 
 // Per-module shape is intentionally loose so each tool file can keep its precise
@@ -53,11 +57,13 @@ export const ALL_TOOLS: McpToolModule[] = [
   check_tax_vat,
   check_fx_policy,
   check_cost_guard,
-  build_validation_explanation
+  check_hs_uae_compliance,
+  build_validation_explanation,
+  classify_type_b
 ];
 
-if (ALL_TOOLS.length !== 11) {
-  throw new Error(`Expected 11 tools, got ${ALL_TOOLS.length}`);
+if (ALL_TOOLS.length !== 13) {
+  throw new Error(`Expected 13 tools, got ${ALL_TOOLS.length}`);
 }
 
 // Loose schema typing so MCP_TOOLS can be uniformly listed for /tools/list and
@@ -84,7 +90,9 @@ const DESCRIPTIONS: Record<string, string> = {
   check_tax_vat: 'Validates VAT / tax compliance',
   check_fx_policy: 'Validates foreign exchange rate usage against policy',
   check_cost_guard: 'Runs CostGuard numeric-integrity + standard-rate analysis',
-  build_validation_explanation: 'Generates human-readable explanation for a validation finding'
+  check_hs_uae_compliance: 'Validates HS/UAE customs compliance (BOE + HS code)',
+  build_validation_explanation: 'Generates human-readable explanation for a validation finding',
+  classify_type_b: 'Classifies an invoice line into a TYPE-B category (INSPECTION/CUSTOMS/DO/INLAND/THC/DETENTION/STROAGE/OTHERS)'
 };
 
 // Build the unified schema map (preserves the legacy ToolInputSchemas contract).
@@ -99,7 +107,9 @@ export const ToolInputSchemas = {
   check_tax_vat: check_tax_vat.CheckTaxVatInputSchema,
   check_fx_policy: check_fx_policy.CheckFxPolicyInputSchema,
   check_cost_guard: check_cost_guard.CheckCostGuardInputSchema,
-  build_validation_explanation: build_validation_explanation.BuildValidationExplanationInputSchema
+  check_hs_uae_compliance: check_hs_uae_compliance.CheckHsUaeComplianceInputSchema,
+  build_validation_explanation: build_validation_explanation.BuildValidationExplanationInputSchema,
+  classify_type_b: classify_type_b.ClassifyTypeBInputSchema
 } as const;
 
 export const MCP_TOOL_LIST = Object.keys(ToolInputSchemas) as Array<keyof typeof ToolInputSchemas>;
