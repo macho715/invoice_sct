@@ -35,56 +35,62 @@ export async function POST(req: Request): Promise<Response> {
   const files = await STORE.listSourceFiles(body.job_id);
   if (files.length === 0) return err('INVALID_STATE', 'no source files');
   await STORE.updateJob(body.job_id, { status: 'PARSING' });
-  const file = files[0];
+
+  const invoiceFile = files.find(f => f.file_type === 'xlsx' || f.file_type === 'md' || f.file_type === 'txt');
+  const evidenceFiles = files.filter(f => f.file_type === 'pdf');
+
+  if (!invoiceFile) {
+    return err('INVALID_STATE', 'invoice file required (xlsx, md, or txt) — PDF-only uploads are evidence, not invoices');
+  }
+
   const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000', token: process.env.PARSER_WORKER_TOKEN ?? 'dev' });
   let parseRes;
   try {
-    const blobUrl = await getSignedDownloadUrl(file.blob_ref);
+    const blobUrl = await getSignedDownloadUrl(invoiceFile.blob_ref);
     const basePayload = {
-      blob_ref: file.blob_ref, file_id: file.file_id, job_id: body.job_id,
-      file_type: file.file_type as 'xlsx' | 'md' | 'txt' | 'pdf',
+      blob_ref: invoiceFile.blob_ref, file_id: invoiceFile.file_id, job_id: body.job_id,
+      file_type: invoiceFile.file_type as 'xlsx' | 'md' | 'txt' | 'pdf',
       parser_version: job.parser_version,
       blob_url: blobUrl
     };
-    if (file.file_type === 'pdf') {
-      parseRes = await parser.parsePdfText(basePayload);  // P3B
-    } else {
-      parseRes = await parser.parse(basePayload as any);
-    }
+    parseRes = await parser.parse(basePayload as any);
   } catch (e) {
     const msg = (e as Error).message || '';
     await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
-    if (msg.includes('PARSE_PDF_UNSUPPORTED') || msg.includes('PARSE_PDF_LOW_CONFIDENCE')) {
-      const code: ErrorCode = msg.includes('PARSE_PDF_UNSUPPORTED') ? 'PARSE_PDF_UNSUPPORTED' : 'PARSE_PDF_LOW_CONFIDENCE';
-      return err(code, msg);
-    }
     return err('PARSE_FAILED', msg);
   }
-  // P3C: low-confidence AMBER gate for PDF (plan §6.2, FR-071) - force AMBER regardless of CostGuard
-  const pconf = (parseRes as any)?.normalized?.parser_confidence ?? 1.0;
-  const isPdfLowConf = file.file_type === 'pdf' && pconf < 0.85;
+
   await STORE.appendTrace(body.job_id, {
     step: 'PARSE',
-    input_ref: file.file_type === 'pdf' ? `${file.blob_ref}|pdf_page=1` : file.blob_ref,
+    input_ref: invoiceFile.blob_ref,
     output_ref: parseRes.parse_result_id,
-    source_hash: file.sha256,
+    source_hash: invoiceFile.sha256,
     calculation_hash: parseRes.parse_result_id,
-    attributedTo: file.file_type === 'pdf' ? 'python-worker:pdfplumber' : 'python-worker'
+    attributedTo: 'python-worker'
   });
   await STORE.setNormalizedInvoice(body.job_id, parseRes.normalized as any);
 
-  // Phase 3 reviewer feedback + domestic fullset 이식: 완전 pdf_source_data population
-  // Use source_data returned from parser (built from actual text_spans in py route, ported from fullset build_supporting_doc_extractions / _extract_doc_fields)
-  const pdfSourceData = (parseRes as any).source_data || [];
-  if (file.file_type === 'pdf' && pdfSourceData.length > 0) {
-    // In real flow, feed to STORE or export builder for 90_Source_Data with real original_text, pdf_page, text_span_hash
-    await STORE.appendTrace(body.job_id, {
-      step: 'SOURCE_DATA',
-      input_ref: file.file_id,
-      output_ref: `pdf_spans:${pdfSourceData.length}`,
-      attributedTo: 'domestic-fullset-port'
-    });
-    // TODO: if STORE supports, await STORE.setSourceDataRows(body.job_id, pdfSourceData);
+  const mergedEvidence = [...((parseRes.normalized as any)?.evidence_candidates ?? [])];
+  for (const evFile of evidenceFiles) {
+    try {
+      const evBlobUrl = await getSignedDownloadUrl(evFile.blob_ref);
+      const evPayload = {
+        blob_ref: evFile.blob_ref, file_id: evFile.file_id, job_id: body.job_id,
+        file_type: 'pdf' as const, parser_version: job.parser_version, blob_url: evBlobUrl
+      };
+      const evParse = await parser.parsePdfText(evPayload);
+      const evCandidates = (evParse.normalized as any)?.evidence_candidates ?? [];
+      mergedEvidence.push(...evCandidates);
+      await STORE.appendTrace(body.job_id, {
+        step: 'EVIDENCE_PARSE',
+        input_ref: evFile.blob_ref,
+        output_ref: `evidence_candidates:${evCandidates.length}`,
+        source_hash: evFile.sha256,
+        attributedTo: 'python-worker:pdfplumber'
+      });
+    } catch {
+      await STORE.appendTrace(body.job_id, { step: 'EVIDENCE_PARSE', input_ref: evFile.blob_ref, output_ref: 'SKIPPED', attributedTo: 'python-worker:pdfplumber' });
+    }
   }
 
   await STORE.updateJob(body.job_id, { status: 'VALIDATING' });
@@ -93,7 +99,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     sct = await cf.validate(body.job_id, {
       invoice_lines: (parseRes.normalized as { invoice_lines: unknown[] }).invoice_lines,
-      evidence_index: (parseRes.normalized as { evidence_candidates: unknown[] }).evidence_candidates,
+      evidence_index: mergedEvidence,
       rule_version: job.rule_version
     });
   } catch (e: any) {
@@ -126,7 +132,7 @@ export async function POST(req: Request): Promise<Response> {
       }, 0) ?? 0
     : null;
   const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal);
-  let finalVerdict = isPdfLowConf ? 'AMBER' : gate.verdict;
+  let finalVerdict = gate.verdict;
   const actionItems = [...(gate.action_items || [])];
   if (!recon.ok && recon.verdict !== 'PASS') {
     const VERDICT_RANK: Record<string, number> = { PASS: 0, AMBER: 1, ZERO: 2, FAILED: 3 };
@@ -138,17 +144,6 @@ export async function POST(req: Request): Promise<Response> {
       issue_type: recon.reason ?? 'RECONCILIATION',
       required_action: recon.verdict === 'ZERO' ? 'TYPE-B total mismatch — Contract/Admin review required' : 'Line audit total mismatch — review line items'
     });
-  }
-  if (isPdfLowConf) {
-    // P3C §6.2: push explicit action per plan snippet
-    actionItems.push({
-      action_id: `act_pdf_low_${body.job_id}`,
-      severity: 'AMBER',
-      line_id: '',
-      issue_type: 'PDF_LOW_CONFIDENCE',
-      required_action: 'Human review of PDF extraction; re-upload higher quality scan if needed.',
-    });
-    await STORE.appendTrace(body.job_id, { step: 'AMBER_OVERRIDE', input_ref: 'parser_confidence<0.85', output_ref: 'AMBER', attributedTo: 'pdf-low-conf-gate' });
   }
   await STORE.setResult(body.job_id, { ...gate, verdict: finalVerdict, action_items: actionItems });
   await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: finalVerdict });
