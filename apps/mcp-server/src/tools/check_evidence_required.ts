@@ -6,7 +6,8 @@ export const TOOL_VERSION = '0.2.0';
 export const CheckEvidenceRequiredInputSchema = z.object({
   line_id: z.string(),
   charge_code: z.string(),
-  sct_code: z.string().nullable()
+  sct_code: z.string().nullable(),
+  present_evidence: z.array(z.string()).default([])
 });
 
 export const CheckEvidenceRequiredOutputSchema = z.object({
@@ -32,8 +33,8 @@ const EVIDENCE_MAP: Record<string, string[]> = {
 
 export async function run(input: CheckEvidenceRequiredInput): Promise<CheckEvidenceRequiredOutput> {
   const required = EVIDENCE_MAP[input.charge_code] ?? EVIDENCE_MAP['GENERAL'];
-  const present: string[] = [];
-  const missing = [...required];
+  const present = input.present_evidence ?? [];
+  const missing = required.filter(r => !present.includes(r));
 
   if (missing.length === 0) {
     return { verdict: 'PASS', required_evidence: required, present_evidence: present, missing_evidence: missing };

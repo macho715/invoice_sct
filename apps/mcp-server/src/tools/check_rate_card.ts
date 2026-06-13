@@ -8,7 +8,8 @@ export const CheckRateCardInputSchema = z.object({
   charge_code: z.string(),
   lane: z.string().nullable(),
   rate_basis: z.string().nullable(),
-  effective_date: z.string().nullable()
+  effective_date: z.string().nullable(),
+  applied_rate: z.number().nullable()
 });
 
 export const CheckRateCardOutputSchema = z.object({
@@ -65,7 +66,7 @@ export async function run(input: CheckRateCardInput): Promise<CheckRateCardOutpu
     };
   }
 
-  const appliedRate: number | null = null;
+  const appliedRate: number | null = input.applied_rate;
 
   if (appliedRate === null) {
     return {
