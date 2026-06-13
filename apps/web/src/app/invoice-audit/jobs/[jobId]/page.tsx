@@ -1,12 +1,17 @@
 import { notFound } from 'next/navigation';
-import { STORE } from '@/lib/job-store';
+import { headers } from 'next/headers';
 
 async function fetchStatus(jobId: string) {
-  const job = await STORE.getJob(jobId);
-  if (!job) return null;
-  const trace = await STORE.listTrace(jobId);
-  const lastStep = trace.at(-1)?.step ?? null;
-  return { status: job.status, verdict: job.verdict, last_step: lastStep };
+  let base = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!base) {
+    const h = await headers();
+    const host = h.get('host') ?? 'localhost:3000';
+    const proto = h.get('x-forwarded-proto') ?? 'http';
+    base = `${proto}://${host}`;
+  }
+  const r = await fetch(`${base}/api/audit/status?job_id=${jobId}`, { cache: 'no-store' });
+  if (!r.ok) return null;
+  return r.json() as Promise<{ status: string; verdict: string | null; last_step: string | null }>;
 }
 
 export default async function JobPage({ params }: { params: Promise<{ jobId: string }> }) {
