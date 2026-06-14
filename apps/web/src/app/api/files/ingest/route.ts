@@ -24,6 +24,15 @@ function err(code: ErrorCode, message: string, extra: Record<string, unknown> = 
 }
 
 export async function POST(req: Request): Promise<Response> {
+  try {
+    return await ingestFile(req);
+  } catch (e) {
+    console.error('[files/ingest] unhandled failure:', e);
+    return err('STORAGE_AUTH_FAILED', 'ingest failed');
+  }
+}
+
+async function ingestFile(req: Request): Promise<Response> {
   let form: FormData;
   try { form = await req.formData(); } catch { return err('STORAGE_AUTH_FAILED', 'invalid form body'); }
   const file = form.get('file');
