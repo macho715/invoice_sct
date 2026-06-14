@@ -100,12 +100,31 @@ export type ParserCompatibleResult = z.infer<typeof ParserCompatibleResultSchema
 
 export const NotebookLmCallbackPayloadSchema = z.object({
   job_id: z.string().min(1),
-  notebooklm_source_id: z.string().min(1),
-  summary: NotebookLmSummarySchema,
+  notebook_id: z.string().min(1).optional(),
+  notebooklm_source_id: z.string().min(1).optional(),
+  source_id: z.string().min(1).optional(),
+  summary: NotebookLmSummarySchema.optional(),
+  summary_json: NotebookLmSummarySchema.optional(),
   markdown_sha256: z.string().length(64).optional(),
   source_sha256: z.string().length(64).optional(),
+  source_hash: z.string().length(64).optional(),
   received_at: z.string().datetime().optional()
-});
+}).superRefine((value, ctx) => {
+  if (!value.notebooklm_source_id && !value.source_id) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['source_id'], message: 'source_id or notebooklm_source_id required' });
+  }
+  if (!value.summary && !value.summary_json) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['summary'], message: 'summary or summary_json required' });
+  }
+}).transform((value) => ({
+  job_id: value.job_id,
+  notebook_id: value.notebook_id ?? null,
+  notebooklm_source_id: value.notebooklm_source_id ?? value.source_id!,
+  summary: value.summary ?? value.summary_json!,
+  markdown_sha256: value.markdown_sha256,
+  source_sha256: value.source_sha256 ?? value.source_hash,
+  received_at: value.received_at
+}));
 export type NotebookLmCallbackPayload = z.infer<typeof NotebookLmCallbackPayloadSchema>;
 
 export const HIGH_IMPACT_FIELDS = [
@@ -131,6 +150,12 @@ export interface ExtractionMismatch {
   parser_value_hash: string | null;
   notebooklm_value_hash: string | null;
   impact: 'HIGH';
+}
+
+export interface NotebookLmGateIssue {
+  code: 'NOTEBOOKLM_LOW_CONFIDENCE' | 'NOTEBOOKLM_AMOUNT_MISSING' | 'NOTEBOOKLM_IDENTIFIER_MISSING' | 'NOTEBOOKLM_CURRENCY_MISSING';
+  field: 'confidence' | 'amount' | 'identifier' | 'currency';
+  severity: 'AMBER';
 }
 
 export function adaptNotebookLmToParserResult(summary: NotebookLmSummary): ParserCompatibleResult {
@@ -209,7 +234,8 @@ export function compareParserAndNotebookLm(
   return HIGH_IMPACT_FIELDS.flatMap((field) => {
     const parserValue = normalizeComparable(parserValues[field]);
     const notebookValue = normalizeComparable(notebookValues[field]);
-    if (parserValue === null || notebookValue === null || parserValue === notebookValue) return [];
+    if (parserValue === null && notebookValue === null) return [];
+    if (parserValue !== null && notebookValue !== null && parserValue === notebookValue) return [];
     return [{
       field,
       parser_value: parserValues[field],
@@ -219,6 +245,39 @@ export function compareParserAndNotebookLm(
       impact: 'HIGH' as const
     }];
   });
+}
+
+export function findNotebookLmGateIssues(summary: NotebookLmSummary): NotebookLmGateIssue[] {
+  const issues: NotebookLmGateIssue[] = [];
+  const fields = summary.fields ?? {};
+  const amount = toNumber(fields.amount ?? firstAmount(summary.amounts));
+  const hasIdentifier = [
+    fields.invoice_no,
+    fields.waybill_no,
+    fields.order_no,
+    fields.job_no,
+    fields.po_no,
+    fields.do_no,
+    fields.bol_no,
+    fields.trip_no,
+    summary.shipment_ids[0],
+    summary.document_numbers[0]
+  ].some((value) => typeof value === 'string' && value.trim().length > 0);
+
+  if (summary.confidence < 0.85) {
+    issues.push({ code: 'NOTEBOOKLM_LOW_CONFIDENCE', field: 'confidence', severity: 'AMBER' });
+  }
+  if (amount === null) {
+    issues.push({ code: 'NOTEBOOKLM_AMOUNT_MISSING', field: 'amount', severity: 'AMBER' });
+  }
+  if (!hasIdentifier) {
+    issues.push({ code: 'NOTEBOOKLM_IDENTIFIER_MISSING', field: 'identifier', severity: 'AMBER' });
+  }
+  if (!fields.currency) {
+    issues.push({ code: 'NOTEBOOKLM_CURRENCY_MISSING', field: 'currency', severity: 'AMBER' });
+  }
+
+  return issues;
 }
 
 export function summarizeMismatchesForTrace(mismatches: ExtractionMismatch[]) {
