@@ -107,4 +107,39 @@ describe('POST /api/audit/export', () => {
     expect(body.manifest.sha256).toBe('a'.repeat(64));
     expect(body.file_content_base64).toBe(mockWorkerRes.file_content_base64);
   });
+
+  it('job page download flow creates export before navigation and returns a download target', async () => {
+    const job = await STORE.createJob({ created_by: 'user_1' });
+    await STORE.updateJob(job.job_id, { status: 'APPROVED', verdict: 'PASS' });
+    await STORE.setResult(job.job_id, { verdict: 'PASS', line_results: [], action_items: [] });
+
+    const mockWorkerRes = {
+      job_id: job.job_id,
+      manifest: {
+        sha256: 'c'.repeat(64),
+        size_bytes: 16,
+        sheets: [{ sheet_name: '00_Decision', row_count: 1 }],
+        generated_at: '2026-06-09T12:00:00Z'
+      },
+      file_content_base64: Buffer.from('mock-excel-bytes').toString('base64')
+    };
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => mockWorkerRes }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await EXPORT_POST(
+      new Request('http://test/api/audit/export', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ job_id: job.job_id, kind: 'FINAL_APPROVED' })
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = await res.json();
+    expect(body.job_id).toBe(job.job_id);
+    expect(body.signed_url).toContain('/api/dev/blob/');
+    expect(body.kind).toBe('FINAL_APPROVED');
+  });
+
 });
