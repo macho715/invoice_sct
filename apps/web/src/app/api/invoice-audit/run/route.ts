@@ -112,7 +112,8 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await STORE.updateJob(body.job_id, { status: 'VALIDATING' });
-  const cf = createCfMcpClient({ baseUrl: process.env.CF_MCP_BASE_URL ?? process.env.MCP_SERVER_URL ?? 'https://hvdc-ontology-chatgpt-app.mscho715.workers.dev', timeoutMs: Number(process.env.CF_MCP_TIMEOUT_MS ?? 5000), retries: 3 });
+  // MCP validation tools now run in-process (apps/web/src/lib/mcp) — no external MCP URL needed.
+  const cf = createCfMcpClient();
   let sct;
   try {
     sct = await cf.validate(body.job_id, {
