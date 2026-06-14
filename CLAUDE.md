@@ -65,7 +65,7 @@ packages/database (TypeScript, ESM)
 - **13-sheet workbook contract**: Exact order enforced. `00_Decision` through `99_Manifest`.
 - **Approval gates**: PASS/AMBER/ZERO/FAILED. ZERO blocks export. AMBER needs reviewer approval.
 - **3-way reconciliation**: Final Subtotal = Line_Audit = TYPE-B (±0.01 tolerance)
-- **16 P2 categories** in DLP export gate
+- **DLP**: 16 P2 categories defined in `dlp-scanner.ts` (`scanForDlpViolations`/`assertDlpClean`). NOTE (2026-06-14, operator decision): the `/api/export/download` route no longer DLP-re-scans the workbook before delivery — the final Excel is delivered without a download-time `scanWorkbook` gate. DLP scanning of the assembled workbook is therefore not enforced at download; rely on upstream source/commit DLP discipline.
 - **Currency**: AED/USD only. FX policy check via `check_fx_policy`.
 - **CSP header**: `Content-Security-Policy` set in `apps/web/next.config.js` — restricts script-src, connect-src (Vercel Blob + Neon), frame-ancestors 'none'.
 - **Batch validation**: `check_rate_card_batch({checks: [{charge_code, lane, rate}, ...]})` collapses N line calls into 1 query (performance plan v1).

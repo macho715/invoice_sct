@@ -5,7 +5,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXPORTS_MAP, isDevStub } from '@/lib/export-store';
 import { evaluateApprovalGate, type ExportType } from '@/lib/approval-gate';
-import { scanWorkbook } from '@/lib/dlp-scanner';
 import { buildExportRequest } from '@/lib/workbook-builder';
 import type { ExportRequest } from '@/lib/types';
 
@@ -13,27 +12,6 @@ export const runtime = 'nodejs';
 
 function err(code: ErrorCode, message: string) {
   return NextResponse.json({ code, message }, { status: httpForError(code) });
-}
-
-function buildSheetsFromExportRequest(req: ExportRequest): Record<string, string[][]> {
-  const toRows = (objs: Record<string, unknown>[]): string[][] =>
-    objs.length === 0 ? [['']] : objs.map(obj => Object.values(obj).map(v => String(v ?? '')));
-
-  return {
-    '00_Decision': toRows(req.decision_rows),
-    '01_Action_Items': toRows(req.action_items_rows),
-    '02_Final_Recon': toRows(req.final_recon_rows),
-    '03_Header_Check': toRows(req.header_check_rows ?? []),
-    '04_Line_View': toRows(req.line_view_rows),
-    '05_Duplicate_Check': toRows(req.duplicate_check_rows ?? []),
-    '06_Rate_Check': toRows(req.rate_check_rows ?? []),
-    '07_Tax_FX_Check': toRows(req.tax_fx_check_rows ?? []),
-    '08_Shipment_Match': toRows(req.shipment_match_rows ?? []),
-    '90_Source_Data': toRows(req.source_data_rows),
-    '91_Audit_Detail': toRows(req.audit_detail_rows),
-    '92_Evidence_Issues': toRows(req.evidence_issues_rows),
-    '99_Manifest': [['']],
-  };
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -64,22 +42,17 @@ export async function GET(req: Request): Promise<Response> {
     return err(gate.error_code as ErrorCode, gate.reason);
   }
 
-  // Build the export request once: used for the DLP scan and, on a cache miss,
-  // to regenerate the workbook. EXPORTS_MAP is in-process only and is NOT shared
-  // across serverless instances, so we cannot depend on it for delivery.
+  // Build the export request once for the cross-instance regeneration fallback
+  // below. EXPORTS_MAP is in-process only and is NOT shared across serverless
+  // instances, so on a cache miss we rebuild from audit data instead.
+  // NOTE: download-route DLP scanning was intentionally removed (per operator
+  // decision 2026-06-14). The final Excel is delivered without a workbook-level
+  // DLP re-scan; see CLAUDE.md "DLP" notes.
   let exportReq: ExportRequest | null = null;
   try {
     exportReq = await buildExportRequest(jobId, undefined);
-    const sheets = buildSheetsFromExportRequest(exportReq);
-    const scanResult = scanWorkbook(sheets);
-    if (!scanResult.clean && verdict !== 'ZERO') {
-      return NextResponse.json(
-        { code: 'DLP_BLOCK', verdict: 'ZERO', violations: scanResult.violations },
-        { status: 403 }
-      );
-    }
   } catch {
-    // Data not available for DLP scan (e.g. dev stub); proceed
+    // No audit data available (e.g. dev stub); the regeneration fallback handles it.
   }
 
   const record = EXPORTS_MAP.get(jobId);
