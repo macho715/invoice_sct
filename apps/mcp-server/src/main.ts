@@ -4,6 +4,9 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { MCP_TOOLS } from './tools/index.js';
 import { guardDlp, guardDlpOutput, DlpGuardInputSchema } from './schemas/dlp-guard.js';
+import { initMcpTelemetry, withToolSpan, currentTraceId } from './telemetry.js';
+
+initMcpTelemetry();
 
 const app = new Hono();
 
@@ -73,7 +76,9 @@ app.post('/mcp', async (c) => {
     }
 
     try {
-      const result = await tool.module.run(parsed.data);
+      const result = await withToolSpan(name, { 'mcp.jsonrpc.id': String(id ?? '') }, async (_span) => {
+        return tool.module.run(parsed.data);
+      });
       const outputCheck = guardDlpOutput(result);
       if (!outputCheck.passed) {
         return c.json({
@@ -89,10 +94,11 @@ app.post('/mcp', async (c) => {
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Tool execution failed';
+      const traceId = currentTraceId();
       return c.json({
         jsonrpc: '2.0',
         id,
-        error: { code: -32000, message }
+        error: { code: -32000, message, ...(traceId ? { trace_id: traceId } : {}) }
       }, 500);
     }
   }

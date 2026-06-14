@@ -14,6 +14,7 @@
     "@hono/node-server": "^2.0.4",
     "@invoice-audit/database": "workspace:*",
     "@invoice-audit/tools": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
     "hono": "^4.0.0",
     "pg": "^8.13.1",
     "zod": "^3.23.8"

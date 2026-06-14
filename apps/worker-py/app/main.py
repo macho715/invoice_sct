@@ -6,6 +6,7 @@ from app.middleware.audit_log import AuditLogMiddleware
 from app.routes.health import router as health_router
 from app.routes.parse import router as parse_router
 from app.routes.export import router as export_router
+from app.telemetry import init_telemetry
 
 
 def create_app() -> FastAPI:
@@ -31,3 +32,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+init_telemetry()

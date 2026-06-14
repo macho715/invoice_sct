@@ -9,7 +9,8 @@
   },
   "exports": {
     "./hash": "./hash.ts",
-    "./redaction": "./redaction.ts"
+    "./redaction": "./redaction.ts",
+    "./trace-redact": "./trace-redact.ts"
   },
   "devDependencies": {
     "@types/node": "^22.19.21"
