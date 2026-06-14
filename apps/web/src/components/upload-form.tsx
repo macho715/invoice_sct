@@ -1,6 +1,7 @@
 'use client';
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { getUploadSelectionError } from '@/lib/upload-validation';
 
 const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
 
@@ -13,7 +14,8 @@ export default function UploadForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (files.length === 0) { setErr('select at least one file'); return; }
+    const selectionError = getUploadSelectionError(files);
+    if (selectionError) { setErr(selectionError); return; }
 
     // P0-5 interim: large client-direct upload is not wired yet. Block >4.5MB
     // up front (per file) so a confusing 400 is replaced with a clear message.
@@ -67,13 +69,16 @@ export default function UploadForm() {
   return (
     <form className="card" onSubmit={onSubmit}>
       <h2>Upload invoice or evidence</h2>
-      <p>Supported: <code>.xlsx</code>, <code>.md</code>, <code>.txt</code>, <code>.pdf</code> — 여러 파일(인보이스 + 증빙)을 함께 선택할 수 있습니다.</p>
+      <p>Invoice required: <code>.xlsx</code>, <code>.md</code>, or <code>.txt</code>. Evidence: <code>.pdf</code> files can be added with the invoice.</p>
       <input
         className="input"
         type="file"
         multiple
         accept=".xlsx,.md,.txt,.pdf,application/pdf"
-        onChange={e => setFiles(Array.from(e.target.files ?? []))}
+        onChange={e => {
+          setFiles(Array.from(e.target.files ?? []));
+          setErr(null);
+        }}
       />
       {files.length > 0 && (
         <ul className="file-list">

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 const putMock = vi.fn(async (_n: string, b: Blob) => ({ url: 'https://blob/x', pathname: 'x' }));
 vi.mock('@vercel/blob', () => ({ put: putMock }));
@@ -9,6 +9,13 @@ vi.stubGlobal('fetch', fetchMock);
 import { POST } from '../src/app/api/invoice-audit/run/route';
 import { POST as INGEST_POST } from '../src/app/api/files/ingest/route';
 import { STORE } from '../src/lib/job-store';
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  delete process.env.PARSER_WORKER_URL;
+  delete process.env.WORKER_URL;
+  delete process.env.PARSER_WORKER_TOKEN;
+});
 
 async function setupJob(): Promise<{ jobId: string; fileId: string }> {
   const fd = new FormData();
@@ -51,6 +58,42 @@ describe('POST /api/invoice-audit/run', () => {
     expect(body.status).toBe('REVIEW_REQUIRED');
   });
 
+  it('allows token-protected parser workers hosted on vercel.app', async () => {
+    const { jobId } = await setupJob();
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        parse_result_id: 'pr_vercel',
+        job_id: jobId,
+        file_id: 'f1',
+        normalized: {
+          invoice_id: 'inv1',
+          invoice_header: { currency: 'AED' },
+          invoice_lines: [{ line_id: 'l1', description: 'TRUCKING', currency: 'AED', amount: 100, qty: 2, rate: 50, source_ref: { sheet: 'S', row: 2, col: '0' } }],
+          evidence_candidates: [],
+          parser_confidence: 0.9,
+          parser_version: 'parser-0.1.0'
+        }
+      })
+    });
+    process.env.PARSER_WORKER_URL = 'https://sct-ontology-worker.vercel.app';
+    process.env.PARSER_WORKER_TOKEN = 't';
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', {
+      method: 'POST',
+      body: JSON.stringify({ job_id: jobId }),
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('https://sct-ontology-worker.vercel.app'),
+      expect.any(Object)
+    );
+    if (!r.ok) {
+      await expect(r.json()).resolves.not.toMatchObject({ code: 'STORAGE_AUTH_FAILED' });
+    }
+  });
 
   it('returns structured error when PARSER_WORKER_TOKEN is missing', async () => {
     const { jobId } = await setupJob();
@@ -85,7 +128,7 @@ describe('POST /api/invoice-audit/run', () => {
     expect(r.status).toBe(500);
     await expect(r.json()).resolves.toMatchObject({
       code: 'STORAGE_AUTH_FAILED',
-      message: 'WORKER_URL must point to internal host'
+      message: 'WORKER_URL must point to an allowed parser worker host'
     });
     await expect(STORE.getJob(jobId)).resolves.toMatchObject({ status: 'FAILED', verdict: 'FAILED' });
   });

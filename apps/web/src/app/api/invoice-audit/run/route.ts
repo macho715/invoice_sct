@@ -62,10 +62,10 @@ export async function POST(req: Request): Promise<Response> {
     await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
     return err('STORAGE_AUTH_FAILED', 'WORKER_URL must be a valid URL');
   }
-  const allowedHosts = ['127.0.0.1', 'localhost', '.fly.dev', '.internal'];
+  const allowedHosts = ['127.0.0.1', 'localhost', '.fly.dev', '.internal', '.vercel.app'];
   if (!allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith(h))) {
     await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
-    return err('STORAGE_AUTH_FAILED', 'WORKER_URL must point to internal host');
+    return err('STORAGE_AUTH_FAILED', 'WORKER_URL must point to an allowed parser worker host');
   }
   const parser = createParserClient({ baseUrl: workerUrl, token: parserToken });
   let parseRes;
