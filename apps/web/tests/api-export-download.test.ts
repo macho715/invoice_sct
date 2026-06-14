@@ -111,4 +111,29 @@ describe('GET /api/export/download', () => {
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect(new TextDecoder().decode(bytes)).toBe('mock-excel-bytes');
   });
+
+  it('job page download flow serves workbook only after export creation populated the cache', async () => {
+    const job = await STORE.createJob({ created_by: 'user_1' });
+    await STORE.updateJob(job.job_id, { status: 'APPROVED', verdict: 'PASS' });
+    await STORE.setResult(job.job_id, { verdict: 'PASS', line_results: [], action_items: [] });
+
+    const beforeExport = await DOWNLOAD_GET(
+      new Request(`http://test/api/export/download?job_id=${job.job_id}`)
+    );
+    expect(beforeExport.status).toBe(409);
+    expect((await beforeExport.json()).message).toBe('Job has not been exported yet');
+
+    stubWorker(job.job_id);
+    const exportRes = await EXPORT_POST(
+      new Request('http://test/api/audit/export', { method: 'POST', body: JSON.stringify({ job_id: job.job_id }) })
+    );
+    expect(exportRes.status).toBe(200);
+
+    const res = await DOWNLOAD_GET(
+      new Request(`http://test/api/export/download?job_id=${job.job_id}`)
+    );
+    expect(res.status).toBe(200);
+    expect(new TextDecoder().decode(new Uint8Array(await res.arrayBuffer()))).toBe('mock-excel-bytes');
+  });
+
 });

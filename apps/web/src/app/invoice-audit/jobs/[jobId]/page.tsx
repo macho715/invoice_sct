@@ -1,4 +1,5 @@
 import RunAuditButton from './RunAuditButton';
+import DownloadAuditButton from './DownloadAuditButton';
 
 async function fetchStatus(jobId: string) {
   const base = process.env.NEXT_PUBLIC_BASE_URL
@@ -41,7 +42,7 @@ export default async function JobPage({ params }: { params: Promise<{ jobId: str
         {!isComplete && <p><a href={`/invoice-audit/jobs/${jobId}`}>Refresh</a></p>}
         {isComplete && (
           <div style={{ marginTop: 12 }}>
-            <a href={`/api/export/download?job_id=${jobId}`} className="btn">Download Audit Workbook</a>
+            <DownloadAuditButton jobId={jobId} />
           </div>
         )}
         <p style={{ marginTop: 12 }}><a href="/invoice-audit/upload">Upload another invoice</a></p>
