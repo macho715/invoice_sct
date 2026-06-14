@@ -8,6 +8,7 @@ vi.stubGlobal('fetch', fetchMock);
 
 import { POST } from '../src/app/api/invoice-audit/run/route';
 import { POST as INGEST_POST } from '../src/app/api/files/ingest/route';
+import { STORE } from '../src/lib/job-store';
 
 async function setupJob(): Promise<{ jobId: string; fileId: string }> {
   const fd = new FormData();
@@ -48,5 +49,29 @@ describe('POST /api/invoice-audit/run', () => {
     const body = await r.json();
     expect(body.job_id).toBe(jobId);
     expect(body.status).toBe('REVIEW_REQUIRED');
+  });
+
+  it('rejects PDF-only evidence without leaving the job stuck in PARSING', async () => {
+    const fd = new FormData();
+    fd.set('file', new File(['%PDF-1.4 minimal'], 'pod.pdf', { type: 'application/pdf' }));
+    const ingest = await INGEST_POST(new Request('http://test/api/files/ingest', {
+      method: 'POST',
+      body: fd,
+      headers: { 'x-user-id': 'u1' }
+    }));
+    const uploaded = await ingest.json();
+
+    const run = await POST(new Request('http://test/api/invoice-audit/run', {
+      method: 'POST',
+      body: JSON.stringify({ job_id: uploaded.job_id }),
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    expect(run.status).toBe(409);
+    await expect(run.json()).resolves.toMatchObject({
+      code: 'INVALID_STATE',
+      message: expect.stringContaining('invoice file required')
+    });
+    await expect(STORE.getJob(uploaded.job_id)).resolves.toMatchObject({ status: 'UPLOADED' });
   });
 });

@@ -39,7 +39,6 @@ export async function POST(req: Request): Promise<Response> {
   if (job.status !== 'UPLOADED' && job.status !== 'QUEUED') return err('INVALID_STATE', `cannot run from status ${job.status}`);
   const files = await STORE.listSourceFiles(body.job_id);
   if (files.length === 0) return err('INVALID_STATE', 'no source files');
-  await STORE.updateJob(body.job_id, { status: 'PARSING' });
 
   const invoiceFile = files.find(f => f.file_type === 'xlsx' || f.file_type === 'md' || f.file_type === 'txt');
   const evidenceFiles = files.filter(f => f.file_type === 'pdf');
@@ -47,6 +46,8 @@ export async function POST(req: Request): Promise<Response> {
   if (!invoiceFile) {
     return err('INVALID_STATE', 'invoice file required (xlsx, md, or txt) — PDF-only uploads are evidence, not invoices');
   }
+
+  await STORE.updateJob(body.job_id, { status: 'PARSING' });
 
   const parserToken = process.env.PARSER_WORKER_TOKEN;
   if (!parserToken) throw new Error('PARSER_WORKER_TOKEN not configured');
