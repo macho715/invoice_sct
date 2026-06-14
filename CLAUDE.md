@@ -23,6 +23,8 @@ cd apps/mcp-server && pnpm test  # 186 tests
 
 ## Architecture
 
+**Canonical role definition:** see `docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md` (3-layer: NoteLM / Worker / Vercel).
+
 ```
 apps/web (Next.js, Vercel)
   ├── Upload → Vercel Blob
@@ -52,6 +54,22 @@ packages/tools (TypeScript, ESM)
 packages/database (TypeScript, ESM)
   └── Postgres pool singleton (Neon) — shared by web and mcp-server
 ```
+
+### Architecture Status (2026-06-14 audit)
+
+The implementation mostly matches the spec but with notable deviations:
+
+| Layer | Spec | Actual code | Status |
+|---|---|---|---|
+| **NoteLM** | field extraction only | `notebooklm-mcp-pr53-pr55` + `apps/mcp-server` | ✅ Compliant |
+| **Worker** | MarkItDown → NotebookLM → normalize → callback | `apps/worker-py` | ⚠️ **Exceeds scope** — also does PDF parsing, numeric-integrity validation, 13-sheet workbook generation, contract validation |
+| **Vercel** | callback + adapter + final audit + workbook | `apps/web` | ✅ Compliant — final audit engine, approval gate, workbook builder, NotebookLM callback receiver all present |
+
+**Known duplication:** Verdict logic and 13-sheet workbook generation exist in BOTH `apps/worker-py` (`exporters/xlsx.py`, `validators/numeric_integrity.py`) and `apps/web` (`workbook-builder.ts`, `gate-bridge.ts`). The Vercel versions are the canonical ones; Worker versions are either legacy or shadow implementations.
+
+**Migration status:** Not started. Estimated scope: 6 files move/rewrite, 1 schema simplification, 1 test suite split. See `docs/session-wraps/2026-06-14-notebooklm-ask-question-timeout.md` §5 for follow-up tasks.
+
+When making changes, respect: `Worker = orchestrator only, Vercel = final audit + workbook`. Don't add new validation logic to worker files.
 
 ## Database
 

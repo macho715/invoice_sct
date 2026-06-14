@@ -33,6 +33,13 @@ class TestResultToText:
 
 
 class TestMarkItDownMcpClient:
+    def test_uses_markitdown_timeout_env(self, monkeypatch):
+        monkeypatch.setenv("MARKITDOWN_MCP_TIMEOUT_MS", "45")
+
+        client = MarkItDownMcpClient("http://markitdown.test/mcp")
+
+        assert client.timeout == 45.0
+
     @pytest.mark.asyncio
     async def test_convert_pdf_bytes_uses_data_uri(self):
         pdf_bytes = b"%PDF-1.4 sample"
@@ -47,6 +54,32 @@ class TestMarkItDownMcpClient:
 
 
 class TestNotebookLmMcpClient:
+    def test_uses_notebooklm_mcp_timeout_env(self, monkeypatch):
+        monkeypatch.setenv("NOTEBOOKLM_MCP_TIMEOUT_MS", "600000")
+        monkeypatch.setenv("NOTEBOOKLM_ASK_TIMEOUT_MS", "120")
+
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        assert client.timeout == 600000.0
+
+    def test_uses_notebooklm_ask_timeout_env_as_fallback(self, monkeypatch):
+        monkeypatch.delenv("NOTEBOOKLM_MCP_TIMEOUT_MS", raising=False)
+        monkeypatch.setenv("NOTEBOOKLM_ASK_TIMEOUT_MS", "600000")
+
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        assert client.timeout == 600000.0
+
+    def test_ignores_invalid_timeout_env(self, monkeypatch):
+        monkeypatch.setenv("NOTEBOOKLM_MCP_TIMEOUT_MS", "not-a-number")
+        monkeypatch.setenv("NOTEBOOKLM_ASK_TIMEOUT_MS", "-1")
+
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        # Default is 300s (see comment in mcp_client.py: full MCP ask_question
+        # cycle observed at ~30s; 300s gives 10x headroom).
+        assert client.timeout == 300.0
+
     @pytest.mark.asyncio
     async def test_add_source_extracts_source_id_from_json_result(self):
         client = NotebookLmMcpClient("http://notebooklm.test/mcp")
@@ -62,6 +95,19 @@ class TestNotebookLmMcpClient:
         call_tool.assert_awaited_once_with(
             "add_source",
             {"type": "text", "content": "markdown body", "notebook_id": "nb_1"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_add_source_passes_show_browser_when_enabled(self, monkeypatch):
+        monkeypatch.setenv("NOTEBOOKLM_ADD_SOURCE_SHOW_BROWSER", "true")
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        with patch.object(client, "call_tool_text", AsyncMock(return_value='{"source_id":"src_123"}')) as call_tool:
+            await client.add_source("markdown body", notebook_id="nb_1")
+
+        call_tool.assert_awaited_once_with(
+            "add_source",
+            {"type": "text", "content": "markdown body", "notebook_id": "nb_1", "show_browser": True},
         )
 
     @pytest.mark.asyncio
@@ -177,4 +223,42 @@ class TestNotebookLmMcpClient:
         call_tool.assert_awaited_once_with(
             "ask_question",
             {"question": "Return JSON only", "notebook_id": "nb_1"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_ask_question_extracts_answer_from_success_envelope(self):
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        with patch.object(
+            client,
+            "call_tool_text",
+            AsyncMock(return_value='{"success":true,"data":{"answer":"{\\"ok\\":true}"}}'),
+        ):
+            answer = await client.ask_question("Return JSON only")
+
+        assert answer == '{"ok":true}'
+
+    @pytest.mark.asyncio
+    async def test_ask_question_raises_on_tool_failure(self):
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        with patch.object(
+            client,
+            "call_tool_text",
+            AsyncMock(return_value='{"success":false,"error":"Timeout waiting for response from NotebookLM"}'),
+        ):
+            with pytest.raises(McpToolError, match="Timeout waiting"):
+                await client.ask_question("Return JSON only")
+
+    @pytest.mark.asyncio
+    async def test_ask_question_passes_show_browser_when_enabled(self, monkeypatch):
+        monkeypatch.setenv("NOTEBOOKLM_ASK_SHOW_BROWSER", "true")
+        client = NotebookLmMcpClient("http://notebooklm.test/mcp")
+
+        with patch.object(client, "call_tool_text", AsyncMock(return_value='{"confidence":1}')) as call_tool:
+            await client.ask_question("Return JSON only", notebook_id="nb_1")
+
+        call_tool.assert_awaited_once_with(
+            "ask_question",
+            {"question": "Return JSON only", "notebook_id": "nb_1", "show_browser": True},
         )

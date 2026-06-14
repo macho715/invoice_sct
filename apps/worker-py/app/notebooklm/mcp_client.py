@@ -23,6 +23,24 @@ class McpToolError(Exception):
     pass
 
 
+def _float_env(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _result_to_text(result: Any) -> str:
     """Extract text from common MCP CallToolResult shapes."""
     content = getattr(result, "content", None)
@@ -66,8 +84,9 @@ class StreamableMcpClient:
 
 
 class MarkItDownMcpClient(StreamableMcpClient):
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 30.0):
-        super().__init__(base_url or os.environ.get("MARKITDOWN_MCP_URL"), timeout=timeout)
+    def __init__(self, base_url: Optional[str] = None, timeout: Optional[float] = None):
+        resolved_timeout = timeout if timeout is not None else _float_env("MARKITDOWN_MCP_TIMEOUT_MS", 30.0)
+        super().__init__(base_url or os.environ.get("MARKITDOWN_MCP_URL"), timeout=resolved_timeout)
 
     async def convert_pdf_bytes(self, pdf_bytes: bytes) -> str:
         data_uri = "data:application/pdf;base64," + base64.b64encode(pdf_bytes).decode("ascii")
@@ -75,13 +94,25 @@ class MarkItDownMcpClient(StreamableMcpClient):
 
 
 class NotebookLmMcpClient(StreamableMcpClient):
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 30.0):
-        super().__init__(base_url or os.environ.get("NOTEBOOKLM_MCP_URL"), timeout=timeout)
+    def __init__(self, base_url: Optional[str] = None, timeout: Optional[float] = None):
+        resolved_timeout = timeout
+        if resolved_timeout is None:
+            resolved_timeout = _float_env(
+                "NOTEBOOKLM_MCP_TIMEOUT_MS",
+                # Default 300s accommodates the full MCP ask_question cycle
+                # (browser init ~5s + type+submit ~4s + DIAG capture ~16s +
+                # answer generation ~10s + headroom). Live smoke verified on
+                # 2026-06-14: full happy path takes ~30s, so 300s gives 10x.
+                _float_env("NOTEBOOKLM_ASK_TIMEOUT_MS", 300.0),
+            )
+        super().__init__(base_url or os.environ.get("NOTEBOOKLM_MCP_URL"), timeout=resolved_timeout)
 
     async def add_source(self, text: str, notebook_id: Optional[str] = None) -> str:
         arguments: dict[str, Any] = {"type": "text", "content": text}
         if notebook_id:
             arguments["notebook_id"] = notebook_id
+        if _bool_env("NOTEBOOKLM_SHOW_BROWSER") or _bool_env("NOTEBOOKLM_ADD_SOURCE_SHOW_BROWSER"):
+            arguments["show_browser"] = True
         raw = await self.call_tool_text("add_source", arguments)
         parsed = None
         with contextlib.suppress(json.JSONDecodeError, ValueError):
@@ -117,4 +148,16 @@ class NotebookLmMcpClient(StreamableMcpClient):
         arguments: dict[str, Any] = {"question": question}
         if notebook_id:
             arguments["notebook_id"] = notebook_id
-        return await self.call_tool_text("ask_question", arguments)
+        if _bool_env("NOTEBOOKLM_SHOW_BROWSER") or _bool_env("NOTEBOOKLM_ASK_SHOW_BROWSER"):
+            arguments["show_browser"] = True
+        raw = await self.call_tool_text("ask_question", arguments)
+        with contextlib.suppress(json.JSONDecodeError, ValueError):
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                if parsed.get("success") is False:
+                    raise McpToolError(str(parsed.get("error") or parsed.get("message") or "NotebookLM ask_question failed"))
+                data = parsed.get("data") if isinstance(parsed.get("data"), dict) else {}
+                answer = data.get("answer")
+                if isinstance(answer, str):
+                    return answer
+        return raw
