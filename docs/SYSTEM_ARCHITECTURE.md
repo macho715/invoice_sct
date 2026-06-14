@@ -11,6 +11,8 @@ SCT Invoice Audit Platform — 3-app architecture for HVDC invoice processing, c
 | **apps/web** | Next.js 15 (App Router) | Vercel | Invoice upload UI, audit workspace, API orchestration, approval gates, workbook export dispatch |
 | **apps/worker-py** | FastAPI (Python) | Fly.io | File parsing (xlsx/md/txt/pdf/pdf_json), 13-sheet audit workbook export |
 | **apps/mcp-server** | Hono (TypeScript) | Fly.io | Standalone MCP JSON-RPC validation server — 14 audit tools for external clients (ChatGPT, Claude Desktop) |
+| **packages/tools** | TypeScript (ESM) | — | **14 MCP validation tools — single source of truth**, shared by `apps/web` and `apps/mcp-server` (no code duplication) |
+| **packages/database** | TypeScript (ESM) | — | Postgres pool singleton (Neon) — shared by `apps/web` and `apps/mcp-server` |
 | **packages/contracts** | TypeScript | — | Shared invoice, validation, and export Zod schemas |
 | **packages/shared** | TypeScript | — | Hashing, redaction, and DLP helpers |
 
@@ -23,7 +25,7 @@ flowchart LR
     W --> D[(Neon Postgres)]
     W -->|fetch parse| PY["apps/worker-py /parse"]
     PY --> W
-    W -->|in-process dispatch| MCP["MCP tools in-process<br/>apps/web/src/lib/mcp/tools.ts"]
+    W -->|in-process dispatch| MCP["MCP tools in-process<br/>@invoice-audit/tools (14)"]
     MCP --> GB["gate-bridge<br/>PASS/AMBER/ZERO"]
     GB -->|build| WB["workbook-builder"]
     WB -->|fetch export| PY2["apps/worker-py /v1/export"]
@@ -82,11 +84,12 @@ flowchart LR
 
 ## MCP Validation Tools
 
-14 tools in `apps/mcp-server/src/tools/`:
+**Single source of truth:** `packages/tools/src/` (14 tools). Imported by both `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC). No code duplication.
 
-`route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `match_shipment_reference`, `check_rate_card`, `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`, `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`, `check_dem_det`
+14 tools:
+`route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `match_shipment_reference`, `check_rate_card` (+ `check_rate_card_batch` for N-line queries in 1 round-trip), `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`, `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`, `check_dem_det`
 
-**In-process subset** (apps/web/src/lib/mcp/tools.ts): 6 tools — `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `check_rate_card`, `check_cost_guard`, `build_validation_explanation`.
+**Batch validation** (Phase 4 performance plan v1): `check_rate_card_batch({checks: [{charge_code, lane, rate}, ...]})` collapses N per-line calls into a single batched query — significant latency reduction for high-volume invoices.
 
 ## Approval Gate Model
 
@@ -120,6 +123,7 @@ CI workflows: `web-ci.yml`, `python-worker-ci.yml`, `release-gate.yml`, `vercel-
 - Raw P2 content never sent to LLM prompts.
 - Workbook exports are controlled audit artifacts.
 - `.gitignore` includes `**/private/**`, `**/DSV_SHIPMENT_FULL_PACKAGE_*/**`, and PII template patterns.
+- **Content-Security-Policy** header set in `apps/web/next.config.js`: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.vercel-storage.com https://*.neon.tech; img-src 'self' data: blob: https:; frame-ancestors 'none'; font-src 'self'` — restricts XSS, framing, and outbound connections to Vercel Blob + Neon only.
 
 ## Verification Baseline (2026-06-14)
 

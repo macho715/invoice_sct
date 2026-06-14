@@ -23,6 +23,14 @@
     "./check_evidence_required": "./src/check_evidence_required.ts",
     "./check_hs_uae_compliance": "./src/check_hs_uae_compliance.ts",
     "./check_rate_card": "./src/check_rate_card.ts",
+    "./normalize_invoice_lines": "./src/normalize_invoice_lines.ts",
+    "./check_duplicate_invoice": "./src/check_duplicate_invoice.ts",
+    "./match_shipment_reference": "./src/match_shipment_reference.ts",
+    "./check_contract_validity": "./src/check_contract_validity.ts",
+    "./check_tax_vat": "./src/check_tax_vat.ts",
+    "./check_fx_policy": "./src/check_fx_policy.ts",
+    "./build_validation_explanation": "./src/build_validation_explanation.ts",
+    "./check_dem_det": "./src/check_dem_det.ts",
     "./types": "./src/types.ts"
   }
 }

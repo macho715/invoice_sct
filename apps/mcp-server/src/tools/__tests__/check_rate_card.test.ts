@@ -2,13 +2,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 const queryMock = vi.fn();
 
-vi.mock('../../db.js', () => ({
+vi.mock('@invoice-audit/database', () => ({
   getPool: () => ({
     query: queryMock
   })
 }));
 
-import { run, TOOL_VERSION, ToolName } from '../check_rate_card.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/check_rate_card';
 
 beforeAll(() => {
   process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';

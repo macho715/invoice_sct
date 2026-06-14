@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../check_cost_guard.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/check_cost_guard';
 
 describe('check_cost_guard', () => {
   it('exposes the expected tool identity', () => {

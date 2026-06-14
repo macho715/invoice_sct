@@ -11,20 +11,20 @@
  */
 import type { z } from 'zod';
 
-import * as route_question from './route_question.js';
-import * as normalize_invoice_lines from './normalize_invoice_lines.js';
-import * as check_duplicate_invoice from './check_duplicate_invoice.js';
-import * as match_shipment_reference from './match_shipment_reference.js';
-import * as check_rate_card from './check_rate_card.js';
-import * as check_contract_validity from './check_contract_validity.js';
-import * as check_evidence_required from './check_evidence_required.js';
-import * as check_tax_vat from './check_tax_vat.js';
-import * as check_fx_policy from './check_fx_policy.js';
-import * as check_cost_guard from './check_cost_guard.js';
-import * as check_hs_uae_compliance from './check_hs_uae_compliance.js';
-import * as build_validation_explanation from './build_validation_explanation.js';
-import * as classify_type_b from './classify_type_b.js';
-import * as check_dem_det from './check_dem_det.js';
+import * as route_question from '@invoice-audit/tools/route_question';
+import * as normalize_invoice_lines from '@invoice-audit/tools/normalize_invoice_lines';
+import * as check_duplicate_invoice from '@invoice-audit/tools/check_duplicate_invoice';
+import * as match_shipment_reference from '@invoice-audit/tools/match_shipment_reference';
+import * as check_rate_card from '@invoice-audit/tools/check_rate_card';
+import * as check_contract_validity from '@invoice-audit/tools/check_contract_validity';
+import * as check_evidence_required from '@invoice-audit/tools/check_evidence_required';
+import * as check_tax_vat from '@invoice-audit/tools/check_tax_vat';
+import * as check_fx_policy from '@invoice-audit/tools/check_fx_policy';
+import * as check_cost_guard from '@invoice-audit/tools/check_cost_guard';
+import * as check_hs_uae_compliance from '@invoice-audit/tools/check_hs_uae_compliance';
+import * as build_validation_explanation from '@invoice-audit/tools/build_validation_explanation';
+import * as classify_type_b from '@invoice-audit/tools/classify_type_b';
+import * as check_dem_det from '@invoice-audit/tools/check_dem_det';
 
 export {
   check_dem_det,

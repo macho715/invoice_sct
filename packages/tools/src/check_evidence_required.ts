@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { MCP_Verdict } from './types.js';
 
+export const ToolName = 'check_evidence_required' as const;
+export const TOOL_VERSION = '0.2.0';
+
 export const CheckEvidenceRequiredInputSchema = z.object({
   line_id: z.string(),
   charge_code: z.string(),
@@ -42,3 +45,5 @@ export async function check_evidence_required(input: CheckEvidenceRequiredInput)
   else verdict = 'ZERO';
   return { verdict, required_evidence: required, present_evidence: present, missing_evidence: missing };
 }
+
+export const run = check_evidence_required;

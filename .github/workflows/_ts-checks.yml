@@ -36,12 +36,12 @@ jobs:
           version: 9
 
       - name: Cache pnpm store
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
-          path: |
-            ~/.pnpm-store
-            **/node_modules
+          path: ~/.pnpm-store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -51,11 +51,25 @@ jobs:
         run: pnpm typecheck
         working-directory: ${{ inputs.working-directory }}
 
+      - name: Detect optional scripts
+        id: scripts
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const scripts = pkg.scripts || {};
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_lint=${Boolean(scripts.lint)}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_test=${Boolean(scripts.test)}\n`);
+          NODE
+        working-directory: ${{ inputs.working-directory }}
+
       - name: Lint
+        if: steps.scripts.outputs.has_lint == 'true'
         run: pnpm lint
         working-directory: ${{ inputs.working-directory }}
 
       - name: Test
         id: test
+        if: steps.scripts.outputs.has_test == 'true'
         run: pnpm test --run
         working-directory: ${{ inputs.working-directory }}

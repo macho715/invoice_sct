@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../route_question.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/route_question';
 
 describe('route_question', () => {
   it('exposes the expected tool identity', () => {

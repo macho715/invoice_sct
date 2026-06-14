@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { run, TOOL_VERSION, ToolName } from "../check_dem_det.js";
+import { run, TOOL_VERSION, ToolName } from "@invoice-audit/tools/check_dem_det";
 
 describe("check_dem_det", () => {
   it("exposes the expected tool identity", () => {

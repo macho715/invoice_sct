@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../normalize_invoice_lines.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/normalize_invoice_lines';
 
 describe('normalize_invoice_lines', () => {
   it('exposes the expected tool identity', () => {

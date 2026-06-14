@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { MCP_Verdict } from './types.js';
 
+export const ToolName = 'check_cost_guard' as const;
+export const TOOL_VERSION = '0.2.0';
+
 export const CheckCostGuardInputSchema = z.object({
   invoiceNo: z.string(),
   currency: z.enum(['AED', 'USD']),
@@ -64,3 +67,5 @@ export async function check_cost_guard(input: CheckCostGuardInput): Promise<Chec
 
   return { verdict, line_findings };
 }
+
+export const run = check_cost_guard;

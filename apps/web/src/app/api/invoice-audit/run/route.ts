@@ -26,6 +26,11 @@ async function parseBody(req: Request): Promise<{ job_id?: string } | null> {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const contentLength = req.headers.get('content-length');
+  if (contentLength && parseInt(contentLength) > 5 * 1024 * 1024) {
+    return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+  }
+
   const body = await parseBody(req);
   if (!body) return err('INVALID_STATE', 'invalid json body');
   if (!body.job_id) return err('INVALID_STATE', 'job_id required');
@@ -45,7 +50,13 @@ export async function POST(req: Request): Promise<Response> {
 
   const parserToken = process.env.PARSER_WORKER_TOKEN;
   if (!parserToken) throw new Error('PARSER_WORKER_TOKEN not configured');
-  const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000', token: parserToken });
+  const workerUrl = process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000';
+  const parsed = new URL(workerUrl);
+  const allowedHosts = ['127.0.0.1', 'localhost', '.fly.dev', '.internal'];
+  if (!allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith(h))) {
+    return NextResponse.json({ error: 'WORKER_URL must point to internal host' }, { status: 500 });
+  }
+  const parser = createParserClient({ baseUrl: workerUrl, token: parserToken });
   let parseRes;
   try {
     const blobUrl = await getSignedDownloadUrl(invoiceFile.blob_ref);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../check_tax_vat.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/check_tax_vat';
 
 describe('check_tax_vat', () => {
   it('exposes the expected tool identity', () => {

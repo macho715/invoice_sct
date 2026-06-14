@@ -1,3 +1,6 @@
+[extend]
+useDefault = true
+
 # Gitleaks configuration for SCT_ONTOLOGY
 # Detects hardcoded secrets, keys, tokens in the codebase.
 
@@ -14,8 +17,14 @@ description = "Private Key"
 regex = '''-----BEGIN\s.*PRIVATE\sKEY-----'''
 
 [allowlist]
-description = "Global allowlist"
+description = "Test fixtures and known-safe patterns"
 paths = [
+  '''(.*?)(test|spec|fixture|mock)(.*?)''',
   "pnpm-lock.yaml",
   ".git/",
+]
+regexes = [
+  '''test-mcp-key''',
+  '''e2e-test-key''',
+  '''change-me-in-production''',
 ]

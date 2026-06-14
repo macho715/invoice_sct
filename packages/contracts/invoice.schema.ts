@@ -10,31 +10,45 @@ export const VerdictSchema = z.enum(['PASS', 'AMBER', 'ZERO', 'FAILED']);
 export type Verdict = z.infer<typeof VerdictSchema>;
 
 export const InvoiceHeaderSchema = z.object({
-  invoice_no: z.string().nullable(),
-  vendor: z.string().nullable(),
-  issue_date: z.string().nullable(),
+  invoice_no: z.string().nullish(),
+  vendor: z.string().nullish(),
+  issue_date: z.string().nullish(),
   currency: CurrencySchema,
-  invoice_total: z.number().nullable()
+  invoice_total: z.number().nullish()
 });
 export type InvoiceHeader = z.infer<typeof InvoiceHeaderSchema>;
 
+export const EvidenceCandidateSchema = z.object({
+  source_file_id: z.string(),
+  text_span: z.string(),
+  matched_reference: z.string().nullish(),
+  confidence: z.number().min(0).max(1)
+});
+export type EvidenceCandidate = z.infer<typeof EvidenceCandidateSchema>;
+
 export const InvoiceLineSchema = z.object({
   line_id: z.string(),
-  shipment_ref: z.string().nullable(),
-  job_number: z.string().nullable(),
+  shipment_ref: z.string().nullish(),
+  job_number: z.string().nullish(),
   description: z.string(),
-  normalized_description: z.string().nullable(),
-  qty: z.number().nullable(),
-  rate: z.number().nullable(),
-  rate_basis: RateBasisSchema.nullable(),
+  normalized_description: z.string().nullish(),
+  qty: z.number().nullish(),
+  rate: z.number().nullish(),
+  rate_basis: RateBasisSchema.nullish(),
   currency: CurrencySchema,
   amount: z.number(),
-  numeric_integrity_status: z.enum(['PASS', 'AMBER']).nullable(),
-  numeric_delta: z.number().nullable(),
-  rate_source_candidate: z.enum(['CONTRACT', 'AT_COST', 'DSV_HANDLING', 'UNKNOWN']).nullable(),
-  for_charge_component: z.string().nullable(),
-  type_b: z.string().nullable(),
-  source_ref: z.record(z.unknown()).nullable()
+  numeric_integrity_status: z.enum(['PASS', 'AMBER']).nullish(),
+  numeric_delta: z.number().nullish(),
+  rate_source_candidate: z.enum(['CONTRACT', 'AT_COST', 'DSV_HANDLING', 'UNKNOWN']).nullish(),
+  for_charge_component: z.string().nullish(),
+  type_b: z.string().nullish(),
+  evidence_status: z.enum(['MATCHED', 'PARTIAL', 'MISSING']).nullish(),
+  rate_status: z.enum(['MATCHED', 'UNKNOWN', 'MISMATCH', 'NOT_APPLICABLE']).nullish(),
+  validity_status: z.enum(['VALID', 'EXPIRED', 'PENDING']).nullish(),
+  gate_status: VerdictSchema.nullish(),
+  band: z.enum(['PASS', 'WARN', 'HIGH', 'CRITICAL']).nullish(),
+  delta_pct: z.number().nullish(),
+  source_ref: z.object({ sheet: z.string().optional(), row: z.number().optional(), col: z.string().optional(), text_span: z.string().optional() }).nullish()
 });
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
 
@@ -42,12 +56,7 @@ export const NormalizedInvoiceSchema = z.object({
   invoice_id: z.string(),
   invoice_header: InvoiceHeaderSchema,
   invoice_lines: z.array(InvoiceLineSchema),
-  evidence_candidates: z.array(z.object({
-    source_file_id: z.string(),
-    text_span: z.string(),
-    matched_reference: z.string().nullable(),
-    confidence: z.number().min(0).max(1)
-  })),
+  evidence_candidates: z.array(EvidenceCandidateSchema),
   parser_confidence: z.number().min(0).max(1),
   parser_version: z.string()
 });

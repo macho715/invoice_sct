@@ -54,6 +54,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@invoice-audit/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@invoice-audit/database':
         specifier: workspace:*
         version: link:../../packages/database

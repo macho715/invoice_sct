@@ -1,8 +1,9 @@
+import { timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { MCP_TOOLS } from './tools/index.js';
-import { guardDlp, DlpGuardInputSchema } from './schemas/dlp-guard.js';
+import { guardDlp, guardDlpOutput, DlpGuardInputSchema } from './schemas/dlp-guard.js';
 
 const app = new Hono();
 
@@ -24,7 +25,9 @@ app.post('/mcp', async (c) => {
     return c.json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Server misconfigured — MCP_API_KEY not set' } }, 500);
   }
   const auth = c.req.header('Authorization');
-  if (auth !== `Bearer ${expected}`) {
+  const authBuf = Buffer.from(auth || '');
+  const expectedBuf = Buffer.from(`Bearer ${expected}`);
+  if (!auth || authBuf.length !== expectedBuf.length || !timingSafeEqual(authBuf, expectedBuf)) {
     return c.json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } }, 401);
   }
 
@@ -71,6 +74,14 @@ app.post('/mcp', async (c) => {
 
     try {
       const result = await tool.module.run(parsed.data);
+      const outputCheck = guardDlpOutput(result);
+      if (!outputCheck.passed) {
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32600, message: 'DLP_VIOLATION: Sensitive data detected in tool output', data: outputCheck.violations }
+        }, 400);
+      }
       return c.json({
         jsonrpc: '2.0',
         id,

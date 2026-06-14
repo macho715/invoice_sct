@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { MCP_Verdict } from './types.js';
 
+export const ToolName = 'check_hs_uae_compliance' as const;
+export const TOOL_VERSION = '0.1.0';
+
 export const CheckHsUaeComplianceInputSchema = z.object({
   line_id: z.string(),
   charge_code: z.string(),
@@ -31,3 +34,5 @@ export async function check_hs_uae_compliance(input: CheckHsUaeComplianceInput):
   if (!hs_code_valid) return { verdict: 'AMBER', boe_found: true, hs_code_valid: false, reason_code: 'CUSTOMS_HS_CODE_INVALID' };
   return { verdict: 'PASS', boe_found: true, hs_code_valid: true, reason_code: null };
 }
+
+export const run = check_hs_uae_compliance;

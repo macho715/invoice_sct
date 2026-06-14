@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../check_fx_policy.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/check_fx_policy';
 
 describe('check_fx_policy', () => {
   it('exposes the expected tool identity', () => {

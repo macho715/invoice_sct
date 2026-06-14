@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const ToolName = 'classify_type_b' as const;
+export const TOOL_VERSION = '0.1.0';
+
 export const ClassifyTypeBInputSchema = z.object({
   line_id: z.string(),
   description: z.string()
@@ -38,3 +41,5 @@ export async function classify_type_b(input: ClassifyTypeBInput): Promise<Classi
   }
   return { line_id: input.line_id, type_b: 'OTHERS', confidence: 0.5, matched_keyword: null };
 }
+
+export const run = classify_type_b;

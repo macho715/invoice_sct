@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export { InvoiceLineSchema, NormalizedInvoiceSchema, EvidenceCandidateSchema } from '@invoice-audit/contracts/invoice';
+export type { InvoiceLine, NormalizedInvoice, EvidenceCandidate } from '@invoice-audit/contracts/invoice';
+
 export const JobStatusSchema = z.enum([
   'CREATED','UPLOADING','UPLOADED','QUEUED','PARSING','VALIDATING',
   'REVIEW_REQUIRED','APPROVED','EXPORTING','COMPLETED','FAILED','REJECTED'
@@ -25,55 +28,6 @@ export const SourceFileSchema = z.object({
 });
 export type SourceFile = z.infer<typeof SourceFileSchema>;
 
-export const InvoiceLineSchema = z.object({
-  line_id: z.string().min(1),
-  shipment_ref: z.string().nullish(),
-  job_number: z.string().nullish(),
-  description: z.string().min(1),
-  normalized_description: z.string().nullish(),
-  qty: z.number().nullish(),
-  rate: z.number().nullish(),
-  rate_basis: z.enum(['PER_EA','PER_TRUCK','PER_TEU','PER_CBM','PER_MT','PER_DAY','AT_COST','LUMP_SUM']).nullish(),
-  currency: z.enum(['AED','USD']),
-  amount: z.number(),
-  numeric_integrity_status: z.enum(['PASS','AMBER']).nullish(),
-  numeric_delta: z.number().nullish(),
-  rate_source_candidate: z.enum(['CONTRACT','AT_COST','DSV_HANDLING','UNKNOWN']).nullish(),
-  for_charge_component: z.string().nullish(),
-  type_b: z.string().nullish(),
-  evidence_status: z.enum(['MATCHED','PARTIAL','MISSING']).nullish(),
-  rate_status: z.enum(['MATCHED','UNKNOWN','MISMATCH','NOT_APPLICABLE']).nullish(),
-  validity_status: z.enum(['VALID','EXPIRED','PENDING']).nullish(),
-  gate_status: VerdictSchema.nullish(),
-  band: z.enum(['PASS','WARN','HIGH','CRITICAL']).nullish(),
-  delta_pct: z.number().nullish(),
-  source_ref: z.object({ sheet: z.string().optional(), row: z.number().optional(), col: z.string().optional(), text_span: z.string().optional() }).nullish()
-});
-export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
-
-export const EvidenceCandidateSchema = z.object({
-  source_file_id: z.string(),
-  text_span: z.string(),
-  matched_reference: z.string().nullish(),
-  confidence: z.number().min(0).max(1)
-});
-export type EvidenceCandidate = z.infer<typeof EvidenceCandidateSchema>;
-
-export const NormalizedInvoiceSchema = z.object({
-  invoice_id: z.string(),
-  invoice_header: z.object({
-    invoice_no: z.string().nullish(),
-    vendor: z.string().nullish(),
-    issue_date: z.string().nullish(),
-    currency: z.enum(['AED','USD']),
-    invoice_total: z.number().nullish()
-  }),
-  invoice_lines: z.array(InvoiceLineSchema),
-  evidence_candidates: z.array(EvidenceCandidateSchema),
-  parser_confidence: z.number().min(0).max(1),
-  parser_version: z.string()
-});
-export type NormalizedInvoice = z.infer<typeof NormalizedInvoiceSchema>;
 
 export const SctValidationResultSchema = z.object({
   validation_id: z.string(),

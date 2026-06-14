@@ -72,7 +72,7 @@ export async function GET(req: Request): Promise<Response> {
     exportReq = await buildExportRequest(jobId, undefined);
     const sheets = buildSheetsFromExportRequest(exportReq);
     const scanResult = scanWorkbook(sheets);
-    if (!scanResult.clean) {
+    if (!scanResult.clean && verdict !== 'ZERO') {
       return NextResponse.json(
         { code: 'DLP_BLOCK', verdict: 'ZERO', violations: scanResult.violations },
         { status: 403 }

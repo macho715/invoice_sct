@@ -21,11 +21,20 @@ SCT_ONTOLOGY-main/
 │   │   └── tests/              # Pytest (95 tests)
 │   │
 │   └── mcp-server/             # Hono MCP validation server (Fly.io, standalone)
-│       ├── src/tools/          # 14 validation tools + tests
+│       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
 │       ├── src/schemas/        # DLP guard, validation schemas
 │       └── db/                 # Rate card migrations + seeds
 │
 ├── packages/
+│   ├── tools/                  # @invoice-audit/tools — 14 MCP tools, single source of truth
+│   │   └── src/                # route_question, normalize_invoice_lines, check_duplicate_invoice,
+│   │                           #   match_shipment_reference, check_rate_card (+ batch),
+│   │                           #   check_contract_validity, check_evidence_required,
+│   │                           #   check_tax_vat, check_fx_policy, check_cost_guard,
+│   │                           #   build_validation_explanation, classify_type_b,
+│   │                           #   check_hs_uae_compliance, check_dem_det, types, index
+│   ├── database/               # @invoice-audit/database — Postgres pool singleton (Neon)
+│   │   └── src/index.ts        # Pool factory shared by web + mcp-server
 │   ├── contracts/              # Shared Zod schemas (invoice, validation, export)
 │   └── shared/                 # Hash, redaction, DLP helpers
 │
@@ -68,9 +77,11 @@ SCT_ONTOLOGY-main/
 | `apps/worker-py/app/parsers/` | File parsers: xlsx, md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
 | `apps/worker-py/app/exporters/` | 13-sheet contract-compliant audit workbook export |
 | `apps/worker-py/tests/` | Pytest coverage with parser/export fixtures |
-| `apps/mcp-server/src/tools/` | 14 MCP validation tools with per-tool tests |
+| `apps/mcp-server/src/tools/` | Re-exports 14 MCP validation tools from `@invoice-audit/tools` (per-tool tests) |
 | `apps/mcp-server/src/schemas/` | DLP guard schema + validation contracts |
 | `apps/mcp-server/db/` | Rate card DDL migrations + seed data |
+| `packages/tools/src/` | **14 MCP validation tools — single source of truth** (shared by web + mcp-server) |
+| `packages/database/src/index.ts` | Postgres pool singleton (Neon) shared by web + mcp-server |
 | `packages/contracts/` | Shared invoice, validation, and export Zod schemas |
 | `packages/shared/` | Hashing, redaction, and DLP helpers shared across TypeScript runtimes |
 | `migrations/` | Neon Postgres schema migrations for invoice audit persistence |
@@ -104,11 +115,13 @@ SCT_ONTOLOGY-main/
 | `/api/fx-policy` | `fx-policy/route.ts` | POST |
 | `/mcp` | `mcp/route.ts` | POST |
 
-## MCP Validation Tools (apps/mcp-server/src/tools/)
+## MCP Validation Tools
 
-14 tools: `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `match_shipment_reference`, `check_rate_card`, `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`, `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`, `check_dem_det`
+**Canonical source:** `packages/tools/src/` — 14 tools as single source of truth, imported by both `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC).
 
-In-process subset in `apps/web/src/lib/mcp/tools.ts`: 6 tools — `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `check_rate_card`, `check_cost_guard`, `build_validation_explanation`.
+14 tools: `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `match_shipment_reference`, `check_rate_card` (with `check_rate_card_batch` for N-line batch queries), `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`, `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`, `check_dem_det`
+
+`apps/mcp-server/src/tools/` re-exports the same 14 tools for JSON-RPC dispatch (no code duplication).
 
 ## Worker Routes (apps/worker-py/app/routes/)
 

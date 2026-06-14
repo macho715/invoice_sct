@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../classify_type_b.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/classify_type_b';
 
 describe('classify_type_b', () => {
   it('exposes the expected tool identity', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { run, TOOL_VERSION, ToolName } from '../check_hs_uae_compliance.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/check_hs_uae_compliance';
 
 describe('check_hs_uae_compliance', () => {
   it('exposes the expected tool identity', () => {

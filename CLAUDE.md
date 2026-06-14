@@ -27,9 +27,9 @@ cd apps/mcp-server && pnpm test  # 186 tests
 apps/web (Next.js, Vercel)
   ├── Upload → Vercel Blob
   ├── API routes orchestrate full audit pipeline
-  ├── In-process MCP tools (src/lib/mcp/tools.ts) — 6 of 14 tools
   ├── gate-bridge.ts — PASS/AMBER/ZERO/FAILED verdicts
   ├── workbook-builder.ts — 13-sheet contract assembly
+  ├── Imports MCP tools from @invoice-audit/tools (14 tools, single source of truth)
   └── fetch → apps/worker-py for /parse and /v1/export
 
 apps/worker-py (FastAPI, Fly.io)
@@ -38,7 +38,19 @@ apps/worker-py (FastAPI, Fly.io)
 
 apps/mcp-server (Hono, Fly.io)
   └── Standalone JSON-RPC MCP server for external clients
-      (ChatGPT, Claude Desktop). NOT called during web audit flow.
+      (ChatGPT, Claude Desktop). Imports the same @invoice-audit/tools package.
+      NOT called during web audit flow.
+
+packages/tools (TypeScript, ESM)
+  └── 14 MCP validation tools — single source of truth
+      (route_question, normalize_invoice_lines, check_duplicate_invoice,
+       match_shipment_reference, check_rate_card [+ check_rate_card_batch],
+       check_contract_validity, check_evidence_required, check_tax_vat,
+       check_fx_policy, check_cost_guard, build_validation_explanation,
+       classify_type_b, check_hs_uae_compliance, check_dem_det)
+
+packages/database (TypeScript, ESM)
+  └── Postgres pool singleton (Neon) — shared by web and mcp-server
 ```
 
 ## Database
@@ -55,6 +67,8 @@ apps/mcp-server (Hono, Fly.io)
 - **3-way reconciliation**: Final Subtotal = Line_Audit = TYPE-B (±0.01 tolerance)
 - **16 P2 categories** in DLP export gate
 - **Currency**: AED/USD only. FX policy check via `check_fx_policy`.
+- **CSP header**: `Content-Security-Policy` set in `apps/web/next.config.js` — restricts script-src, connect-src (Vercel Blob + Neon), frame-ancestors 'none'.
+- **Batch validation**: `check_rate_card_batch({checks: [{charge_code, lane, rate}, ...]})` collapses N line calls into 1 query (performance plan v1).
 
 ## File Map
 
@@ -66,7 +80,9 @@ apps/mcp-server (Hono, Fly.io)
 | `apps/web/tests/` | 23 Vitest test files |
 | `apps/worker-py/app/parsers/` | xlsx, md, txt, pdf, pdf_json, dsv_waybill parsers |
 | `apps/worker-py/app/exporters/` | 13-sheet workbook export |
-| `apps/mcp-server/src/tools/` | 14 validation tools |
+| `apps/mcp-server/src/tools/` | 14 validation tools (re-export from @invoice-audit/tools) |
+| `packages/tools/src/` | **14 MCP tools (single source of truth)** — check_rate_card, check_rate_card_batch, etc. |
+| `packages/database/src/index.ts` | Postgres pool singleton (shared by web + mcp-server) |
 | `packages/contracts/` | Shared Zod schemas |
 | `packages/shared/` | Hash, redaction, DLP helpers |
 | `migrations/` | Postgres DDL (0008-0010) |

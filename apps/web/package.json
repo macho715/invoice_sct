@@ -15,6 +15,7 @@
     "a11y": "echo 'a11y check placeholder'"
   },
   "dependencies": {
+    "@invoice-audit/contracts": "workspace:*",
     "@invoice-audit/database": "workspace:*",
     "@invoice-audit/tools": "workspace:*",
     "@vercel/blob": "^2.4.0",

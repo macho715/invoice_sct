@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const ToolName = 'route_question' as const;
+export const TOOL_VERSION = '0.2.0';
+
 export const RouteQuestionInputSchema = z.object({
   question: z.string(),
   userRole: z.string()
@@ -43,3 +46,5 @@ export async function route_question(input: RouteQuestionInput): Promise<RouteQu
     rationale: 'Default route: cost guard analysis'
   };
 }
+
+export const run = route_question;

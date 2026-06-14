@@ -6,7 +6,7 @@
  *   2. Exact (vendor + invoice_no + amount) match → ZERO / DUPLICATE_INVOICE.
  *   3. Same (vendor + invoice_no) but different amount → AMBER / AMOUNT_MISMATCH.
  *
- * The pg.Pool is mocked via vi.mock('../db.js') so no real DB connection is
+ * The pg.Pool is mocked via vi.mock('@invoice-audit/database') so no real DB connection is
  * opened. We also pin the env so `getPool()` is not invoked outside the mock.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,13 +14,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 // Mock the db module before importing the tool under test.
 const queryMock = vi.fn();
 
-vi.mock('../../db.js', () => ({
+vi.mock('@invoice-audit/database', () => ({
   getPool: () => ({
     query: queryMock
   })
 }));
 
-import { run, TOOL_VERSION, ToolName } from '../check_duplicate_invoice.js';
+import { run, TOOL_VERSION, ToolName } from '@invoice-audit/tools/check_duplicate_invoice';
 
 const VENDOR_ID = 'V-001';
 const VENDOR_NAME = 'DSV Abu Dhabi';
