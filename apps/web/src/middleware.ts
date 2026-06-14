@@ -1,10 +1,10 @@
-import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const RATE_LIMIT = new Map<string, { count: number; reset: number }>();
 const WINDOW_MS = 60_000;
 const MAX_REQ = 60;
+const TEXT_ENCODER = new TextEncoder();
 
 let reqCounter = 0;
 const MAX_MAP_SIZE = 10_000;
@@ -16,6 +16,19 @@ function sweepExpired() {
   }
 }
 
+function constantTimeEqualEdge(actual: string, expected: string): boolean {
+  const actualBytes = TEXT_ENCODER.encode(actual);
+  const expectedBytes = TEXT_ENCODER.encode(expected);
+  const maxLength = Math.max(actualBytes.length, expectedBytes.length);
+  let diff = actualBytes.length ^ expectedBytes.length;
+
+  for (let i = 0; i < maxLength; i++) {
+    diff |= (actualBytes[i] ?? 0) ^ (expectedBytes[i] ?? 0);
+  }
+
+  return diff === 0;
+}
+
 export function middleware(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith('/api/')) {
     const apiKey = process.env.API_SECRET_KEY;
@@ -23,9 +36,7 @@ export function middleware(req: NextRequest) {
       return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
     }
     const token = req.headers.get('authorization')?.replace('Bearer ', '');
-    const tokenBuf = Buffer.from(token || '');
-    const keyBuf = Buffer.from(apiKey);
-    if (!token || tokenBuf.length !== keyBuf.length || !timingSafeEqual(tokenBuf, keyBuf)) {
+    if (!token || !constantTimeEqualEdge(token, apiKey)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
