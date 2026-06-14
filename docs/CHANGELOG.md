@@ -1,5 +1,27 @@
 # Changelog
 
+## Worker NotebookLM MCP Default Timeout Hardening - 2026-06-14
+
+### Changed
+
+- Bumped `apps/worker-py/app/notebooklm/mcp_client.py` `NotebookLmMcpClient` default timeout from **30s → 300s** when neither `NOTEBOOKLM_MCP_TIMEOUT_MS` nor `NOTEBOOKLM_ASK_TIMEOUT_MS` is set.
+- Rationale: full MCP `ask_question` cycle observed at ~30s in live smoke (browser init ~5s + type+submit ~4s + DIAG capture ~16s + answer generation ~10s + headroom). 300s gives 10x headroom and prevents the 60s+ timeouts observed in the BUGFIX debug session (`waitForStableAnswer` ignoreSet fix in `notebooklm-mcp-pr53-pr55`).
+- The `AskOptions.ignoreTexts` parameter on the MCP side is kept for API compatibility but no longer consulted (see MCP fix `2f6ccdcb`).
+
+### Verified
+
+- Worker `pytest tests/test_notebooklm_mcp_client.py` — 18/18 passed with clean env.
+- `apps/worker-py` overall pytest — 95 passed.
+- Full project tsc — 0 errors.
+- 4/4 MCP vitest unit tests for the new `waitForStableAnswer` behavior (commit `b942557`).
+
+### See also
+
+- `docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md` — canonical 3-layer role definition.
+- `docs/superpowers/specs/2026-06-14-wait-for-stable-answer-ignore-set-bug-design.md` — ignoreSet BUGFIX design.
+- `docs/session-wraps/2026-06-14-notebooklm-ask-question-timeout.md` — session wrap-up.
+- PR #61 (https://github.com/PleasePrompto/notebooklm-mcp/pull/61) — upstream MCP fix.
+
 ## NotebookLM MCP Runtime Triage and Live Smoke Hardening - 2026-06-14
 
 ### Added
