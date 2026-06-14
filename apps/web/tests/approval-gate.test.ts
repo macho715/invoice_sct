@@ -12,14 +12,14 @@ describe('evaluateApprovalGate', () => {
     expect(result.export_type).toBe('FINAL_APPROVED');
   });
 
-  it('ZERO verdict blocks FINAL_APPROVED export', () => {
+  it('ZERO verdict still delivers FINAL_APPROVED export (Rule #1, labeled in workbook)', () => {
     const result = evaluateApprovalGate({
       verdict: 'ZERO',
       approval: null,
       exportType: 'FINAL_APPROVED'
     });
-    expect(result.allowed).toBe(false);
-    expect(result.error_code).toBe('ZERO_BLOCKED');
+    expect(result.allowed).toBe(true);
+    expect(result.error_code).toBe(null);
   });
 
   it('ZERO verdict allows REVIEW_PACK export', () => {
@@ -32,14 +32,25 @@ describe('evaluateApprovalGate', () => {
     expect(result.export_type).toBe('REVIEW_PACK');
   });
 
-  it('AMBER without approval blocks FINAL_APPROVED', () => {
+  it('AMBER without approval still delivers FINAL_APPROVED (Rule #1); approver role surfaced for labeling', () => {
     const result = evaluateApprovalGate({
       verdict: 'AMBER',
       approval: null,
       exportType: 'FINAL_APPROVED'
     });
+    expect(result.allowed).toBe(true);
+    expect(result.error_code).toBe(null);
+    expect(result.required_approver_role).toBe('OPS_LEAD');
+  });
+
+  it('FAILED verdict stays blocked (validation could not run — no deliverable)', () => {
+    const result = evaluateApprovalGate({
+      verdict: 'FAILED',
+      approval: null,
+      exportType: 'FINAL_APPROVED'
+    });
     expect(result.allowed).toBe(false);
-    expect(result.error_code).toBe('APPROVAL_REQUIRED');
+    expect(result.error_code).toBe('VALIDATION_FAILED');
   });
 
   it('AMBER with approval allows FINAL_APPROVED', () => {

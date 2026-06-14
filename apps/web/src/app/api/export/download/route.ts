@@ -64,13 +64,12 @@ export async function GET(req: Request): Promise<Response> {
     return err(gate.error_code as ErrorCode, gate.reason);
   }
 
-  const record = EXPORTS_MAP.get(jobId);
-  if (!record) {
-    return err('INVALID_STATE', 'Job has not been exported yet');
-  }
-
+  // Build the export request once: used for the DLP scan and, on a cache miss,
+  // to regenerate the workbook. EXPORTS_MAP is in-process only and is NOT shared
+  // across serverless instances, so we cannot depend on it for delivery.
+  let exportReq: ExportRequest | null = null;
   try {
-    const exportReq = await buildExportRequest(jobId, undefined);
+    exportReq = await buildExportRequest(jobId, undefined);
     const sheets = buildSheetsFromExportRequest(exportReq);
     const scanResult = scanWorkbook(sheets);
     if (!scanResult.clean) {
@@ -83,16 +82,20 @@ export async function GET(req: Request): Promise<Response> {
     // Data not available for DLP scan (e.g. dev stub); proceed
   }
 
+  const record = EXPORTS_MAP.get(jobId);
   let buffer: Buffer;
 
   if (isDevStub()) {
+    // Local dev: bytes live on disk, written by the export step in this process.
+    if (!record) return err('INVALID_STATE', 'Job has not been exported yet');
     const filename = `exports/${jobId}/audit-pack-${(record.result as any).manifest.sha256.slice(0, 8)}.xlsx`;
     const target = join(process.cwd(), '.dev-blob', filename);
     if (!existsSync(target)) {
       return err('INVALID_STATE', 'Exported file not found on disk');
     }
     buffer = readFileSync(target);
-  } else {
+  } else if (record) {
+    // Fast path: same instance that exported — serve the uploaded blob.
     try {
       const token = process.env.BLOB_READ_WRITE_TOKEN;
       if (!token) throw new Error('BLOB_READ_WRITE_TOKEN not configured');
@@ -105,6 +108,29 @@ export async function GET(req: Request): Promise<Response> {
       buffer = Buffer.from(await res.arrayBuffer());
     } catch (e) {
       return err('EXPORT_FAILED', `Failed to download file from storage: ${(e as Error).message}`);
+    }
+  } else {
+    // Rule #1 (CLAUDE.md §0): the final Excel must always be downloadable once the
+    // job has audit data. On a cross-instance cache miss, regenerate the workbook
+    // deterministically from the exporter worker instead of returning "not exported".
+    if (!exportReq) {
+      return err('EXPORT_FAILED', 'No audit data available to build the export');
+    }
+    try {
+      const parserUrl = process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000';
+      const resp = await fetch(`${parserUrl}/v1/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(exportReq),
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        return err('EXPORT_FAILED', `Exporter worker returned error: ${txt}`);
+      }
+      const exportResult = await resp.json();
+      buffer = Buffer.from(exportResult.file_content_base64, 'base64');
+    } catch (e) {
+      return err('EXPORT_FAILED', `Failed to regenerate export: ${(e as Error).message}`);
     }
   }
 

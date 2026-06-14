@@ -43,7 +43,9 @@ export async function POST(req: Request): Promise<Response> {
     return err('INVALID_STATE', 'invoice file required (xlsx, md, or txt) — PDF-only uploads are evidence, not invoices');
   }
 
-  const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000', token: process.env.PARSER_WORKER_TOKEN ?? 'dev' });
+  const parserToken = process.env.PARSER_WORKER_TOKEN;
+  if (!parserToken) throw new Error('PARSER_WORKER_TOKEN not configured');
+  const parser = createParserClient({ baseUrl: process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000', token: parserToken });
   let parseRes;
   try {
     const blobUrl = await getSignedDownloadUrl(invoiceFile.blob_ref);

@@ -20,8 +20,12 @@ def _fetch_blob(blob_url: str) -> bytes:
         r.raise_for_status()
         return r.content
 
-@router.post('/parse', response_model=ParseResponse)
-def parse(req: ParseRequest) -> ParseResponse:
+@router.post('/parse', response_model=ParseResponse, deprecated=True)
+def parse_deprecated_alias(req: ParseRequest) -> ParseResponse:
+    return parse_v1(req)
+
+@router.post('/v1/parse', response_model=ParseResponse)
+def parse_v1(req: ParseRequest) -> ParseResponse:
     try:
         raw = _fetch_blob(req.blob_url)
     except Exception as e:
@@ -120,4 +124,4 @@ def parse(req: ParseRequest) -> ParseResponse:
 @router.post('/parse/pdf-json', response_model=ParseResponse)
 def parse_pdf_json(req: ParseRequest) -> ParseResponse:
     req.file_type = 'pdf_json'
-    return parse(req)
+    return parse_v1(req)

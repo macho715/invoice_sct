@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
   "exports": {
     "./hash": "./hash.ts",
     "./redaction": "./redaction.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21"
   }
 }

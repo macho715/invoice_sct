@@ -17,30 +17,54 @@ describe('GET /api/export/download', () => {
     expect(body.code).toBe('JOB_NOT_FOUND');
   });
 
-  it('APPROVAL_REQUIRED if job is not approved', async () => {
+  function stubWorker(jobId: string) {
+    const mockWorkerRes = {
+      job_id: jobId,
+      manifest: {
+        sha256: 'b'.repeat(64),
+        size_bytes: 16,
+        sheets: [{ sheet_name: '00_Decision', row_count: 1 }],
+        generated_at: '2026-06-09T12:00:00Z'
+      },
+      file_content_base64: Buffer.from('mock-excel-bytes').toString('base64')
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => mockWorkerRes })));
+  }
+
+  it('AMBER (not approved) still delivers the final Excel (Rule #1)', async () => {
     const job = await STORE.createJob({ created_by: 'user_1' });
     await STORE.updateJob(job.job_id, { status: 'REVIEW_REQUIRED', verdict: 'AMBER' });
     await STORE.setResult(job.job_id, { verdict: 'AMBER', line_results: [], action_items: [] });
+    stubWorker(job.job_id);
+
+    const exportRes = await EXPORT_POST(
+      new Request('http://test/api/audit/export', { method: 'POST', body: JSON.stringify({ job_id: job.job_id }) })
+    );
+    expect(exportRes.status).toBe(200);
 
     const res = await DOWNLOAD_GET(
       new Request(`http://test/api/export/download?job_id=${job.job_id}`)
     );
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.code).toBe('APPROVAL_REQUIRED');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   });
 
-  it('ZERO_BLOCKED if job verdict is ZERO', async () => {
+  it('ZERO still delivers the final Excel with verdict stamped (Rule #1)', async () => {
     const job = await STORE.createJob({ created_by: 'user_1' });
     await STORE.updateJob(job.job_id, { status: 'APPROVED', verdict: 'ZERO' });
     await STORE.setResult(job.job_id, { verdict: 'ZERO', line_results: [], action_items: [] });
+    stubWorker(job.job_id);
+
+    const exportRes = await EXPORT_POST(
+      new Request('http://test/api/audit/export', { method: 'POST', body: JSON.stringify({ job_id: job.job_id }) })
+    );
+    expect(exportRes.status).toBe(200);
 
     const res = await DOWNLOAD_GET(
       new Request(`http://test/api/export/download?job_id=${job.job_id}`)
     );
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.code).toBe('ZERO_BLOCKED');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   });
 
   it('success download of excel bytes', async () => {

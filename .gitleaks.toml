@@ -1,0 +1,21 @@
+# Gitleaks configuration for SCT_ONTOLOGY
+# Detects hardcoded secrets, keys, tokens in the codebase.
+
+title = "SCT_ONTOLOGY Gitleaks Config"
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(?:key|api|token|secret|password|auth)[\s]*[=:][\s]*['\"][A-Za-z0-9+/=_\-]{20,}['\"]'''
+
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN\s.*PRIVATE\sKEY-----'''
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  "pnpm-lock.yaml",
+  ".git/",
+]

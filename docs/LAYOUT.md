@@ -1,352 +1,156 @@
 # Repository Layout
 
-## Repository Layout
+## Current Structure
 
-This repository keeps root-level operating docs for historical continuity and `docs/` project-doc-pipeline outputs for current synchronized documentation.
-
-```mermaid
-graph TD
-  Root["Repository root"] --> Server["server/src"]
-  Root --> Public["public"]
-  Root --> Data["data"]
-  Root --> Scripts["scripts"]
-  Root --> Migrations["migrations"]
-  Root --> Tests["tests"]
-  Root --> Docs["docs"]
-  Root --> WhStatus["wh status"]
-  Server --> Worker["worker.ts"]
-  Server --> HvdcServer["hvdc-server.ts"]
-  Server --> Decision["decision-card.ts"]
-  Server --> Generated["generated"]
-  Public --> Widget["hvdc-answer-widget.html"]
-  Data --> Corpus["corpus"]
-  Scripts --> Assets["generate_worker_assets.py"]
-  Scripts --> SeedWh["seed_wh_status_d1.py"]
-  Migrations --> D1["D1 schema"]
-  Tests --> Verify["Vitest regression gates"]
-  Docs --> Guide["GUIDE.md"]
+```
+SCT_ONTOLOGY-main/
+├── apps/
+│   ├── web/                    # Next.js 15 frontend + API (Vercel)
+│   │   ├── src/app/            # App Router pages + API route handlers
+│   │   ├── src/app/api/        # 11 API routes (upload, audit, export, fx, mcp)
+│   │   ├── src/lib/            # Job store, gate-bridge, MCP tools, parser client, blob, DLP
+│   │   │   └── mcp/            # In-process MCP validation tools port
+│   │   ├── tests/              # Vitest (23 files, 107 tests)
+│   │   └── e2e/                # Playwright smoke tests
+│   │
+│   ├── worker-py/              # Python FastAPI parser/exporter (Fly.io)
+│   │   ├── app/routes/         # /parse, /v1/export, /health
+│   │   ├── app/parsers/        # xlsx, md, txt, pdf, pdf_json, DSV waybill
+│   │   ├── app/middleware/     # Audit log middleware (FR-025)
+│   │   ├── app/exporters/      # 13-sheet workbook export logic
+│   │   └── tests/              # Pytest (95 tests)
+│   │
+│   └── mcp-server/             # Hono MCP validation server (Fly.io, standalone)
+│       ├── src/tools/          # 14 validation tools + tests
+│       ├── src/schemas/        # DLP guard, validation schemas
+│       └── db/                 # Rate card migrations + seeds
+│
+├── packages/
+│   ├── contracts/              # Shared Zod schemas (invoice, validation, export)
+│   └── shared/                 # Hash, redaction, DLP helpers
+│
+├── migrations/                 # Neon Postgres DDL
+│   ├── 0008_invoice_audit.sql
+│   ├── 0009_job_store_persist.sql
+│   └── 0010_invoices.sql
+│
+├── docs/                       # Architecture, layout, plan, security, QA, changelog
+├── scripts/                    # 24 utility scripts (audit, seed, graph, DLP, deployment)
+├── shpiment/                   # DSV shipment reference data (P2, gitignored)
+├── domestic/                   # Korean domestic invoice runtime
+│
+├── .github/workflows/          # 8 CI/CD workflows
+│   ├── codeql.yml
+│   ├── fly-mcp-server-deploy.yml
+│   ├── fly-worker-deploy.yml
+│   ├── python-worker-ci.yml
+│   ├── release-gate.yml
+│   ├── vercel-preview.yml
+│   ├── vercel-prod.yml
+│   └── web-ci.yml
+│
+├── .env.example                # Environment variable template
+├── pnpm-workspace.yaml         # pnpm workspace config
+├── tsconfig.base.json          # Shared TypeScript config
+└── README.md                   # Project overview + quick start
 ```
 
 ## Directory Responsibilities
 
 | Path | Responsibility |
-| --- | --- |
-| `server/src/` | TypeScript runtime modules for Worker, MCP tools, answer generation, routing, Decision Card payloads, telemetry, and rate limiting. |
-| `server/src/generated/` | Generated Worker assets. Do not hand-edit unless intentionally updating generated output. |
-| `public/hvdc-answer-widget.html` | Source ChatGPT iframe widget HTML/CSS/JS. Regenerate Worker assets after editing. |
-| `data/corpus/` | Approved ontology corpus documents used by runtime search. |
-| `data/datasets/` | CSV dataset layer for Control Tower and D1 seed inputs. |
-| `scripts/` | Asset generation, D1 seed/reconcile/rollback, source audit, deployment, and validation helpers. |
-| `migrations/` | Cloudflare D1 schema migrations for audit, upload/write, Dual-MCP, Control Tower, and WH status case events. |
-| `tests/` | Vitest regression coverage for descriptors, pipeline, widget, D1, identifier normalization, governance, and runtime behavior. |
-| `docs/` | Current guide, QA/security/spec documents, traceability reports, plans, and generated pipeline docs. |
-| `wh status/` | Source Excel workbook and warehouse status planning / ontology migration artifacts. |
-| `.github/workflows/` | CI and HVDC verification workflows. |
+|---|---|
+| `apps/web/` | Next.js web UI and API orchestration — upload, audit job lifecycle, approval gates, export dispatch |
+| `apps/web/src/app/` | App Router pages and API route handlers |
+| `apps/web/src/lib/` | Shared runtime logic: job store, gate-bridge, MCP tools (in-process), parser client, blob, DLP scanner, FX check, human gate, approval gate, export store, error codes, types |
+| `apps/web/tests/` | Vitest coverage for API routes, gate logic, DLP, and runtime helpers |
+| `apps/web/e2e/` | Playwright smoke tests |
+| `apps/worker-py/app/routes/` | FastAPI route handlers for `/parse`, `/v1/export`, health endpoints |
+| `apps/worker-py/app/parsers/` | File parsers: xlsx, md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
+| `apps/worker-py/app/exporters/` | 13-sheet contract-compliant audit workbook export |
+| `apps/worker-py/tests/` | Pytest coverage with parser/export fixtures |
+| `apps/mcp-server/src/tools/` | 14 MCP validation tools with per-tool tests |
+| `apps/mcp-server/src/schemas/` | DLP guard schema + validation contracts |
+| `apps/mcp-server/db/` | Rate card DDL migrations + seed data |
+| `packages/contracts/` | Shared invoice, validation, and export Zod schemas |
+| `packages/shared/` | Hashing, redaction, and DLP helpers shared across TypeScript runtimes |
+| `migrations/` | Neon Postgres schema migrations for invoice audit persistence |
+| `scripts/` | 24 scripts: audit graphs, source/PII scans, D1 seed/reconcile, deployment, smoke tests, graph build, dataset generation, index drift checks |
+| `docs/` | Architecture, layout, plan, security, QA, operations, and traceability documents |
+| `.github/workflows/` | 8 CI/CD workflows covering web, worker, mcp-server, release gates, code scanning |
 
-## Entrypoints
+## Web Routes (apps/web/src/app/)
 
-| Entry point | Purpose |
-| --- | --- |
-| `server/src/worker.ts` | Cloudflare Worker entrypoint from `wrangler.toml`. |
-| `server/src/index.ts` | Node fallback MCP server entrypoint for local/non-Worker use. |
-| `server/src/claude-server.ts` | Claude-oriented remote/local MCP bridge support. |
-| `server/src/hvdc-server.ts` | Shared MCP tool and resource factory. |
-| `public/hvdc-answer-widget.html` | Source widget rendered through generated `widget-html.ts`. |
+| Route | Source | Purpose |
+|---|---|---|
+| `/` | `page.tsx` | App entry |
+| `/invoice-audit` | `invoice-audit/page.tsx` | Audit workspace |
+| `/invoice-audit/upload` | `invoice-audit/upload/page.tsx` | Invoice/evidence upload |
+| `/invoice-audit/jobs/[jobId]` | `invoice-audit/jobs/[jobId]/page.tsx` | Job detail + review |
+| `/fx-policies` | `fx-policies/page.tsx` | FX policy reference |
 
-## Key Commands
+## API Routes (apps/web/src/app/api/)
 
-| Command | Purpose |
-| --- | --- |
-| `npm run generate:worker-assets` | Rebuild generated corpus/sample/widget Worker assets. |
-| `npm run dev` | Generate assets and start Wrangler dev. |
-| `npm run typecheck` | Generate assets and run TypeScript typecheck. |
-| `npm test` | Generate assets and run Vitest, excluding archived worktrees. |
-| `npm run verify` | Typecheck, test, and Worker dry-run. |
-| `npm run worker:deploy` | Run full verify and deploy to Cloudflare Workers. |
-| `npm run verify:governance` | Run SCT governance reports, PII/NDA/source audits, syntax checks, and focused governance tests. |
-| `npm run d1:seed-wh-status` | Seed warehouse status Excel projection to remote D1. |
-| `npm run d1:reconcile-wh-status` | Reconcile warehouse status D1 projection. |
+| Route | Source | Method |
+|---|---|---|
+| `/api/files/ingest` | `files/ingest/route.ts` | POST |
+| `/api/files/ingest/large` | `files/ingest/large/route.ts` | POST |
+| `/api/invoice-audit/run` | `invoice-audit/run/route.ts` | POST |
+| `/api/audit/status` | `audit/status/route.ts` | GET |
+| `/api/audit/trace` | `audit/trace/route.ts` | GET |
+| `/api/audit/result` | `audit/result/route.ts` | GET |
+| `/api/audit/approve` | `audit/approve/route.ts` | POST |
+| `/api/audit/export` | `audit/export/route.ts` | POST |
+| `/api/export/download` | `export/download/route.ts` | GET |
+| `/api/fx-policy` | `fx-policy/route.ts` | POST |
+| `/mcp` | `mcp/route.ts` | POST |
 
-## Generated Files
+## MCP Validation Tools (apps/mcp-server/src/tools/)
 
-- `server/src/generated/corpus-data.ts`
-- `server/src/generated/sample-shipments.ts`
-- `server/src/generated/widget-html.ts`
+14 tools: `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `match_shipment_reference`, `check_rate_card`, `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`, `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`, `check_dem_det`
 
-Regenerate these with `npm run generate:worker-assets` after changing corpus, sample data, or widget source.
+In-process subset in `apps/web/src/lib/mcp/tools.ts`: 6 tools — `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `check_rate_card`, `check_cost_guard`, `build_validation_explanation`.
 
+## Worker Routes (apps/worker-py/app/routes/)
 
-## Codex Documentation Update — 2026-06-13T18:20:29.442785+00:00
+| Route | Source | Purpose |
+|---|---|---|
+| `POST /parse` | `parse.py` | Parse uploaded file by type |
+| `POST /v1/export` | `export.py` | Build 13-sheet audit workbook |
+| `GET /health/ready` | `health.py` | Readiness check |
+| `GET /health/live` | `health.py` | Liveness check |
 
-**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
+## Local/Generated Directories (gitignored)
 
-**Purpose:** This section maps the detected repository layout and documentation surface.
+- `apps/web/.next/`, `.dev-blob/`, `coverage/`, `test-results/`, `node_modules/`
+- `apps/worker-py/.venv/`, `.pytest_cache/`, `__pycache__/`
+- `apps/mcp-server/node_modules/`, `dist/`
+- `.vercel/`, `.codex/`, `.claude/`, `graphify-out/`
 
-### Evidence inventory
+Do not copy generated invoice text, signed URLs, blob keys, or P2 evidence from these into documentation.
 
-**Source/code files sampled:**
-- `apps\mcp-server\src\__tests__\router.test.ts`
-- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
-- `apps\mcp-server\src\db.ts`
-- `apps\mcp-server\src\main.ts`
-- `apps\mcp-server\src\schemas\dlp-guard.ts`
-- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_cost_guard.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_duplicate_invoice.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_evidence_required.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_fx_policy.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_rate_card.test.ts`
-
-**Documentation files sampled:**
-- `.vercel\README.txt`
-- `20260613_job_store_mcp_fix_plan.md`
-- `apps\README.md`
-- `apps\graphify-out\GRAPH_REPORT.md`
-- `apps\graphify-out\converted\sample-invoice_c70e590b.md`
-- `apps\web\.vercel\README.txt`
-- `apps\worker-py\README.md`
-- `apps\worker-py\invoice_audit_parser.egg-info\SOURCES.txt`
-- `apps\worker-py\invoice_audit_parser.egg-info\dependency_links.txt`
-- `apps\worker-py\invoice_audit_parser.egg-info\requires.txt`
-- `apps\worker-py\invoice_audit_parser.egg-info\top_level.txt`
-- `docs\# 3-Way 교차검증 보고서 (graph × 개발 현황 보고서 × Invoice Audit Platform v1.00).md`
-
-**Config/build files sampled:**
-- `.codex\root-docs-scan.json`
-- `.github\dependabot.yml`
-- `.github\workflows\codeql.yml`
-- `.github\workflows\fly-worker-deploy.yml`
-- `.github\workflows\python-worker-ci.yml`
-- `.github\workflows\release-gate.yml`
-- `.github\workflows\vercel-preview.yml`
-- `.github\workflows\vercel-prod.yml`
-- `.github\workflows\web-ci.yml`
-- `.vercel\project.json`
-- `apps\graphify-out\graph.json`
-- `apps\mcp-server\package-lock.json`
-
-**Agent profile files sampled:**
-- No agent profile detected; this update records the absence explicitly.
-
-### Mermaid graph
-
-```mermaid
-flowchart TD
-  ROOT[Repository root] --> SRC[src / app code]
-  ROOT --> DOCS[docs / markdown]
-  ROOT --> AGENTS[agent profiles]
-  ROOT --> CONFIG[config/build files]
-```
-
-### Verification notes
-
-- Append-only update generated by `root-docs-batch-update`.
-- Code/config/doc/agent inventory counts: code=171, docs=99, config=264, agent_profiles=0.
-- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.
-
-## Invoice Audit MVP Layout Addendum - 2026-06-13
-
-This addendum records the current invoice audit MVP layout observed in the repository. It supplements the earlier Cloudflare ontology layout without deleting historical sections.
-
-For invoice-audit development, this addendum is the current-state layout reference. Earlier Cloudflare ontology layout sections remain as historical context.
-
-### Current Top-Level Layout
-
-```mermaid
-flowchart TD
-  Root["SCT_ONTOLOGY-main"] --> Apps["apps"]
-  Apps --> Web["apps/web"]
-  Apps --> Worker["apps/worker-py"]
-  Apps --> MCP["apps/mcp-server"]
-  Root --> Packages["packages"]
-  Packages --> Contracts["packages/contracts"]
-  Packages --> Shared["packages/shared"]
-  Root --> Migrations["migrations"]
-  Root --> Scripts["scripts"]
-  Root --> Docs["docs"]
-  Root --> GitHub[".github/workflows"]
-```
-
-### Current Directory Responsibilities
-
-| Path | Responsibility |
-| --- | --- |
-| `apps/web/` | Next.js web UI and API orchestration for invoice upload, audit job execution, approval, and export. |
-| `apps/web/src/app/` | App Router pages and API route handlers. |
-| `apps/web/src/lib/` | Job store, Blob access, parser client, validation helpers, gate helpers, and shared web runtime logic. |
-| `apps/web/tests/` | Vitest coverage for API routes and web runtime helpers. |
-| `apps/web/e2e/` | Playwright smoke tests. |
-| `apps/worker-py/app/routes/` | FastAPI route handlers for parse, export, and health endpoints. |
-| `apps/worker-py/app/parsers/` | Parsers for `xlsx`, `md`, `txt`, `pdf`, and `pdf_json`. |
-| `apps/worker-py/app/exporters/` | 13-sheet audit workbook export logic. |
-| `apps/worker-py/app/validators/` | Worker-side numeric integrity validation. |
-| `apps/worker-py/tests/` | Pytest coverage and parser/export fixtures. |
-| `apps/mcp-server/src/tools/` | Invoice validation tools and tool tests. |
-| `apps/mcp-server/src/schemas/` | MCP server schema and DLP guard code. |
-| `packages/contracts/` | Shared invoice, validation, and export schemas. |
-| `packages/shared/` | Hashing and redaction helpers shared across runtimes. |
-| `migrations/` | Postgres schema migrations for invoice audit persistence. |
-| `scripts/` | Deployment, seeding, graph, DLP, and validation helper scripts. |
-| `docs/` | Architecture, layout, plan, security, QA, operations, and traceability documents. |
-
-### Current Web Pages
-
-| Route | Source path | Purpose |
-| --- | --- | --- |
-| `/` | `apps/web/src/app/page.tsx` | App entry page. |
-| `/invoice-audit` | `apps/web/src/app/invoice-audit/page.tsx` | Invoice audit workspace. |
-| `/invoice-audit/upload` | `apps/web/src/app/invoice-audit/upload/page.tsx` | Invoice/evidence upload page. |
-| `/invoice-audit/jobs/[jobId]` | `apps/web/src/app/invoice-audit/jobs/[jobId]/page.tsx` | Job detail and review page. |
-| `/fx-policies` | `apps/web/src/app/fx-policies/page.tsx` | FX policy view. |
-
-### Current API Route Files
-
-| API route | Source path |
-| --- | --- |
-| `/api/files/ingest` | `apps/web/src/app/api/files/ingest/route.ts` |
-| `/api/files/ingest/large` | `apps/web/src/app/api/files/ingest/large/route.ts` |
-| `/api/invoice-audit/run` | `apps/web/src/app/api/invoice-audit/run/route.ts` |
-| `/api/audit/status` | `apps/web/src/app/api/audit/status/route.ts` |
-| `/api/audit/trace` | `apps/web/src/app/api/audit/trace/route.ts` |
-| `/api/audit/result` | `apps/web/src/app/api/audit/result/route.ts` |
-| `/api/audit/approve` | `apps/web/src/app/api/audit/approve/route.ts` |
-| `/api/audit/export` | `apps/web/src/app/api/audit/export/route.ts` |
-| `/api/export/download` | `apps/web/src/app/api/export/download/route.ts` |
-| `/api/fx-policy` | `apps/web/src/app/api/fx-policy/route.ts` |
-| `/mcp` | `apps/web/src/app/mcp/route.ts` |
-
-### Current Validation Tool Files
-
-The MCP validation tool set is under `apps/mcp-server/src/tools/`.
-
-- `route_question.ts`
-- `normalize_invoice_lines.ts`
-- `check_duplicate_invoice.ts`
-- `match_shipment_reference.ts`
-- `check_rate_card.ts`
-- `check_contract_validity.ts`
-- `check_evidence_required.ts`
-- `check_tax_vat.ts`
-- `check_fx_policy.ts`
-- `check_cost_guard.ts`
-- `build_validation_explanation.ts`
-- `classify_type_b.ts` (2026-06-13: Track 1 TYPE-B priority port)
-- `check_hs_uae_compliance.ts` (2026-06-13: BOE + HS code validation)
-- `check_dem_det.ts` (2026-06-13: DEM/DET evidence check)
-
-Total: 14 tools.
-
-### DSV Waybill Parser (2026-06-13)
-
-- `apps/worker-py/app/parsers/dsv_waybill.py` — DSV Waybill field extraction (8 core functions, 28 tests)
-- `apps/worker-py/tests/fixtures/dsv-waybill-001.txt` — DSV fixture
-- `apps/worker-py/tests/test_dsv_waybill.py` — 28 DSV-specific tests
-
-### SESS-005 Cross-Validation Artifacts
-
-- `20260613_cross_validation_report.md` — Track 1 vs Track 2 gate coverage report
-- `20260613_dsv_waybill_port_plan.md` — DSV parser port implementation plan
-- `20260613_p2_gap_design.md` — P2 gap design document
-
-### Local and Generated Files
-
-These paths can appear during local execution or builds and should not be treated as source documentation targets:
-
-- `apps/web/.next/`
-- `apps/web/.dev-blob/` for local Blob fallback storage when private Blob credentials are not active.
-- `apps/web/coverage/`
-- `apps/web/test-results/`
-- `apps/web/node_modules/`
-- `apps/worker-py/.venv/`
-- `apps/worker-py/.pytest_cache/`
-- `apps/worker-py/**/__pycache__/`
-- `apps/mcp-server/node_modules/`
-- `apps/mcp-server/dist/`
-
-Do not copy generated invoice text, signed URLs, Blob object keys, or private evidence contents from these directories into documentation.
-
-Local fallback modes are for development only. Production layout assumes Neon/Postgres persistence through `DATABASE_URL` and private Vercel Blob storage through `BLOB_READ_WRITE_TOKEN`.
-
-### Current Verification Commands
+## Verification Commands
 
 | Area | Command |
-| --- | --- |
+|---|---|
 | Web typecheck | `pnpm --dir apps\web typecheck` |
 | Web tests | `pnpm --dir apps\web test` |
 | Web build | `pnpm --dir apps\web build` |
-| Worker syntax smoke | `python -m py_compile apps\worker-py\app\routes\parse.py` |
 | Worker tests | `cd apps\worker-py && pytest -q` |
+| Worker syntax | `python -m py_compile apps\worker-py\app\routes\parse.py` |
 | MCP typecheck | `cd apps\mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps\mcp-server && pnpm test` |
 | MCP build | `cd apps\mcp-server && pnpm build` |
+| Workbook contract | `python apps\worker-py\scripts\workbook_contract_validate.py <wb.xlsx>` |
 
+## Historical (Archived 2026-06-14)
 
-## Codex Documentation Update — 2026-06-13T21:10:45.952547+00:00
+Earlier versions of this repository ran a Cloudflare Worker (`server/src/worker.ts`) serving the SCT ontology ChatGPT App. That runtime and its associated directories are deleted:
 
-**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
+- `server/src/` — Worker, MCP tools, answer pipeline, Decision Card, generated assets
+- `public/` — ChatGPT iframe widget HTML
+- `data/corpus/` — Ontology corpus documents
+- `wh status/` — Warehouse status Excel projections
+- `tests/` (root) — Vitest regression for ontology runtime
+- `migrations/0001-0007_*.sql` — D1 schemas (kept for reference, superseded by Postgres)
 
-**Purpose:** This section maps the detected repository layout and documentation surface.
-
-### Evidence inventory
-
-**Source/code files sampled:**
-- `apps\mcp-server\db\migrate-rate-cards.sql`
-- `apps\mcp-server\db\seed-rate-cards.sql`
-- `apps\mcp-server\src\__tests__\router.test.ts`
-- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
-- `apps\mcp-server\src\db.ts`
-- `apps\mcp-server\src\main.ts`
-- `apps\mcp-server\src\schemas\dlp-guard.ts`
-- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_cost_guard.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_dem_det.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_duplicate_invoice.test.ts`
-
-**Documentation files sampled:**
-- `.vercel\README.txt`
-- `20260613_cross_validation_report.md`
-- `20260613_dsv_waybill_port_plan.md`
-- `20260613_job_store_mcp_fix_plan.md`
-- `20260613_p2_gap_design.md`
-- `README.md`
-- `apps\README.md`
-- `apps\graphify-out\GRAPH_REPORT.md`
-- `apps\graphify-out\converted\sample-invoice_c70e590b.md`
-- `apps\web\.vercel\README.txt`
-- `apps\worker-py\README.md`
-- `apps\worker-py\invoice_audit_parser.egg-info\SOURCES.txt`
-
-**Config/build files sampled:**
-- `.claude\settings.local.json`
-- `.codex\root-docs-scan.json`
-- `.codex\root-docs-write.json`
-- `.github\dependabot.yml`
-- `.github\workflows\codeql.yml`
-- `.github\workflows\fly-worker-deploy.yml`
-- `.github\workflows\python-worker-ci.yml`
-- `.github\workflows\release-gate.yml`
-- `.github\workflows\vercel-preview.yml`
-- `.github\workflows\vercel-prod.yml`
-- `.github\workflows\web-ci.yml`
-- `.vercel\project.json`
-
-**Agent profile files sampled:**
-- No agent profile detected; this update records the absence explicitly.
-
-### Mermaid graph
-
-```mermaid
-flowchart TD
-  ROOT[Repository root] --> SRC[src / app code]
-  ROOT --> DOCS[docs / markdown]
-  ROOT --> AGENTS[agent profiles]
-  ROOT --> CONFIG[config/build files]
-```
-
-### Verification notes
-
-- Append-only update generated by `root-docs-batch-update`.
-- Code/config/doc/agent inventory counts: code=182, docs=108, config=451, agent_profiles=0.
-- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.
+The current layout reflects the invoice audit platform (Phase 1 MVP), which replaced the ontology app. See `docs/SYSTEM_ARCHITECTURE.md` for the full architecture.

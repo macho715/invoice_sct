@@ -29,7 +29,7 @@ export class ParseFailedError extends Error {
 export function createParserClient(opts: { baseUrl: string; token: string }): ParserClient {
   const { baseUrl, token } = opts;
   const call = async (req: ParseRequestPayload) => {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/parse`, {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/parse`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify(req)

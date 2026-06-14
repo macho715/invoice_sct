@@ -1,7 +1,7 @@
 name: "Release Gate (MVP SC-001..SC-013)"
 
 # Integrated release gate for MVP. Runs ALL success criteria from the Spec.
-# Sequentially dependent jobs: ALL SC jobs must pass before gate-summary.
+# Collapsed to 4 job groups to reduce CI bottleneck.
 #
 # NOTE: Track 1 DLP scan + self-test scripts live in shpiment/ which is a
 # sibling of SCT_ONTOLOGY-main/ in the parent invoice/ repo. Those checks
@@ -29,7 +29,6 @@ env:
 jobs:
   # ------------------------------------------------------------------
   # SC-001..SC-003: DLP scan + Track 1 self-test
-  # Track 1 scripts (shpiment/) are outside this repo; steps skip gracefully.
   # ------------------------------------------------------------------
   sc-dlp:
     name: "SC-DLP (DLP scan + self-test 3x)"
@@ -44,10 +43,11 @@ jobs:
           echo "::notice::Track 1 DLP/self-test runs in the parent invoice/ workflow. SC-DLP gate passes here."
 
   # ------------------------------------------------------------------
-  # SC-004: Workbook output contract (13 sheets, exact order, no 03_Type_B_Summary)
+  # SC-Python-CI: workbook contract + pytest + worker startup smoke
+  # Consolidates: sc-workbook, sc-pytest, sc-worker-startup
   # ------------------------------------------------------------------
-  sc-workbook:
-    name: "SC-Workbook (13-Sheet contract)"
+  sc-python-ci:
+    name: "SC-Python-CI (workbook + pytest + startup)"
     runs-on: ubuntu-latest
     needs: [sc-dlp]
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
@@ -99,43 +99,24 @@ jobs:
           print('OK: 03_Type_B_Summary is absent')
           PY
 
-  # ------------------------------------------------------------------
-  # SC-005..SC-006: pytest (worker-py) + coverage >= 80%
-  # ------------------------------------------------------------------
-  sc-pytest:
-    name: "SC-Pytest (worker-py, coverage >= 80%)"
-    runs-on: ubuntu-latest
-    needs: [sc-dlp]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install worker-py dependencies
-        run: |
-          cd apps/worker-py
-          uv sync --frozen
-
-      - name: Run pytest
+      - name: Run pytest (coverage >= 80%)
         run: |
           cd apps/worker-py
           uv run pytest -q --maxfail=1 --cov=app --cov-report=term-missing --cov-fail-under=80
 
+      - name: Import smoke (parsers + routes)
+        run: |
+          cd apps/worker-py
+          uv run python -c "from app.parsers import parse, pdf_text, pdf_json; from app.routes import parse as r"
+          echo "Exit: $?"
+
   # ------------------------------------------------------------------
-  # SC-007..SC-008: vitest (apps/web) + coverage >= 80%
+  # SC-TS-Checks: typecheck + lint + test for web & mcp-server
+  # Consolidates: sc-vitest, sc-typecheck, sc-mcp-cardinality,
+  #               sc-mcp-test, sc-web-lint
   # ------------------------------------------------------------------
-  sc-vitest:
-    name: "SC-Vitest (apps/web, coverage >= 80%)"
+  sc-ts-checks:
+    name: "SC-TS-Checks (typecheck + lint + test - web & mcp)"
     runs-on: ubuntu-latest
     needs: [sc-dlp]
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
@@ -153,63 +134,52 @@ jobs:
         with:
           version: 9
 
-      - name: Install dependencies
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      # --- apps/web (pnpm) ---
+      - name: Install apps/web dependencies
         run: |
           cd apps/web
           pnpm install --frozen-lockfile
 
-      - name: Run vitest
+      - name: Typecheck apps/web
+        run: |
+          cd apps/web
+          pnpm typecheck
+
+      - name: Lint apps/web
+        run: |
+          cd apps/web
+          pnpm lint
+
+      - name: Vitest apps/web (coverage >= 80%)
         run: |
           cd apps/web
           pnpm test --run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
 
-  # ------------------------------------------------------------------
-  # SC-009: TypeScript typecheck (apps/web + apps/mcp-server)
-  # No root workspace — each app has its own package manager.
-  # ------------------------------------------------------------------
-  sc-typecheck:
-    name: "SC-Typecheck (web + mcp-server)"
-    runs-on: ubuntu-latest
-    needs: [sc-dlp]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Typecheck apps/web (pnpm)
-        run: |
-          cd apps/web
-          pnpm install --frozen-lockfile
-          pnpm typecheck
-
-      - name: Typecheck apps/mcp-server (npm)
+      # --- apps/mcp-server (pnpm) ---
+      - name: Install mcp-server dependencies
         run: |
           cd apps/mcp-server
-          npm ci
-          npm run typecheck
+          pnpm install --frozen-lockfile
 
-  # ------------------------------------------------------------------
-  # SC-010: MCP tool cardinality must be exactly 13
-  # ------------------------------------------------------------------
-  sc-mcp-cardinality:
-    name: "SC-MCP-Cardinality (tools = 13)"
-    runs-on: ubuntu-latest
-    needs: [sc-dlp]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Typecheck apps/mcp-server
+        run: |
+          cd apps/mcp-server
+          pnpm run typecheck
 
+      - name: Run mcp-server tests
+        run: |
+          cd apps/mcp-server
+          pnpm test
+
+      # --- MCP tool cardinality ---
       - name: Count MCP tools
         run: |
           TOOLS_DIR="apps/mcp-server/src/tools"
@@ -224,103 +194,6 @@ jobs:
             exit 1
           fi
           echo "OK: 14 MCP tools present"
-
-  # ------------------------------------------------------------------
-  # SC-MCP-Test: vitest + typecheck for apps/mcp-server
-  # ------------------------------------------------------------------
-  sc-mcp-test:
-    name: "SC-MCP-Test (vitest + typecheck)"
-    runs-on: ubuntu-latest
-    needs: [sc-dlp]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          cd apps/mcp-server
-          npm ci
-
-      - name: Typecheck
-        run: |
-          cd apps/mcp-server
-          npm run typecheck
-
-      - name: Run tests
-        run: |
-          cd apps/mcp-server
-          npm test
-
-  # ------------------------------------------------------------------
-  # SC-Web-Lint: ESLint for apps/web
-  # ------------------------------------------------------------------
-  sc-web-lint:
-    name: "SC-Web-Lint"
-    runs-on: ubuntu-latest
-    needs: [sc-dlp]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install dependencies
-        run: |
-          cd apps/web
-          pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: |
-          cd apps/web
-          pnpm lint
-
-  # ------------------------------------------------------------------
-  # SC-011..SC-012: Worker startup import smoke
-  # ------------------------------------------------------------------
-  sc-worker-startup:
-    name: "SC-Worker-Startup (import smoke)"
-    runs-on: ubuntu-latest
-    needs: [sc-dlp]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install worker-py dependencies
-        run: |
-          cd apps/worker-py
-          uv sync --frozen
-
-      - name: Import smoke (parsers + routes)
-        run: |
-          cd apps/worker-py
-          uv run python -c "from app.parsers import parse, pdf_text, pdf_json; from app.routes import parse as r"
-          echo "Exit: $?"
 
   # ------------------------------------------------------------------
   # SC-013: E2E Playwright smoke tests
@@ -343,6 +216,14 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: |
@@ -368,21 +249,15 @@ jobs:
           retention-days: 7
 
   # ------------------------------------------------------------------
-  # gate-summary: aggregate ALL SC jobs; emit PASS/FAIL badge
+  # gate-summary: aggregate 4 groups; emit PASS/FAIL badge
   # ------------------------------------------------------------------
   gate-summary:
     name: "Gate-Summary (PASS/FAIL)"
     runs-on: ubuntu-latest
     needs:
       - sc-dlp
-      - sc-workbook
-      - sc-pytest
-      - sc-vitest
-      - sc-typecheck
-      - sc-mcp-cardinality
-      - sc-mcp-test
-      - sc-web-lint
-      - sc-worker-startup
+      - sc-python-ci
+      - sc-ts-checks
       - sc-e2e
     if: always()
     steps:
@@ -391,14 +266,8 @@ jobs:
           set -e
           RESULTS=(
             "sc-dlp=${{ needs.sc-dlp.result }}"
-            "sc-workbook=${{ needs.sc-workbook.result }}"
-            "sc-pytest=${{ needs.sc-pytest.result }}"
-            "sc-vitest=${{ needs.sc-vitest.result }}"
-            "sc-typecheck=${{ needs.sc-typecheck.result }}"
-            "sc-mcp-cardinality=${{ needs.sc-mcp-cardinality.result }}"
-            "sc-mcp-test=${{ needs.sc-mcp-test.result }}"
-            "sc-web-lint=${{ needs.sc-web-lint.result }}"
-            "sc-worker-startup=${{ needs.sc-worker-startup.result }}"
+            "sc-python-ci=${{ needs.sc-python-ci.result }}"
+            "sc-ts-checks=${{ needs.sc-ts-checks.result }}"
             "sc-e2e=${{ needs.sc-e2e.result }}"
           )
           echo "## Release Gate Results" >> $GITHUB_STEP_SUMMARY
@@ -424,7 +293,7 @@ jobs:
           fi
 
       - name: Fail if any SC job failed
-        if: needs.sc-dlp.result != 'success' || needs.sc-workbook.result != 'success' || needs.sc-pytest.result != 'success' || needs.sc-vitest.result != 'success' || needs.sc-typecheck.result != 'success' || needs.sc-mcp-cardinality.result != 'success' || needs.sc-mcp-test.result != 'success' || needs.sc-web-lint.result != 'success' || needs.sc-worker-startup.result != 'success' || needs.sc-e2e.result != 'success'
+        if: needs.sc-dlp.result != 'success' || needs.sc-python-ci.result != 'success' || needs.sc-ts-checks.result != 'success' || needs.sc-e2e.result != 'success'
         run: |
           echo "::error::Release gate FAILED - one or more SC jobs did not pass"
           exit 1

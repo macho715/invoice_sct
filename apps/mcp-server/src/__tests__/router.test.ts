@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
 import { app } from '../main.js';
 import { MCP_TOOLS } from '../tools/index.js';
+
+const AUTH_HEADER = { Authorization: 'Bearer test-mcp-key' };
+
+beforeAll(() => {
+  process.env.MCP_API_KEY = 'test-mcp-key';
+});
 
 describe('MCP Router', () => {
   describe('GET /health', () => {
@@ -17,7 +23,7 @@ describe('MCP Router', () => {
     it('returns all 13 tools with correct names', async () => {
       const req = new Request('http://localhost/mcp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 })
       });
       const res = await app.request(req);
@@ -35,7 +41,7 @@ describe('MCP Router', () => {
     it('includes name, description, version, and inputSchema for each tool', async () => {
       const req = new Request('http://localhost/mcp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 2 })
       });
       const res = await app.request(req);
@@ -53,7 +59,7 @@ describe('MCP Router', () => {
     it('returns JSON-RPC error -32601 for unknown tool name', async () => {
       const req = new Request('http://localhost/mcp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({
           jsonrpc: '2.0',
           method: 'tools/call',
@@ -75,7 +81,7 @@ describe('MCP Router', () => {
     it('returns JSON-RPC error -32602 for invalid params', async () => {
       const req = new Request('http://localhost/mcp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({
           jsonrpc: '2.0',
           method: 'tools/call',
@@ -97,7 +103,7 @@ describe('MCP Router', () => {
     it('returns JSON-RPC error -32601 for unknown method', async () => {
       const req = new Request('http://localhost/mcp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({ jsonrpc: '2.0', method: 'unknown/method', id: 5 })
       });
       const res = await app.request(req);

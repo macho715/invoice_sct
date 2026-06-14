@@ -20,8 +20,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  install:
-    name: Install Dependencies
+  root-install:
+    name: Root Install
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -38,126 +38,37 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
-          path: ~/.local/share/pnpm/store
+          path: |
+            ~/.pnpm-store
+            **/node_modules
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-  lint:
-    name: Lint
-    needs: install
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run lint
-        run: pnpm lint
-
-  typecheck:
-    name: Typecheck (web, contracts, mcp-server)
-    needs: install
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck web
-        run: pnpm --filter web typecheck
-
-      - name: Typecheck contracts
-        run: pnpm --filter contracts typecheck
-
-      - name: Typecheck mcp-server
-        run: pnpm --filter mcp-server typecheck
-
-  test:
-    name: Test (vitest, coverage >= 80%)
-    needs: install
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests with coverage
-        run: pnpm test --run --coverage
-
-      - name: Enforce coverage threshold (>= 80%)
-        run: |
-          node -e "
-            const fs = require('fs');
-            const path = require('path');
-            const cwd = process.cwd();
-            const summary = JSON.parse(fs.readFileSync(path.join(cwd, 'coverage', 'coverage-summary.json'), 'utf8'));
-            const total = summary.total;
-            const metrics = ['lines', 'statements', 'functions', 'branches'];
-            const failures = [];
-            for (const m of metrics) {
-              if (total[m].pct < 80) {
-                failures.push(\`\${m}: \${total[m].pct}% < 80%\`);
-              }
-            }
-            if (failures.length) {
-              console.error('Coverage threshold (>=80%) NOT met:');
-              for (const f of failures) console.error('  ' + f);
-              process.exit(1);
-            }
-            console.log('Coverage threshold (>=80%) met:');
-            for (const m of metrics) {
-              console.log(\`  \${m}: \${total[m].pct}%\`);
-            }
-          "
+  checks:
+    name: "Checks (${{ matrix.app }})"
+    needs: [root-install]
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - apps/web
+          - apps/mcp-server
+          - packages/contracts
+          - packages/shared
+          - packages/tools
+          - packages/database
+    uses: ./.github/workflows/_ts-checks.yml
+    with:
+      working-directory: ${{ matrix.app }}
+      node-version: "20"
 
   build:
     name: Build
-    needs: install
+    needs: [checks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -173,6 +84,14 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -199,6 +118,14 @@ jobs:
         with:
           version: ${{ env.PNPM_VERSION }}
 
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -223,6 +150,14 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

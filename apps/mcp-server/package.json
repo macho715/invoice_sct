@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",
+    "@invoice-audit/database": "workspace:*",
+    "@invoice-audit/tools": "workspace:*",
     "hono": "^4.0.0",
     "pg": "^8.13.1",
     "zod": "^3.23.8"

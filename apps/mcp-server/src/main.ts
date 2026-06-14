@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { MCP_TOOLS } from './tools/index.js';
 import { guardDlp, DlpGuardInputSchema } from './schemas/dlp-guard.js';
@@ -7,9 +8,25 @@ const app = new Hono();
 
 app.get('/health', (c) => c.json({ status: 'ok', tools: MCP_TOOLS.length }));
 
+app.use('/mcp', cors({
+  origin: ['http://localhost:3000', 'https://invoice-audit.vercel.app'],
+  allowMethods: ['POST'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+  maxAge: 86400,
+}));
+
 app.post('/mcp', async (c) => {
   const body = await c.req.json();
   const { method, params, id } = body;
+
+  const expected = process.env.MCP_API_KEY;
+  if (!expected) {
+    return c.json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Server misconfigured — MCP_API_KEY not set' } }, 500);
+  }
+  const auth = c.req.header('Authorization');
+  if (auth !== `Bearer ${expected}`) {
+    return c.json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } }, 401);
+  }
 
   if (method === 'tools/list') {
     return c.json({

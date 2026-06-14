@@ -183,7 +183,7 @@ def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version
             source_ref={'sheet': ws.title, 'row': r_idx, 'col': str(cmap['description'])},
             shipment_ref=_cell_str(row[cmap['shipment_ref']]) if 'shipment_ref' in cmap else None,
             job_number=_cell_str(row[cmap['job_number']]) if 'job_number' in cmap else None,
-            rate_basis=None,
+            rate_basis=_cell_str(row[cmap['rate_basis']]) if 'rate_basis' in cmap else None,
             for_charge_component=_cell_str(row[cmap['charge_component']]) if 'charge_component' in cmap else None
         )
         lines.append(line)

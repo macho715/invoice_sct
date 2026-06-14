@@ -27,12 +27,8 @@ jobs:
     permissions:
       contents: read
       deployments: write
-    # push is already scoped by on.push.paths (apps/worker-py/**); the previous
-    # commits.*.modified re-check was fragile and skipped valid deploys.
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    # Prevent double-deploy: only fire on push to main, not workflow_run
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

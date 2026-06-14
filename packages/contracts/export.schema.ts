@@ -40,9 +40,9 @@ export function validateSheetContract(sheetNames: string[]): {
   reordered: boolean;
 } {
   const expected = [...SHEET_CONTRACT_V2];
-  const missing = expected.filter(s => !sheetNames.includes(s));
-  const extra = sheetNames.filter(s => !expected.includes(s));
-  const reordered = sheetNames.filter(s => expected.includes(s)).join('|') !== expected.join('|');
+  const missing = expected.filter(s => !sheetNames.includes(s)) as SheetNameV2[];
+  const extra = sheetNames.filter(s => !expected.includes(s as SheetNameV2)) as SheetNameV2[];
+  const reordered = sheetNames.filter(s => expected.includes(s as SheetNameV2)).join('|') !== expected.join('|');
   return {
     valid: missing.length === 0 && extra.length === 0 && !reordered,
     missing,

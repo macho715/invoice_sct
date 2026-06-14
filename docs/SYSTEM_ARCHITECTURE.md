@@ -1,345 +1,162 @@
 # System Architecture
 
-## System Purpose
+## Overview
 
-This project is the HVDC ontology-grounded ChatGPT App and MCP server. It answers HVDC logistics questions from approved ontology corpus evidence, renders structured Decision Card / Case Status Card UI, and serves the runtime from Cloudflare Workers.
-
-The current public MCP endpoint is `https://hvdc-ontology-chatgpt-app.mscho715.workers.dev/mcp`. The current widget resource is `ui://hvdc/answer-card-v10.html`.
+SCT Invoice Audit Platform — 3-app architecture for HVDC invoice processing, cost guard validation, and approval-gate workflows in the Samsung C&T Abu Dhabi HVDC project.
 
 ## Components
 
-| Component | Evidence path | Runtime role |
-| --- | --- | --- |
-| Cloudflare Worker | `server/src/worker.ts`, `wrangler.toml` | Handles `/healthz`, `/mcp`, D1 lookup, R2 protected file boundary, rate limits, and telemetry config. |
-| MCP tool registry | `server/src/hvdc-server.ts` | Registers ChatGPT Apps SDK resources and tools including ontology search, validation, Dual-MCP tools, and `get_hvdc_case_status`. |
-| Answer pipeline | `server/src/answer.ts`, `server/src/corpus.ts`, `server/src/router.ts` | Routes questions, searches corpus chunks, validates evidence, and returns structured answer payloads. |
-| Decision Card contract | `server/src/decision-card.ts`, `server/src/types.ts` | Builds Decision Card v2.1 payloads, rulepack trace fields, human gate state, and security/audit status. |
-| Widget UI | `public/hvdc-answer-widget.html`, `server/src/generated/widget-html.ts` | Renders ChatGPT iframe UI, Case Status Card, Decision Card tabs, drawers, tables, and fallback text. |
-| Corpus bundle | `data/corpus/`, `scripts/generate_worker_assets.py`, `server/src/generated/corpus-data.ts` | Converts approved ontology documents into Worker-bundled search data. |
-| WH status SSOT | `wh status/hvdc_wh_status.xlsx`, `scripts/seed_wh_status_d1.py`, `migrations/0006_wh_status_case_card.sql`, `migrations/0007_case_event_ssot.sql` | Projects Excel case rows into D1 case cards, canonical events, warehouse dwell, and site intake status. |
-| Verification | `tests/`, `.github/workflows/ci.yml`, `.github/workflows/hvdc-verify.yml` | Runs typecheck, Vitest, Worker dry-run, coverage, schema drift, and corpus drift gates. |
+| Component | Runtime | Host | Role |
+|---|---|---|---|
+| **apps/web** | Next.js 15 (App Router) | Vercel | Invoice upload UI, audit workspace, API orchestration, approval gates, workbook export dispatch |
+| **apps/worker-py** | FastAPI (Python) | Fly.io | File parsing (xlsx/md/txt/pdf/pdf_json), 13-sheet audit workbook export |
+| **apps/mcp-server** | Hono (TypeScript) | Fly.io | Standalone MCP JSON-RPC validation server — 14 audit tools for external clients (ChatGPT, Claude Desktop) |
+| **packages/contracts** | TypeScript | — | Shared invoice, validation, and export Zod schemas |
+| **packages/shared** | TypeScript | — | Hashing, redaction, and DLP helpers |
 
-```mermaid
-graph LR
-  User["ChatGPT / Claude / Cursor"] --> Worker["Cloudflare Worker /mcp"]
-  Worker --> Tools["MCP tool registry"]
-  Tools --> Answer["Answer pipeline"]
-  Tools --> CaseStatus["get_hvdc_case_status"]
-  Answer --> Corpus["Generated ontology corpus"]
-  CaseStatus --> D1["Cloudflare D1 WH status / audit"]
-  Worker --> R2["Cloudflare R2 protected files"]
-  Worker --> Widget["ui://hvdc/answer-card-v10.html"]
-  Widget --> Cards["Decision Card / Case Status Card"]
-  Tests["npm run verify / CI"] --> Worker
-```
-
-## Runtime Flow
-
-1. A client calls `/mcp` with a tool request.
-2. `server/src/worker.ts` creates the Worker request boundary and runtime bindings.
-3. `server/src/hvdc-server.ts` dispatches the selected MCP tool.
-4. Ontology answers read generated corpus data; case status answers read D1 Control Tower / WH status projections.
-5. The tool returns structured content plus `ui://hvdc/answer-card-v10.html` for ChatGPT rendering.
-6. The widget renders cards without mutating business verdict fields.
-
-## External Dependencies
-
-- Cloudflare Workers for runtime hosting.
-- Cloudflare D1 binding `MCP_AUDIT_DB` for audit, Control Tower, and warehouse status projections.
-- Cloudflare R2 binding `HVDC_FILES` for protected upload/write storage.
-- Cloudflare KV binding `HVDC_CACHE` for cache support.
-- ChatGPT Apps SDK metadata via MCP resources.
-
-## Current Verification Baseline
-
-- `npm run worker:deploy` executed `npm run verify` before deployment.
-- Latest verified test baseline: 22 test files, 302 tests passed.
-- Latest deployed Worker URL: `https://hvdc-ontology-chatgpt-app.mscho715.workers.dev`.
-- Latest smoke evidence: `/healthz` returned 200 and `get_hvdc_case_status caseNo=207721` returned `WHCASE-207721`, `WARN`, `M100_FINAL_DELIVERED`, `canonicalEvents=6`, and `caseCard=36`.
-
-
-## Codex Documentation Update — 2026-06-13T18:20:29.442785+00:00
-
-**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
-
-**Purpose:** This section reflects detected source, config, and agent components as an architecture inventory.
-
-### Evidence inventory
-
-**Source/code files sampled:**
-- `apps\mcp-server\src\__tests__\router.test.ts`
-- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
-- `apps\mcp-server\src\db.ts`
-- `apps\mcp-server\src\main.ts`
-- `apps\mcp-server\src\schemas\dlp-guard.ts`
-- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_cost_guard.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_duplicate_invoice.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_evidence_required.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_fx_policy.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_rate_card.test.ts`
-
-**Documentation files sampled:**
-- `.vercel\README.txt`
-- `20260613_job_store_mcp_fix_plan.md`
-- `apps\README.md`
-- `apps\graphify-out\GRAPH_REPORT.md`
-- `apps\graphify-out\converted\sample-invoice_c70e590b.md`
-- `apps\web\.vercel\README.txt`
-- `apps\worker-py\README.md`
-- `apps\worker-py\invoice_audit_parser.egg-info\SOURCES.txt`
-- `apps\worker-py\invoice_audit_parser.egg-info\dependency_links.txt`
-- `apps\worker-py\invoice_audit_parser.egg-info\requires.txt`
-- `apps\worker-py\invoice_audit_parser.egg-info\top_level.txt`
-- `docs\# 3-Way 교차검증 보고서 (graph × 개발 현황 보고서 × Invoice Audit Platform v1.00).md`
-
-**Config/build files sampled:**
-- `.codex\root-docs-scan.json`
-- `.github\dependabot.yml`
-- `.github\workflows\codeql.yml`
-- `.github\workflows\fly-worker-deploy.yml`
-- `.github\workflows\python-worker-ci.yml`
-- `.github\workflows\release-gate.yml`
-- `.github\workflows\vercel-preview.yml`
-- `.github\workflows\vercel-prod.yml`
-- `.github\workflows\web-ci.yml`
-- `.vercel\project.json`
-- `apps\graphify-out\graph.json`
-- `apps\mcp-server\package-lock.json`
-
-**Agent profile files sampled:**
-- No agent profile detected; this update records the absence explicitly.
-
-### Mermaid graph
-
-```mermaid
-flowchart TB
-  subgraph Repository
-    SRC[Source files] --> CFG[Config/build files]
-    CFG --> DOC[Root documentation]
-    AG[Agent profiles] --> DOC
-  end
-  DOC --> QA[Doc-code alignment verification]
-```
-
-### Verification notes
-
-- Append-only update generated by `root-docs-batch-update`.
-- Code/config/doc/agent inventory counts: code=171, docs=99, config=264, agent_profiles=0.
-- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.
-
-## Invoice Audit Platform Runtime Addendum - 2026-06-13
-
-This addendum records the current invoice audit MVP runtime observed in the repository. It supplements the earlier ontology/Cloudflare architecture notes without deleting historical content.
-
-For invoice-audit work, this addendum is the current-state section. Earlier Cloudflare ontology sections remain as historical context for the SCT ontology app lineage.
-
-### Current Runtime Components
-
-| Component | Evidence path | Runtime role |
-| --- | --- | --- |
-| Next.js web/API app | `apps/web/` | Upload UI, job pages, audit APIs, approval gate, export/download orchestration, Vercel deployment target. |
-| Python parser/export worker | `apps/worker-py/` | FastAPI worker for parsing `xlsx`, `md`, `txt`, `pdf`, and `pdf_json`, plus 13-sheet workbook export. |
-| MCP validation server | `apps/mcp-server/` | TypeScript validation tools for invoice normalization, duplicate, shipment, rate, contract, evidence, VAT, FX, cost guard, and explanations. |
-| Shared schemas and helpers | `packages/contracts/`, `packages/shared/` | Shared validation/export schemas, hashing, and redaction helpers. |
-| Postgres persistence | `migrations/`, `DATABASE_URL` | Neon/Postgres-backed job store and audit persistence. Only the environment variable name is documented here, not its value. |
-| Private Blob storage | `BLOB_READ_WRITE_TOKEN` | Private Vercel Blob store for invoice/evidence files. Parser access should use signed download URLs, not public P2 object URLs. |
-
-Local development has fallback behavior. If `DATABASE_URL` is unset, the web job store can run in memory for local testing. If Blob credentials are absent or configured for a development stub, the web app can use local `.dev-blob` storage. Production must use Neon/Postgres and private Blob storage.
-
-### Invoice Audit Runtime Flow
+## Data Flow
 
 ```mermaid
 flowchart LR
-  User["Reviewer / uploader"] --> Web["apps/web Next.js UI + API"]
-  Web --> Blob["Private Vercel Blob"]
-  Web --> DB["Neon Postgres via DATABASE_URL"]
-  Web --> Worker["apps/worker-py FastAPI"]
-  Worker --> Parser["xlsx / md / txt / pdf / pdf_json parsers"]
-  Worker --> Export["13-sheet workbook exporter"]
-  Web --> MCP["apps/mcp-server validation tools"]
-  MCP --> Verdict["PASS / AMBER / ZERO findings"]
-  Export --> Download["/api/export/download"]
+    U[Upload] --> B[Vercel Blob]
+    B --> W["apps/web API"]
+    W --> D[(Neon Postgres)]
+    W -->|fetch parse| PY["apps/worker-py /parse"]
+    PY --> W
+    W -->|in-process dispatch| MCP["MCP tools in-process<br/>apps/web/src/lib/mcp/tools.ts"]
+    MCP --> GB["gate-bridge<br/>PASS/AMBER/ZERO"]
+    GB -->|build| WB["workbook-builder"]
+    WB -->|fetch export| PY2["apps/worker-py /v1/export"]
+    PY2 --> DL["Download .xlsx"]
 ```
 
-### Web/API Boundary
+**Key routing decisions:**
+- MCP validation for the web audit flow runs **in-process** inside `apps/web/src/lib/mcp/tools.ts` — a logic-identical port of the 6 tools the validate() flow calls. No network hop to `apps/mcp-server` during audit.
+- `apps/mcp-server` is the **standalone** MCP server for external clients (ChatGPT, Claude Desktop, Cursor) via JSON-RPC at `/mcp`.
+- Parser and export are always fetched from the Python worker.
 
-The current web API surface is implemented under `apps/web/src/app/api/`.
+## Database
 
-- `POST /api/files/ingest` handles standard uploads.
-- `POST /api/files/ingest/large` handles the large upload path.
-- `POST /api/invoice-audit/run` runs parser and validation orchestration for a job.
-- `GET /api/audit/status?job_id=...` returns job status and last trace step.
-- `GET /api/audit/trace?job_id=...` returns audit trace records.
-- `GET /api/audit/result?job_id=...` returns audit result payload.
-- `POST /api/audit/approve` records approval gate actions.
-- `POST /api/audit/export` builds an export artifact.
-- `GET /api/export/download` downloads the exported workbook.
+| Store | Engine | Purpose | Binding |
+|---|---|---|---|
+| **Primary** | Neon Postgres | Job store, gate results, invoice lines, audit traces, rate cards | `DATABASE_URL` |
+| **Secondary** | Cloudflare D1 | Legacy ontology data, WH status projections (not active for invoice audit) | `MCP_AUDIT_DB` |
+| **Blob** | Vercel Blob (private) | Invoice/evidence file storage, export artifacts | `BLOB_READ_WRITE_TOKEN` |
 
-The current UI routes are implemented under `apps/web/src/app/`.
+## Web/API Surface
 
-- `/invoice-audit`
-- `/invoice-audit/upload`
-- `/invoice-audit/jobs/[jobId]`
-- `/fx-policies`
+### Routes (apps/web/src/app/)
 
-### Worker Boundary
+| Path | Purpose |
+|---|---|
+| `/` | App entry page |
+| `/invoice-audit` | Audit workspace |
+| `/invoice-audit/upload` | Upload invoice + evidence |
+| `/invoice-audit/jobs/[jobId]` | Job detail + review |
+| `/fx-policies` | FX policy reference |
 
-The parser/export worker is implemented in `apps/worker-py/app/`.
+### API Routes (apps/web/src/app/api/)
 
-- `POST /parse` parses uploaded input by file type.
-- `POST /v1/export` builds the final audit workbook.
-- `GET /health/ready` checks readiness for DB, Blob storage, parser, and memory dependencies.
-- `GET /health/live` checks liveness.
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/files/ingest` | POST | Standard file upload |
+| `/api/files/ingest/large` | POST | Large file upload path |
+| `/api/invoice-audit/run` | POST | Run parser + validation pipeline |
+| `/api/audit/status` | GET | Job status + last trace step |
+| `/api/audit/trace` | GET | Audit trace records |
+| `/api/audit/result` | GET | Audit result payload |
+| `/api/audit/approve` | POST | Approval gate action |
+| `/api/audit/export` | POST | Build export artifact |
+| `/api/export/download` | GET | Download exported workbook |
+| `/api/fx-policy` | POST | FX policy check |
+| `/mcp` | POST | In-process MCP tools endpoint |
 
-The worker supports Excel, Markdown, text, PDF text, and OpenDataLoader PDF JSON flows. Parser outputs must preserve source/evidence metadata without exposing raw P2 content in logs or docs.
+## Worker Boundary (apps/worker-py)
 
-### MCP Validation Boundary
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/parse` | POST | Parse uploaded file (xlsx/md/txt/pdf/pdf_json) |
+| `/v1/export` | POST | Build 13-sheet audit workbook |
+| `/health/ready` | GET | Readiness check (DB, blob, parser, memory) |
+| `/health/live` | GET | Liveness check |
 
-The validation server is implemented in `apps/mcp-server/src/`.
+## MCP Validation Tools
 
-Current tool files include:
+14 tools in `apps/mcp-server/src/tools/`:
 
-- `route_question`
-- `normalize_invoice_lines`
-- `check_duplicate_invoice`
-- `match_shipment_reference`
-- `check_rate_card`
-- `check_contract_validity`
-- `check_evidence_required`
-- `check_tax_vat`
-- `check_fx_policy`
-- `check_cost_guard`
-- `build_validation_explanation`
+`route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `match_shipment_reference`, `check_rate_card`, `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`, `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`, `check_dem_det`
 
-These tools support the invoice audit gate model. ZERO findings block final approved export, and AMBER findings require reviewer approval according to project rules.
+**In-process subset** (apps/web/src/lib/mcp/tools.ts): 6 tools — `route_question`, `normalize_invoice_lines`, `check_duplicate_invoice`, `check_rate_card`, `check_cost_guard`, `build_validation_explanation`.
 
-### Security and DLP Boundary
+## Approval Gate Model
 
-- Document environment variable names only. Do not document actual values.
-- Keep invoice/evidence files in private Blob storage.
-- Use signed download URLs when the worker fetches private Blob objects.
-- Do not paste original invoice text, signed URLs, Blob object keys, TRN, BOE, BL, container numbers, raw rates, emails, phone numbers, approval text, or tokens into docs.
-- Treat workbook exports as controlled audit artifacts. Keep the 13-sheet contract intact.
-
-## SESS-005 Cross-Validation Update — 2026-06-13
-
-This section reflects the SESS-005 cross-validation and P0/P1/P2 gap-patching changes. Earlier sections remain as historical context.
-
-### Updated MCP Tools (14)
-
-Expanded from 11 to 14 tools. New tools:
-
-| Tool | Purpose | Track 1 Gate |
-|------|---------|-------------|
-| `classify_type_b` | 8-class priority TYPE-B classification | Ontology/Type-B Matrix |
-| `check_hs_uae_compliance` | BOE presence + HS code validation | Gate 6: HS/UAE |
-| `check_dem_det` | DEM/DET evidence requirement check | Gate 7: DEM/DET |
-
-### Updated Gate Bridge
-
-- `buildGateResult` now accepts `evidenceFindings` (doc_guardian → ZERO/AMBER escalation)
-- `checkReconciliation()` enforces 3-way tie-out: Final Subtotal = Line_Audit = TYPE-B (±0.01)
-- `checkDlpExport()` blocks export on DLP violations (16 P2 categories)
-
-### Updated Parsers
-
-- DSV Waybill parser (`dsv_waybill.py`): 8 core functions ported from Track 1 v1.4.1, 28 tests
-- xlsx parser: InvoiceHeader extraction (invoice_no, vendor, issue_date) + 4 new columns (shipment_ref, job_number, rate_basis, for_charge_component)
-
-### Verification Baseline (2026-06-13)
-
-- Worker-PY: 95 tests PASS
-- MCP Server: 186 tests PASS (16 test files, 14 tools)
-- Web: 107 tests PASS, typecheck 0 errors
-- Cross-validation: Track 1 9 gates → 8 FULL, 1 P3
-
-```mermaid
-flowchart TB
-  subgraph "SESS-005 Changes"
-    DSV[DSV Waybill Parser] --> PT[pdf_text.py enrichment]
-    TB[classify_type_b] --> CF[cf-mcp-client pipeline]
-    HS[check_hs_uae_compliance] --> CF
-    DD[check_dem_det] --> MCP[MCP Server 14 tools]
-    GB[gate-bridge] --> RECON[3-way reconciliation]
-    GB --> DLP[DLP export gate]
-    XL[xlsx header extraction] --> NI[NormalizedInvoice]
-  end
-  CF --> V[Validation Flow]
-  V --> GB
-  GB --> VERDICT[PASS/AMBER/ZERO]
-  DLP --> EXP[Export Gate]
+```
+PASS  — All gates clear, ready for export
+AMBER — Warning findings, reviewer approval required
+ZERO  — Blocking findings, export disabled until resolved
+FAILED — Fatal error (parser failure, missing data)
 ```
 
+`gate-bridge.ts` enforces 3-way reconciliation (Final Subtotal = Line_Audit = TYPE-B, tolerance ±0.01) and DLP export gate (16 P2 categories).
 
-## Codex Documentation Update — 2026-06-13T21:10:45.952547+00:00
+## Deployment
 
-**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
+| App | Host | Workflow |
+|---|---|---|
+| apps/web | Vercel | `.github/workflows/vercel-prod.yml` |
+| apps/worker-py | Fly.io | `.github/workflows/fly-worker-deploy.yml` |
+| apps/mcp-server | Fly.io | `.github/workflows/fly-mcp-server-deploy.yml` |
 
-**Purpose:** This section reflects detected source, config, and agent components as an architecture inventory.
+CI workflows: `web-ci.yml`, `python-worker-ci.yml`, `release-gate.yml`, `vercel-preview.yml`, `codeql.yml`
 
-### Evidence inventory
+## 13-Sheet Workbook Contract
 
-**Source/code files sampled:**
-- `apps\mcp-server\db\migrate-rate-cards.sql`
-- `apps\mcp-server\db\seed-rate-cards.sql`
-- `apps\mcp-server\src\__tests__\router.test.ts`
-- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
-- `apps\mcp-server\src\db.ts`
-- `apps\mcp-server\src\main.ts`
-- `apps\mcp-server\src\schemas\dlp-guard.ts`
-- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_cost_guard.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_dem_det.test.ts`
-- `apps\mcp-server\src\tools\__tests__\check_duplicate_invoice.test.ts`
+`00_Decision` → `01_Action_Items` → `02_Final_Recon` → `03_Header_Check` → `04_Line_View` → `05_Duplicate_Check` → `06_Rate_Check` → `07_Tax_FX_Check` → `08_Shipment_Match` → `90_Source_Data` → `91_Audit_Detail` → `92_Evidence_Issues` → `99_Manifest`
 
-**Documentation files sampled:**
-- `.vercel\README.txt`
-- `20260613_cross_validation_report.md`
-- `20260613_dsv_waybill_port_plan.md`
-- `20260613_job_store_mcp_fix_plan.md`
-- `20260613_p2_gap_design.md`
-- `README.md`
-- `apps\README.md`
-- `apps\graphify-out\GRAPH_REPORT.md`
-- `apps\graphify-out\converted\sample-invoice_c70e590b.md`
-- `apps\web\.vercel\README.txt`
-- `apps\worker-py\README.md`
-- `apps\worker-py\invoice_audit_parser.egg-info\SOURCES.txt`
+## Security & DLP
 
-**Config/build files sampled:**
-- `.claude\settings.local.json`
-- `.codex\root-docs-scan.json`
-- `.codex\root-docs-write.json`
-- `.github\dependabot.yml`
-- `.github\workflows\codeql.yml`
-- `.github\workflows\fly-worker-deploy.yml`
-- `.github\workflows\python-worker-ci.yml`
-- `.github\workflows\release-gate.yml`
-- `.github\workflows\vercel-preview.yml`
-- `.github\workflows\vercel-prod.yml`
-- `.github\workflows\web-ci.yml`
-- `.vercel\project.json`
+- All invoice/evidence files → Private Vercel Blob only. Signed download URLs for worker access.
+- P2 categories: TRN, BOE, BL, container numbers, raw rates, emails, phone numbers, tokens — never committed, never in logs/docs.
+- Raw P2 content never sent to LLM prompts.
+- Workbook exports are controlled audit artifacts.
+- `.gitignore` includes `**/private/**`, `**/DSV_SHIPMENT_FULL_PACKAGE_*/**`, and PII template patterns.
 
-**Agent profile files sampled:**
-- No agent profile detected; this update records the absence explicitly.
+## Verification Baseline (2026-06-14)
 
-### Mermaid graph
+| Component | Tests | Typecheck |
+|---|---|---|
+| apps/web | 107 PASS | 0 errors |
+| apps/worker-py | 95 PASS | py_compile OK |
+| apps/mcp-server | 186 PASS | 0 errors |
+| **Total** | **388** | **0 errors** |
 
-```mermaid
-flowchart TB
-  subgraph Repository
-    SRC[Source files] --> CFG[Config/build files]
-    CFG --> DOC[Root documentation]
-    AG[Agent profiles] --> DOC
-  end
-  DOC --> QA[Doc-code alignment verification]
-```
+## Historical (Archived 2026-06-14)
 
-### Verification notes
+The project originally ran as a single Cloudflare Worker (`server/src/worker.ts`) serving the SCT ontology ChatGPT App with D1-backed MCP tools, corpus search, and Decision Card widgets. That runtime was decommissioned when the invoice audit platform replaced it.
 
-- Append-only update generated by `root-docs-batch-update`.
-- Code/config/doc/agent inventory counts: code=182, docs=108, config=451, agent_profiles=0.
-- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.
+### Legacy Components (all deleted)
+
+| Component | Former Path | Fate |
+|---|---|---|
+| Cloudflare Worker | `server/src/worker.ts` | Deleted. Replaced by `apps/web` + `apps/worker-py` |
+| MCP tool registry | `server/src/hvdc-server.ts` | Deleted. Replaced by `apps/mcp-server` |
+| Answer pipeline | `server/src/answer.ts`, `corpus.ts`, `router.ts` | Deleted |
+| Decision Card | `server/src/decision-card.ts` | Deleted |
+| Widget UI | `public/hvdc-answer-widget.html` | Deleted |
+| Corpus bundle | `data/corpus/` | Deleted |
+| WH status SSOT | `wh status/` | Deleted |
+| D1 migrations | `migrations/0001-0007_*.sql` | Superseded by Postgres migrations `0008-0010` |
+| Generated assets | `server/src/generated/` | Deleted |
+
+### Legacy Deployment
+
+- Former Worker URL: `https://hvdc-ontology-chatgpt-app.mscho715.workers.dev` (offline)
+- Former MCP endpoint: `/mcp` on the Worker
+- Former widget resource: `ui://hvdc/answer-card-v10.html` (retired)
+- Former bindings: `MCP_AUDIT_DB` (D1), `HVDC_FILES` (R2), `HVDC_CACHE` (KV)
+- Former verify: `npm run verify` → typecheck + Vitest + Worker dry-run (302 tests)
+- Former deploy: `npm run worker:deploy`
+
+### Archival Notes
+
+The Cloudflare ontology MCP runtime served its purpose as a proof-of-concept for ChatGPT integration. The invoice audit platform now handles production workflows. Legacy `migrations/0001-0007` (D1 schemas) remain in the repo for reference but are not used by the current runtime. Current migrations `0008-0010` target Neon Postgres.

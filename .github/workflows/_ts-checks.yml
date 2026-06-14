@@ -1,0 +1,61 @@
+name: "Reusable TS Checks"
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+      node-version:
+        required: false
+        type: string
+        default: "20"
+    outputs:
+      test-result:
+        description: "Outcome of the test step (success/failure)"
+        value: ${{ jobs.checks.outputs.test-result }}
+
+jobs:
+  checks:
+    name: "TS Checks"
+    runs-on: ubuntu-latest
+    outputs:
+      test-result: ${{ steps.test.outcome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ${{ inputs.working-directory }}
+
+      - name: Typecheck
+        run: pnpm typecheck
+        working-directory: ${{ inputs.working-directory }}
+
+      - name: Lint
+        run: pnpm lint
+        working-directory: ${{ inputs.working-directory }}
+
+      - name: Test
+        id: test
+        run: pnpm test --run
+        working-directory: ${{ inputs.working-directory }}

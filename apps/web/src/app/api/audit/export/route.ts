@@ -5,6 +5,7 @@ import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXPORTS_MAP, isDevStub } from '@/lib/export-store';
+import { evaluateApprovalGate, type ExportType } from '@/lib/approval-gate';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const jobId = body.job_id;
-  const exportKind = body.kind ?? 'FINAL_APPROVED';
+  const exportKind = (body.kind ?? 'FINAL_APPROVED') as ExportType;
   if (!jobId) {
     return err('INVALID_STATE', 'job_id required');
   }
@@ -31,14 +32,20 @@ export async function POST(req: Request): Promise<Response> {
     return err('JOB_NOT_FOUND', 'unknown job_id');
   }
 
-  // 1. Zero verdict block check
-  if (job.verdict === 'ZERO' && exportKind === 'FINAL_APPROVED') {
-    return err('ZERO_BLOCKED', 'Export blocked for jobs with ZERO verdict');
-  }
-
-  // 2. Approval check
-  if (exportKind === 'FINAL_APPROVED' && job.verdict !== 'PASS' && job.status !== 'APPROVED') {
-    return err('APPROVAL_REQUIRED', 'Job must be approved before export');
+  // Export gate — unified with the download route via evaluateApprovalGate.
+  // Per Rule #1 (CLAUDE.md §0) the final Excel deliverable is always produced
+  // for PASS/AMBER/ZERO; the workbook stamps the real verdict and labels
+  // blocked/unverified items. Only FAILED (validation could not run) is
+  // withheld. DLP masking is still enforced downstream at scan time.
+  const approval = await STORE.getApprovalRecord(jobId);
+  const gate = evaluateApprovalGate({
+    verdict: job.verdict ?? 'FAILED',
+    approval: approval ?? null,
+    exportType: exportKind,
+    varianceAed: 0
+  });
+  if (!gate.allowed) {
+    return err(gate.error_code as ErrorCode, gate.reason);
   }
 
   // Replay check
@@ -109,13 +116,15 @@ export async function POST(req: Request): Promise<Response> {
     const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3000';
     signedUrl = `${base}/api/dev/blob/${encodeURIComponent(filename)}`;
   } else {
-    const { put, getDownloadUrl } = await import('@vercel/blob');
+    const { put } = await import('@vercel/blob');
     const res = await put(filename, buffer, {
       access: 'private' as any,
       addRandomSuffix: true,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
-    signedUrl = await getDownloadUrl(res.pathname);
+    // put() already returns the signed download URL; the prior getDownloadUrl(pathname)
+    // call threw "TypeError: Invalid URL" on the private store and 500'd every prod export.
+    signedUrl = res.downloadUrl;
   }
 
   await STORE.appendTrace(jobId, {

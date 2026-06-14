@@ -19,7 +19,7 @@ describe('POST /api/audit/export', () => {
     expect(body.code).toBe('JOB_NOT_FOUND');
   });
 
-  it('APPROVAL_REQUIRED when AMBER job is not approved', async () => {
+  it('AMBER (not approved) still produces the final Excel deliverable (Rule #1)', async () => {
     const job = await STORE.createJob({ created_by: 'user_1' });
     await STORE.updateJob(job.job_id, { status: 'REVIEW_REQUIRED', verdict: 'AMBER' });
     await STORE.setResult(job.job_id, { verdict: 'AMBER', line_results: [], action_items: [] });
@@ -30,12 +30,13 @@ describe('POST /api/audit/export', () => {
         body: JSON.stringify({ job_id: job.job_id })
       })
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.code).toBe('APPROVAL_REQUIRED');
+    expect(body.job_id).toBe(job.job_id);
+    expect(body.kind).toBe('FINAL_APPROVED');
   });
 
-  it('ZERO_BLOCKED when job verdict is ZERO', async () => {
+  it('ZERO still produces the final Excel deliverable (Rule #1, verdict stamped in workbook)', async () => {
     const job = await STORE.createJob({ created_by: 'user_1' });
     await STORE.updateJob(job.job_id, { status: 'APPROVED', verdict: 'ZERO' });
     await STORE.setResult(job.job_id, { verdict: 'ZERO', line_results: [], action_items: [] });
@@ -46,9 +47,26 @@ describe('POST /api/audit/export', () => {
         body: JSON.stringify({ job_id: job.job_id })
       })
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.code).toBe('ZERO_BLOCKED');
+    expect(body.job_id).toBe(job.job_id);
+    expect(body.kind).toBe('FINAL_APPROVED');
+  });
+
+  it('FAILED verdict stays blocked (validation could not run)', async () => {
+    const job = await STORE.createJob({ created_by: 'user_1' });
+    await STORE.updateJob(job.job_id, { status: 'FAILED', verdict: 'FAILED' });
+    await STORE.setResult(job.job_id, { verdict: 'FAILED', line_results: [], action_items: [] });
+
+    const res = await EXPORT_POST(
+      new Request('http://test/api/audit/export', {
+        method: 'POST',
+        body: JSON.stringify({ job_id: job.job_id })
+      })
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.code).toBe('VALIDATION_FAILED');
   });
 
   it('success export with mocked worker response', async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createJobStore } from '../src/lib/job-store';
 
 describe('job-store', () => {
@@ -17,12 +17,14 @@ describe('job-store', () => {
   });
 
   it('updateJob mutates status and updated_at', async () => {
+    vi.useFakeTimers();
     const j = await store.createJob({ created_by: 'u1' });
     const before = j.updated_at;
-    await new Promise(r => setTimeout(r, 5));
+    vi.advanceTimersByTime(5);
     const updated = await store.updateJob(j.job_id, { status: 'UPLOADED' });
     expect(updated?.status).toBe('UPLOADED');
     expect(updated?.updated_at).not.toBe(before);
+    vi.useRealTimers();
   });
 
   it('addSourceFile and listSourceFiles', async () => {

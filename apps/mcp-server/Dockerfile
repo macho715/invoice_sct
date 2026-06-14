@@ -3,7 +3,7 @@ WORKDIR /app
 RUN npm install -g pnpm@10.32.0
 COPY package.json pnpm-lock.yaml ./
 ENV PNPM_HOME="/pnpm" PATH="$PNPM_HOME:$PATH"
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY src ./src
 RUN pnpm build

@@ -22,13 +22,19 @@ export function evaluateApprovalGate(params: {
 }): ApprovalGateResult {
   const { verdict, approval, exportType, varianceAed = 0 } = params;
 
+  // Rule #1 (CLAUDE.md §0): the final Excel deliverable is ALWAYS produced.
+  // A ZERO verdict no longer withholds the export — the workbook stamps the
+  // real ZERO verdict in 00_Decision and lists blocked/unverified items in
+  // 01_Action_Items / 92_Evidence_Issues. Governance is by labeling inside the
+  // deliverable, not by refusing to deliver it. (DLP masking still enforced at
+  // scan time, and FAILED — validation could not run — stays blocked below.)
   if (verdict === 'ZERO' && exportType === 'FINAL_APPROVED') {
     return {
-      allowed: false,
+      allowed: true,
       export_type: 'FINAL_APPROVED',
-      reason: 'ZERO verdict blocks final approved export. Only review pack is permitted.',
+      reason: 'ZERO verdict: final Excel delivered with blocked/unverified items labeled in the workbook (Rule #1).',
       required_approver_role: null,
-      error_code: 'ZERO_BLOCKED'
+      error_code: null
     };
   }
 
@@ -44,12 +50,15 @@ export function evaluateApprovalGate(params: {
 
   if (verdict === 'AMBER' && exportType === 'FINAL_APPROVED') {
     if (!approval || approval.status !== 'APPROVED') {
+      // Rule #1: deliver the final Excel even without prior approval. The
+      // required approver role is still surfaced (for labeling / sign-off
+      // tracking), but it no longer gates the download.
       return {
-        allowed: false,
+        allowed: true,
         export_type: 'FINAL_APPROVED',
-        reason: 'AMBER verdict requires reviewer approval before final approved export.',
+        reason: 'AMBER verdict: final Excel delivered; reviewer approval is tracked as labeling, not a download gate (Rule #1).',
         required_approver_role: getRequiredApproverRole(varianceAed),
-        error_code: 'APPROVAL_REQUIRED'
+        error_code: null
       };
     }
     return {

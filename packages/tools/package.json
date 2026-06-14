@@ -1,0 +1,28 @@
+{
+  "name": "@invoice-audit/tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8",
+    "@invoice-audit/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./route_question": "./src/route_question.ts",
+    "./classify_type_b": "./src/classify_type_b.ts",
+    "./check_cost_guard": "./src/check_cost_guard.ts",
+    "./check_evidence_required": "./src/check_evidence_required.ts",
+    "./check_hs_uae_compliance": "./src/check_hs_uae_compliance.ts",
+    "./check_rate_card": "./src/check_rate_card.ts",
+    "./types": "./src/types.ts"
+  }
+}
