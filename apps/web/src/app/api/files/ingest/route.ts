@@ -34,9 +34,25 @@ export async function POST(req: Request): Promise<Response> {
   if (!file_type) return err('UNSUPPORTED_FILE_TYPE', `unsupported file type: ${file.type || ext}`);
   if (file.size > MAX_DIRECT_UPLOAD_BYTES) return err('UPLOAD_TOO_LARGE_REQUIRES_CLIENT_UPLOAD', 'file exceeds 4.5MB; use client direct upload', { max_bytes: MAX_DIRECT_UPLOAD_BYTES });
   const userId = req.headers.get('x-user-id') ?? 'anonymous';
+
+  // Optional job_id: append this file to an existing job (multi-file upload).
+  // Without it, a new job is created (single-file / first-file behavior).
+  const jobIdRaw = form.get('job_id');
+  const jobId = typeof jobIdRaw === 'string' && jobIdRaw.trim() ? jobIdRaw.trim() : null;
+  let job;
+  if (jobId) {
+    const existing = await STORE.getJob(jobId);
+    if (!existing) return err('JOB_NOT_FOUND', 'unknown job_id');
+    if (existing.status !== 'UPLOADED' && existing.status !== 'QUEUED') {
+      return err('INVALID_STATE', `cannot add files to job in status ${existing.status}`);
+    }
+    job = existing;
+  } else {
+    job = await STORE.createJob({ created_by: userId });
+  }
+
   let blobRes;
-  try { blobRes = await uploadToBlob(file, 'pending'); } catch (e) { return err('STORAGE_AUTH_FAILED', (e as Error).message); }
-  const job = await STORE.createJob({ created_by: userId });
+  try { blobRes = await uploadToBlob(file, job.job_id); } catch (e) { return err('STORAGE_AUTH_FAILED', (e as Error).message); }
   const sourceFile = SourceFileSchema.parse({
     file_id: `file_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
     job_id: job.job_id,
