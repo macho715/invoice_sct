@@ -71,5 +71,5 @@ jobs:
       - name: Test
         id: test
         if: steps.scripts.outputs.has_test == 'true'
-        run: pnpm test --run
+        run: pnpm run test -- --run
         working-directory: ${{ inputs.working-directory }}

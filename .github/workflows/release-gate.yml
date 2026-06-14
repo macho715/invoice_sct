@@ -161,7 +161,7 @@ jobs:
       - name: Vitest apps/web (coverage >= 80%)
         run: |
           cd apps/web
-          pnpm test --run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
+          pnpm run test -- --run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
 
       # --- apps/mcp-server (pnpm) ---
       - name: Install mcp-server dependencies
