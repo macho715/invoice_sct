@@ -62,12 +62,19 @@ The implementation mostly matches the spec but with notable deviations:
 | Layer | Spec | Actual code | Status |
 |---|---|---|---|
 | **NoteLM** | field extraction only | `notebooklm-mcp-pr53-pr55` + `apps/mcp-server` | ✅ Compliant |
-| **Worker** | MarkItDown → NotebookLM → normalize → callback | `apps/worker-py` | ⚠️ **Exceeds scope** — also does PDF parsing, numeric-integrity validation, 13-sheet workbook generation, contract validation |
-| **Vercel** | callback + adapter + final audit + workbook | `apps/web` | ✅ Compliant — final audit engine, approval gate, workbook builder, NotebookLM callback receiver all present |
+| **Worker** | MarkItDown → NotebookLM → normalize → callback | `apps/worker-py` | ⚠️ **Exceeds scope** — also does PDF parsing, numeric-integrity validation, contract validation |
+| **Vercel** | callback + adapter + final audit + workbook | `apps/web` | ✅ Compliant — final audit engine (`gate-bridge.ts`, `cf-mcp-client.ts`), approval gate, workbook builder, NotebookLM callback receiver all present |
 
-**Known duplication:** Verdict logic and 13-sheet workbook generation exist in BOTH `apps/worker-py` (`exporters/xlsx.py`, `validators/numeric_integrity.py`) and `apps/web` (`workbook-builder.ts`, `gate-bridge.ts`). The Vercel versions are the canonical ones; Worker versions are either legacy or shadow implementations.
+**Nuanced view of Worker responsibilities:**
 
-**Migration status:** Not started. Estimated scope: 6 files move/rewrite, 1 schema simplification, 1 test suite split. See `docs/session-wraps/2026-06-14-notebooklm-ask-question-timeout.md` §5 for follow-up tasks.
+- `app/notebooklm/orchestrator.py` — matches the spec exactly (MarkItDown → NotebookLM → callback).
+- `app/parsers/`, `app/validators/numeric_integrity.py`, `app/scripts/workbook_contract_validate.py` — these compute things the spec says Vercel should compute. **Actual spec violations** when invoked by Vercel.
+- `app/exporters/xlsx.py` + `app/routes/export.py` — these are a **simple xlsx formatter** (verdict is passed in via `ExportRequest`, not computed here) and a **microservice endpoint** that Vercel *could* call. The `/v1/export` route is functional and has 5 passing tests. Whether it is the production export path or a legacy/alternative route is unclear. Treat as **allowed microservice** unless production usage is confirmed otherwise.
+- `app/middleware/audit_log.py`, `app/schemas.py:103 verdict: str` — verdict appears in the worker's data model because the worker logs verdict events for the audit trail. This is a data layer concern, not a verdict-computation concern.
+
+**Known duplication (verdict logic only):** Verdict PASS/AMBER/ZERO/FINAL logic exists in BOTH `apps/worker-py/validators/numeric_integrity.py` and `apps/web/src/lib/gate-bridge.ts`. The Vercel version is the canonical one (called by Vercel's final audit engine). The worker's `numeric_integrity.py` is line-level integrity (qty × rate = line_amount), not the job-level 3-way reconciliation. The two checks serve different purposes but both produce PASS/AMBER/ZERO semantics.
+
+**Migration status:** Not started. Estimated scope: 2 files (`app/validators/numeric_integrity.py`, `app/scripts/workbook_contract_validate.py`) could be removed once their callers (likely inside the worker's /parse route) are migrated to compute validation in Vercel. The `/v1/export` route and `app/exporters/xlsx.py` should be kept as a microservice until Vercel's direct workbook path is confirmed as the sole production export. See `docs/session-wraps/2026-06-14-notebooklm-ask-question-timeout.md` §5 for follow-up tasks.
 
 When making changes, respect: `Worker = orchestrator only, Vercel = final audit + workbook`. Don't add new validation logic to worker files.
 
