@@ -21,6 +21,7 @@ HVDC_FINAL_10x_2026-04-27/
 .codex/
 .vitest-cache/
 coverage/
+**/.coverage
 test-results/
 playwright-report/
 .dev-blob/
