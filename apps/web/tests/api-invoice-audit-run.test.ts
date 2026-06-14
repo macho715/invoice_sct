@@ -51,6 +51,45 @@ describe('POST /api/invoice-audit/run', () => {
     expect(body.status).toBe('REVIEW_REQUIRED');
   });
 
+
+  it('returns structured error when PARSER_WORKER_TOKEN is missing', async () => {
+    const { jobId } = await setupJob();
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    delete process.env.PARSER_WORKER_TOKEN;
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', {
+      method: 'POST',
+      body: JSON.stringify({ job_id: jobId }),
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    expect(r.status).toBe(500);
+    await expect(r.json()).resolves.toMatchObject({
+      code: 'STORAGE_AUTH_FAILED',
+      message: 'PARSER_WORKER_TOKEN not configured'
+    });
+    await expect(STORE.getJob(jobId)).resolves.toMatchObject({ status: 'FAILED', verdict: 'FAILED' });
+  });
+
+  it('returns structured error when worker URL allowlist rejects the host', async () => {
+    const { jobId } = await setupJob();
+    process.env.PARSER_WORKER_TOKEN = 't';
+    process.env.PARSER_WORKER_URL = 'https://example.com';
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', {
+      method: 'POST',
+      body: JSON.stringify({ job_id: jobId }),
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    expect(r.status).toBe(500);
+    await expect(r.json()).resolves.toMatchObject({
+      code: 'STORAGE_AUTH_FAILED',
+      message: 'WORKER_URL must point to internal host'
+    });
+    await expect(STORE.getJob(jobId)).resolves.toMatchObject({ status: 'FAILED', verdict: 'FAILED' });
+  });
+
   it('rejects PDF-only evidence without leaving the job stuck in PARSING', async () => {
     const fd = new FormData();
     fd.set('file', new File(['%PDF-1.4 minimal'], 'pod.pdf', { type: 'application/pdf' }));

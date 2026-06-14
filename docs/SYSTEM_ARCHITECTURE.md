@@ -116,6 +116,19 @@ FAILED — Fatal error (parser failure, missing data)
 
 CI workflows: `web-ci.yml`, `python-worker-ci.yml`, `release-gate.yml`, `vercel-preview.yml`, `codeql.yml`
 
+### Vercel Environment Variables
+
+Configure these variables in Vercel Dashboard → Project → Settings → Environment Variables for the `apps/web` deployment:
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `PARSER_WORKER_TOKEN` | Yes | Bearer token used by `apps/web` when calling the parser/export worker. Missing values make `/api/invoice-audit/run` fail with a structured `{ code, message }` response. |
+| `PARSER_WORKER_URL` or `WORKER_URL` | Yes | Base URL for `apps/worker-py`; `PARSER_WORKER_URL` takes precedence, `WORKER_URL` is the fallback. The run route only accepts `localhost`, `127.0.0.1`, `.fly.dev`, or `.internal` hosts. |
+| `BLOB_READ_WRITE_TOKEN` | Yes | Vercel Blob token for private invoice/evidence uploads, signed worker download URLs, and export artifacts. |
+| `DATABASE_URL` | Yes | Neon Postgres connection string for persistent jobs, gate results, invoice lines, audit traces, and rate cards. |
+
+Do not store raw invoices, contract rates, TRN, BOE, BL, container numbers, personal data, or other P2 evidence directly in environment variables.
+
 ## 13-Sheet Workbook Contract
 
 `00_Decision` → `01_Action_Items` → `02_Final_Recon` → `03_Header_Check` → `04_Line_View` → `05_Duplicate_Check` → `06_Rate_Check` → `07_Tax_FX_Check` → `08_Shipment_Match` → `90_Source_Data` → `91_Audit_Detail` → `92_Evidence_Issues` → `99_Manifest`
