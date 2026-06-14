@@ -1,3 +1,167 @@
+# NoteLM / Worker / Vercel Final Split
+
+Verdict: this 3-layer split is the final target structure.
+
+Reason: the failure points are separated into `NoteLM extraction`, `Worker MCP orchestration`, and `Vercel audit`, so retry, logging, and fallback behavior can be designed per layer.
+
+Next action: lock each layer's responsibility and I/O contract. The Worker must call only the patched local NotebookLM MCP version.
+
+Reference MCP projects:
+
+- [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp)
+- [markitdown](https://github.com/mcp/microsoft/markitdown)
+
+## 1. Final Role Definition
+
+| Layer | Role | Must not do |
+| --- | --- | --- |
+| **NoteLM** | Verification field extraction agent. Reads Markdown source and extracts JSON candidate values for invoice validation. | Must not make the final audit verdict. |
+| **Worker** | `MarkItDown -> NotebookLM -> JSON normalization -> Vercel callback` orchestrator. | Must not perform final amount or contract validation. |
+| **Vercel** | Receive gate, existing parser adapter, final audit engine, Excel/JSON result generation. | Must not directly automate Chrome or NotebookLM. |
+
+## 2. Final Flow
+
+```text
+User PDF upload
+-> Vercel creates audit_job
+-> Worker pulls job
+-> MarkItDown MCP converts PDF to Markdown
+-> Worker sends Markdown to NoteLM / NotebookLM
+-> NoteLM extracts verification fields only
+-> Worker normalizes NoteLM output
+-> Vercel callback
+-> Existing parser adapter compares extracted fields
+-> Final audit engine produces PASS / WARN / FAIL
+-> Excel / JSON / audit trace output
+```
+
+## 3. Core Design Principles
+
+### 3.1 NoteLM Is an Extractor, Not a Judge
+
+Treat NoteLM output as extraction evidence only.
+
+```json
+{
+  "source": "notelm",
+  "role": "field_extractor",
+  "confidence": 0.87,
+  "fields": {
+    "invoice_no": "SCT-0019",
+    "bl_no": "HBL123456",
+    "boe_no": "BOE987654",
+    "container_no": ["MSCU1234567"],
+    "origin": "Khalifa Port",
+    "destination": "DSV Warehouse",
+    "charge_items": [
+      {
+        "description": "THC",
+        "amount": 1750.00,
+        "currency": "AED"
+      }
+    ]
+  },
+  "raw_answer": "...",
+  "warnings": []
+}
+```
+
+Only the Vercel audit engine may produce the final verdict.
+
+## 4. Worker Contract
+
+Worker input:
+
+```json
+{
+  "job_id": "audit_20260614_001",
+  "pdf_url": "https://blob.vercel-storage.com/invoice.pdf",
+  "notebook_id": "invoice-audit-smoke-notebook",
+  "callback_url": "https://your-vercel-app/api/worker/callback",
+  "mode": "dry_run"
+}
+```
+
+Worker callback:
+
+```json
+{
+  "job_id": "audit_20260614_001",
+  "status": "completed",
+  "markitdown": {
+    "ok": true,
+    "markdown_chars": 18542,
+    "markdown_sha256": "..."
+  },
+  "notelm": {
+    "ok": true,
+    "source_added": true,
+    "question_ok": true,
+    "json_parse_ok": true,
+    "fields": {}
+  },
+  "trace": {
+    "worker_version": "patched-notebooklm-mcp-local",
+    "notebooklm_mcp_url": "http://127.0.0.1:3003/mcp",
+    "markitdown_mcp_url": "http://127.0.0.1:3001/mcp"
+  }
+}
+```
+
+## 5. Vercel Final Audit Structure
+
+```text
+/api/upload
+  -> file receive
+  -> create audit_job
+  -> return job_id
+
+/api/worker/callback
+  -> verify job_id
+  -> validate worker payload schema
+  -> save extracted fields
+  -> run parser adapter
+  -> run final audit engine
+  -> generate result
+
+/api/audit/:job_id
+  -> return status/result
+```
+
+## 6. Failure Separation
+
+| Failure | Location | Handling |
+| --- | --- | --- |
+| PDF to Markdown failed | Worker / MarkItDown | OCR fallback or ZERO |
+| `add_source` timeout | Worker / NotebookLM MCP | Recheck patched local MCP |
+| Broken NoteLM JSON | Worker | Retry + strict JSON repair |
+| Parser adapter mismatch | Vercel | WARN/FAIL verdict |
+| Contract rate mismatch | Vercel audit engine | Final FAIL or REVIEW |
+| Callback failed | Vercel gateway | Job retry queue |
+
+## 7. Locked Rules
+
+```text
+1. NoteLM extracts verification fields only.
+2. Worker performs MCP orchestration only.
+3. Only Vercel creates the final audit verdict.
+4. Do not use NotebookLM MCP @latest; pin the patched local version.
+5. Worker output must pass schema validation before entering the audit engine.
+```
+
+## 8. Recommended Next Implementation Units
+
+```text
+T001 worker callback schema addition
+T002 fixed NoteLM extraction prompt
+T003 Worker output normalizer
+T004 connect notelm_fields input to Vercel parser adapter
+T005 add evidence_trace to final audit engine
+T006 smoke test: PDF -> MD -> NoteLM -> callback -> audit PASS
+```
+
+Conclusion: use this structure. Even if NotebookLM MCP is unstable, the Vercel audit engine remains independently protected, and only the Worker retry or replacement path needs to change.
+
 # SCT Invoice Audit Platform
 
 ## Overview
