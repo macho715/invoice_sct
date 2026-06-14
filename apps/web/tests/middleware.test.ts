@@ -2,10 +2,10 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { middleware } from '../src/middleware';
 
-function apiRequest(token?: string, ip = '203.0.113.10') {
+function apiRequest(token?: string, ip = '203.0.113.10', path = '/api/audit/export') {
   const headers = new Headers({ 'x-forwarded-for': ip });
   if (token) headers.set('authorization', `Bearer ${token}`);
-  return new NextRequest('https://example.test/api/audit/status?job_id=j1', { headers });
+  return new NextRequest(`https://example.test${path}`, { headers });
 }
 
 afterEach(() => {
@@ -13,6 +13,12 @@ afterEach(() => {
 });
 
 describe('middleware API auth', () => {
+  it('allows public UI API routes without bearer token', () => {
+    expect(middleware(apiRequest(undefined, '203.0.113.20', '/api/files/ingest')).status).toBe(200);
+    expect(middleware(apiRequest(undefined, '203.0.113.21', '/api/audit/status?job_id=j1')).status).toBe(200);
+    expect(middleware(apiRequest(undefined, '203.0.113.22', '/api/invoice-audit/run')).status).toBe(200);
+  });
+
   it('rejects API requests when API_SECRET_KEY is missing', async () => {
     const res = middleware(apiRequest('secret', '203.0.113.11'));
 
