@@ -75,7 +75,7 @@ export const GateResultSchema = z.object({
 export type GateResult = z.infer<typeof GateResultSchema>;
 
 export const AuditTraceStepSchema = z.enum([
-  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE'
+  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM'
 ]);
 export type AuditTraceStep = z.infer<typeof AuditTraceStepSchema>;
 
@@ -91,7 +91,17 @@ export const AuditTraceEntrySchema = z.object({
   calculation_hash: z.string().nullish(),
   latency_ms: z.number().nullish(),
   wasDerivedFrom: z.string().nullish(),
-  attributedTo: z.string().nullish()
+  attributedTo: z.string().nullish(),
+  notebooklm_source_id: z.string().nullish(),
+  notebooklm_summary_received_at: z.string().datetime().nullish(),
+  notebooklm_confidence: z.number().min(0).max(1).nullish(),
+  notebooklm_flags: z.array(z.string()).nullish(),
+  dual_extraction_mismatches: z.array(z.object({
+    field: z.string(),
+    parser_value_hash: z.string().nullish(),
+    notebooklm_value_hash: z.string().nullish(),
+    impact: z.enum(['HIGH', 'LOW'])
+  })).nullish()
 });
 export type AuditTraceEntry = z.infer<typeof AuditTraceEntrySchema>;
 

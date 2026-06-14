@@ -44,6 +44,11 @@ export interface TraceInput {
   latency_ms?: number;
   wasDerivedFrom?: string;
   attributedTo?: string;
+  notebooklm_source_id?: string;
+  notebooklm_summary_received_at?: string;
+  notebooklm_confidence?: number;
+  notebooklm_flags?: string[];
+  dual_extraction_mismatches?: AuditTraceEntry['dual_extraction_mismatches'];
 }
 
 export interface JobStore {
@@ -188,7 +193,12 @@ export function createJobStore(): JobStore {
         calculation_hash: t.calculation_hash ?? null,
         latency_ms: t.latency_ms ?? null,
         wasDerivedFrom: t.wasDerivedFrom ?? null,
-        attributedTo: t.attributedTo ?? null
+        attributedTo: t.attributedTo ?? null,
+        notebooklm_source_id: t.notebooklm_source_id ?? null,
+        notebooklm_summary_received_at: t.notebooklm_summary_received_at ?? null,
+        notebooklm_confidence: t.notebooklm_confidence ?? null,
+        notebooklm_flags: t.notebooklm_flags ?? null,
+        dual_extraction_mismatches: t.dual_extraction_mismatches ?? null
       };
       const arr = traces.get(jobId) ?? [];
       arr.push(entry);

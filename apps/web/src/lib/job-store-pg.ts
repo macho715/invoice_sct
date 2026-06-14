@@ -119,11 +119,21 @@ export function createPgJobStore(): JobStore | null {
       const traceId = newId('trace');
       const now = nowIso();
       await pool.query(
-        `INSERT INTO audit_traces (trace_id, job_id, step, input_ref, output_ref, timestamp, rule_version, source_hash, calculation_hash, latency_ms, was_derived_from, attributed_to)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        `INSERT INTO audit_traces (
+           trace_id, job_id, step, input_ref, output_ref, timestamp, rule_version,
+           source_hash, calculation_hash, latency_ms, was_derived_from, attributed_to,
+           notebooklm_source_id, notebooklm_summary_received_at, notebooklm_confidence,
+           notebooklm_flags, dual_extraction_mismatches
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
         [traceId, jobId, t.step, t.input_ref, t.output_ref, now,
          t.rule_version ?? null, t.source_hash ?? null, t.calculation_hash ?? null,
-         t.latency_ms ?? null, t.wasDerivedFrom ?? null, t.attributedTo ?? null]
+         t.latency_ms ?? null, t.wasDerivedFrom ?? null, t.attributedTo ?? null,
+         t.notebooklm_source_id ?? null,
+         t.notebooklm_summary_received_at ?? null,
+         t.notebooklm_confidence ?? null,
+         t.notebooklm_flags ? JSON.stringify(t.notebooklm_flags) : null,
+         t.dual_extraction_mismatches ? JSON.stringify(t.dual_extraction_mismatches) : null]
       );
       return {
         trace_id: traceId,
@@ -137,7 +147,12 @@ export function createPgJobStore(): JobStore | null {
         calculation_hash: t.calculation_hash ?? null,
         latency_ms: t.latency_ms ?? null,
         wasDerivedFrom: t.wasDerivedFrom ?? null,
-        attributedTo: t.attributedTo ?? null
+        attributedTo: t.attributedTo ?? null,
+        notebooklm_source_id: t.notebooklm_source_id ?? null,
+        notebooklm_summary_received_at: t.notebooklm_summary_received_at ?? null,
+        notebooklm_confidence: t.notebooklm_confidence ?? null,
+        notebooklm_flags: t.notebooklm_flags ?? null,
+        dual_extraction_mismatches: t.dual_extraction_mismatches ?? null
       };
     },
 
@@ -297,8 +312,21 @@ function mapTraceRow(row: Record<string, unknown>): AuditTraceEntry {
     calculation_hash: (row.calculation_hash as string) ?? null,
     latency_ms: (row.latency_ms as number) ?? null,
     wasDerivedFrom: (row.was_derived_from as string) ?? null,
-    attributedTo: (row.attributed_to as string) ?? null
+    attributedTo: (row.attributed_to as string) ?? null,
+    notebooklm_source_id: (row.notebooklm_source_id as string) ?? null,
+    notebooklm_summary_received_at: row.notebooklm_summary_received_at
+      ? (row.notebooklm_summary_received_at as Date).toISOString()
+      : null,
+    notebooklm_confidence: row.notebooklm_confidence === null || row.notebooklm_confidence === undefined ? null : Number(row.notebooklm_confidence),
+    notebooklm_flags: parseJsonField<string[]>(row.notebooklm_flags) ?? null,
+    dual_extraction_mismatches: parseJsonField<AuditTraceEntry['dual_extraction_mismatches']>(row.dual_extraction_mismatches) ?? null
   };
+}
+
+function parseJsonField<T>(value: unknown): T | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string') return JSON.parse(value) as T;
+  return value as T;
 }
 
 function mapFxPolicyRow(row: Record<string, unknown>): FxPolicy {
