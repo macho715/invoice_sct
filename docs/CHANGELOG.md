@@ -1,5 +1,87 @@
 # Changelog
 
+## NotebookLM MCP `waitForStableAnswer` BUGFIX + Test Infrastructure - 2026-06-14
+
+> **Scope:** Patch the `notebooklm-mcp-pr53-pr55` fork to fix a 2m 10s timeout when a notebook accumulates prior answers with matching text. Adds opt-in diagnostic instrumentation, vitest unit tests, and project docs. All commits pushed to `macho715/notebooklm-mcp`. Upstream PR #61 opened against `PleasePrompto/notebooklm-mcp:main`.
+
+### Fixed
+
+- **Root cause:** `waitForStableAnswer` in `notebooklm-mcp-pr53-pr55/src/notebooklm/chat.ts` filtered candidates via `ignoreSet.has(candidate)` (line 269). When a new answer's text happened to match a prior response (e.g., repeated test prompts `{"ok": true"}`), the new answer was misclassified as "prior" and the streaming-stability loop timed out after 2m 10s.
+- **Fix:** Dropped the `ignoreSet` text-match filter entirely. The DOM position (`.last()`) is the unique identity for "the new answer" by construction. The `isEcho` check (question text echoed back) and the `isPlaceholder` check (loading indicators like "Retrieving details...") are preserved.
+- **Live verification:** 6 prior `{"ok": true}` + 1 new `{"ok": true"}` in notebook `2b70c1f5-6e08-47bb-801b-a3618004c3b5` — return time went from 2m 10s timeout to ~1s. Diagnostic evidence preserved in `artifacts/notebooklm-debug/2026-06-14T18-43-21-*` (gitignored).
+
+### Added
+
+- **Opt-in diagnostic harness:** `src/utils/diagnostics.ts` (NEW, 218 lines). 3-phase capture per `ask_question` call: initial snapshot (T+0), 1Hz trace for 15s, final snapshot (T+15s). Produces 11 files per call: 3 screenshots + 6 text/html files + `candidates.json` + `poll-trace.jsonl`. Gated by `NOTEBOOKLM_DIAGNOSTIC=true` (default off, zero overhead).
+- **3 candidate selectors** evaluated: `.to-user-container .message-text-content` (primary, 5 matches in repro) + 2 fallbacks (`.conversation-turn`, `[data-response-id]/[data-author="assistant"]`). Primary selector confirmed working.
+- **vitest test infrastructure:** `vitest.config.ts` + `tests/notebooklm/chat.test.ts` (4 unit tests, 1.94s). Regression test for the actual bug: 6 prior + 1 new (same text) returns new text. Also: 3 normal-path tests (different text, echo filter, timeout on unstable text).
+- **Documentation:** README updated with `NOTEBOOKLM_DIAGNOSTIC` env var + "Debugging with NOTEBOOKLM_DIAGNOSTIC" section explaining the 11 artifact files.
+
+### Changed
+
+- `src/notebooklm/chat.ts`: removed `ignoreSet` setup, removed `isPrior` check, updated JSDoc on `AskOptions.ignoreTexts` (marked `@deprecated`, kept for API compat), added docstring paragraph explaining position-based identity.
+- `src/session/browser-session.ts`: removed now-dead `existingResponses` snapshot block (lines 388-393), removed `snapshotPriorAnswers`/`snapshotAllResponses` imports, removed `ignoreTexts: existingResponses` argument from `waitForStableAnswer` call. Net: -8 lines of dead data plumbing.
+- `src/types.ts`: removed orphaned `WaitForAnswerOptions` interface (zero consumers).
+- `src/utils/page-utils.ts`: fixed stale comment that claimed `snapshotAllResponses` feeds the stability detector; the detector now uses DOM position only.
+- `package.json`: `test` script changed from `tsx src/index.ts` (which started the MCP server) to `vitest run`. Vitest 4.1.8 added as devDependency.
+
+### Commits
+
+| SHA | Repo | Subject |
+|---|---|---|
+| `ab693c5` | MCP | feat(mcp): add opt-in diagnostic instrumentation to ask_question |
+| `2f6ccdcb` | MCP | **fix(mcp): drop text-based ignoreSet in waitForStableAnswer** |
+| `fc8cfca` | MCP | chore(mcp): cleanup dead snapshot plumbing |
+| `1ed0a5b` | MCP | chore(mcp): gitignore diagnostic artifacts |
+| `b942557` | MCP | test(mcp): add vitest + waitForStableAnswer unit tests |
+| `3f4a0bb` | MCP | docs(mcp): document NOTEBOOKLM_DIAGNOSTIC env var |
+| `d42c7c8` | MCP | chore(mcp): update package-lock.json for vitest |
+
+### Verified
+
+- `npx tsc --noEmit` — 0 errors.
+- `npm test` — 4/4 vitest pass in 1.94s.
+- Live smoke (HTTP mode, 120s timeout) — `{"ok": true"}` returned in ~1s vs prior 2m 10s timeout.
+- Diagnostic evidence preserved at `artifacts/notebooklm-debug/2026-06-14T19-18-12-*` (gitignored).
+
+### See also
+
+- PR #61 (https://github.com/PleasePrompto/notebooklm-mcp/pull/61) — upstream MCP fix.
+- PR #52 (https://github.com/PleasePrompto/notebooklm-mcp/pull/52) — independent fix by carlosorch for the same bug; comment posted on #52 with our alternative approach.
+- `docs/superpowers/specs/2026-06-14-wait-for-stable-answer-ignore-set-bug-design.md` — BUGFIX design.
+- `docs/superpowers/plans/2026-06-14-wait-for-stable-answer-ignore-set-bug.md` — implementation plan.
+- `docs/superpowers/specs/2026-06-14-notebooklm-ask-question-diagnostic-patch-design.md` — diagnostic harness design.
+- `docs/session-wraps/2026-06-14-notebooklm-ask-question-timeout.md` — intermediate wrap (BUGFIX work).
+- `docs/session-wraps/2026-06-14-final-multi-skill-session.md` — final wrap (entire session).
+
+## 3-Layer Role Definition + Architecture Audit - 2026-06-14
+
+> **Scope:** Establish the canonical NoteLM/Worker/Vercel split, audit the implementation against it, and document the gap.
+
+### Added
+
+- **Canonical spec** at `docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md`:
+  - **NoteLM** = verification field extraction agent (notebooklm-mcp fork + apps/mcp-server). Must NOT make the final audit verdict.
+  - **Worker** = MarkItDown → NotebookLM → JSON normalize → Vercel callback orchestrator. Must NOT perform final amount or contract validation.
+  - **Vercel** = receive gate, existing parser adapter, final audit engine, Excel/JSON result generation. Must NOT directly automate Chrome or NotebookLM.
+- **Full data flow diagram** in the spec: User PDF upload → Vercel creates audit_job → Worker pulls → MarkItDown MCP → Worker → NoteLM/NotebookLM → Worker normalizes → Vercel callback → parser adapter → final audit engine → output.
+
+### Changed
+
+- `CLAUDE.md`: added "Architecture Status" section with role-vs-implementation mapping, known duplication (verdict logic, 13-sheet workbook), and migration status. Refined in `a6eae50` to clarify that worker's `exporters/xlsx.py` is a microservice formatter (verdict passed in, not computed) — not a spec violation.
+
+### Commits
+
+| SHA | Repo | Subject |
+|---|---|---|
+| `9027aa2` | SCT | docs(spec): finalize 3-layer role definition |
+| `380700e` | SCT | feat(worker): default NotebookLM MCP timeout 30s → 300s |
+| `a6eae50` | SCT | docs(arch): refine Worker audit |
+
+### See also
+
+- `docs/architecture_audit_2026-06-14.md` (inline) — worker's `exporters/xlsx.py` and `/v1/export` route are a microservice formatter, not a spec violation. Duplication is verdict logic only (`validators/numeric_integrity.py` + `gate-bridge.ts`).
+
 ## Worker NotebookLM MCP Default Timeout Hardening - 2026-06-14
 
 ### Changed
