@@ -1,20 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockQuery } = vi.hoisted(() => {
+const { mockQuery, mockPoolFactory } = vi.hoisted(() => {
   const mockQuery = vi.fn();
-  return { mockQuery };
+  const mockPoolFactory = vi.fn(() => ({
+    query: mockQuery,
+    on: vi.fn(),
+    connect: vi.fn().mockResolvedValue({
+      query: mockQuery,
+      release: vi.fn(),
+    }),
+  }));
+  return { mockQuery, mockPoolFactory };
 });
 
 vi.mock('pg', () => ({
   default: {
-    Pool: vi.fn(() => ({
-      query: mockQuery,
-      on: vi.fn(),
-      connect: vi.fn().mockResolvedValue({
-        query: mockQuery,
-        release: vi.fn(),
-      }),
-    })),
+    Pool: vi.fn(() => mockPoolFactory()),
   },
 }));
 
@@ -24,12 +25,22 @@ const TEST_DB_URL = 'postgresql://test:test@localhost:5432/testdb';
 describe('job-store-pg', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockPoolFactory.mockImplementation(() => ({
+      query: mockQuery,
+      on: vi.fn(),
+      connect: vi.fn().mockResolvedValue({
+        query: mockQuery,
+        release: vi.fn(),
+      }),
+    }));
     vi.resetModules();
     vi.unstubAllEnvs();
+    delete globalThis.__invoice_audit_store;
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    delete globalThis.__invoice_audit_store;
   });
 
   // ---------- T17 TEST 1 ----------
@@ -50,6 +61,31 @@ describe('job-store-pg', () => {
 
       const store = createPgJobStore();
       expect(store).toBeNull();
+    });
+  });
+
+
+
+  describe('Vercel job-store fallback policy', () => {
+    it('does not fall back to in-memory storage when DATABASE_URL is missing on Vercel', async () => {
+      vi.stubEnv('VERCEL', '1');
+      vi.stubEnv('DATABASE_URL', '');
+
+      await expect(import('../src/lib/job-store')).rejects.toThrow(
+        'Vercel deployment requires DATABASE_URL'
+      );
+    });
+
+    it('does not fall back to in-memory storage when PG initialization fails on Vercel', async () => {
+      vi.stubEnv('VERCEL', '1');
+      vi.stubEnv('DATABASE_URL', TEST_DB_URL);
+      mockPoolFactory.mockImplementation(() => {
+        throw new Error('pool init failed');
+      });
+
+      await expect(import('../src/lib/job-store')).rejects.toThrow(
+        'Vercel deployment requires a working Postgres job store'
+      );
     });
   });
 

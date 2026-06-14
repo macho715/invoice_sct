@@ -227,6 +227,8 @@ declare global {
   var __invoice_audit_store: JobStore | undefined;
 }
 
+const isVercelRuntime = () => process.env.VERCEL === '1';
+
 const getStore = (): JobStore => {
   const existing = globalThis.__invoice_audit_store;
   if (existing && typeof (existing as any).setNormalizedInvoice === 'function') {
@@ -241,8 +243,13 @@ const getStore = (): JobStore => {
         return pgStore;
       }
     } catch (err) {
+      if (isVercelRuntime()) {
+        throw new Error('[job-store] Vercel deployment requires a working Postgres job store. PG init failed; check DATABASE_URL.', { cause: err });
+      }
       console.warn('[job-store] PG init failed, falling back to in-memory:', err);
     }
+  } else if (isVercelRuntime()) {
+    throw new Error('[job-store] Vercel deployment requires DATABASE_URL; refusing to use in-memory job store.');
   }
 
   console.warn('[job-store] DATABASE_URL not set or PG init failed — using in-memory job store (data will not persist across restarts)');
