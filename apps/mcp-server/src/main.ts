@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
 import { MCP_TOOLS } from './tools/index.js';
 import { guardDlp, DlpGuardInputSchema } from './schemas/dlp-guard.js';
 
@@ -73,3 +74,11 @@ app.post('/mcp', async (c) => {
 
 export default app;
 export { app };
+
+const port = Number(process.env.PORT ?? 3000);
+const host = process.env.HOST ?? '0.0.0.0';
+const server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
+  console.log(`mcp-server listening on http://${host}:${info.port}`);
+});
+process.on('SIGTERM', () => { server.close(); process.exit(0); });
+process.on('SIGINT', () => { server.close(); process.exit(0); });
