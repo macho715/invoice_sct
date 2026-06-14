@@ -70,7 +70,7 @@ Do not document `query_knowledge_graph`, `create_action_request`, or `export_ans
 AGENTS.md, README.md, CHANGELOG.md, LAYOUT.md, SYSTEM_ARCHITECTURE.md
 chatgpt-app-submission.json, wrangler.toml
 migrations/0001_mcp_audit_logs.sql, migrations/0002_mcp_upload_write.sql
-server/src/worker.ts, hvdc-server.ts, claude-server.ts, index.ts, answer.ts, corpus.ts, router.ts, redact.ts, types.ts
+server/src/worker.ts, hvdc-server.ts, claude-server.ts, index.ts, answer.ts, corpus.ts, router.ts, types.ts
 server/src/generated/
 public/hvdc-answer-widget.html
 data/corpus/, data/index/, ontology/
@@ -112,8 +112,7 @@ Human approval is required before:
 
 Invoice or CostGuard answers above `100,000.00 AED`, or with `HIGH` / `CRITICAL` risk, must require Finance approval gate.
 
-## Privacy and Security
-- Mask phone numbers, email addresses, and token-like strings in UI, logs, reports, tests, and exports.
+## Security
 - Never expose secrets, tokens, private URLs, credentials, or internal commercial terms.
 - Protected upload/write tools require `files:upload` or `files:write` OAuth Bearer scope and must fail closed without it.
 - Tool failures must fail closed with `TOOL_UNAVAILABLE`, `NO_EVIDENCE`, `STALE_SOURCE`, `WARN`, or `BLOCK`.
@@ -137,14 +136,13 @@ Before reporting completion, verify relevant items:
 - AGI/DAS M130 missing-chain case warns and creates MOSB backfill
 - Flow Code misuse blocks outside WHP-only meaning
 - Human-gate applies to write/send/export/report/invoice/cost/approval requests
-- PII masking remains effective
 - descriptor parity between server tools and `chatgpt-app-submission.json`
 - widget fallback/accessibility and no external `fetch()` or `http(s)://` resource use
 - UI-only template failures preserve business result data and expose text fallback
 - corpus index has no drift after corpus changes
 
 ## Skills Policy
-Use `.agents/skills/<skill-name>/SKILL.md` only for workflows that are repeated, triggerable, and verifiable. Skills are development guidance, not runtime app tools. Current skill areas cover answer grounding, MCP tool contract, ontology corpus indexing, privacy redaction, submission readiness, UI component work, and validation gate work.
+Use `.agents/skills/<skill-name>/SKILL.md` only for workflows that are repeated, triggerable, and verifiable. Skills are development guidance, not runtime app tools. Current skill areas cover answer grounding, MCP tool contract, ontology corpus indexing, submission readiness, UI component work, and validation gate work.
 
 ## Output Contract
 When finishing a task, report: verdict (`PASS`, `WARN`, `BLOCK`, or `PARTIAL`), files changed, commands run with pass/fail result, evidence or tests used, remaining risks, and required human approval. Do not claim completion if required verification was not run; state what was not verified and why.
