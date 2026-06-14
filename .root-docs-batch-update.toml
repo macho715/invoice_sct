@@ -1,0 +1,19 @@
+[targets]
+README = "README.md"
+SYSTEM_ARCHITECTURE = "docs/SYSTEM_ARCHITECTURE.md"
+LAYOUT = "docs/LAYOUT.md"
+CHANGELOG = "docs/CHANGELOG.md"
+PLAN = "docs/PLAN.md"
+
+[scan]
+parallelism = 5
+ignore_dirs = ["reports", "iran-war-notelm", "node_modules", ".venv", "dist", "build", "artifacts"]
+
+[agents]
+globs = [".codex/agents/*.toml", "docs/agents/*.md"]
+placeholder_when_missing = false
+update_docs = false
+
+[strict]
+enabled_by_default = false
+missing_tool = "warn"
