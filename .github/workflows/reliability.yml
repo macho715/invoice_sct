@@ -1,0 +1,74 @@
+name: Reliability (optional)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL for load tests'
+        required: false
+        default: 'http://localhost:3000'
+  # Non-blocking on PRs — runs as separate check
+  pull_request:
+    types: [labeled]
+    # Only runs when 'reliability' label is added
+
+env:
+  NODE_VERSION: "20.x"
+
+jobs:
+  k6-smoke:
+    name: k6 Smoke Tests
+    runs-on: ubuntu-latest
+    # Only run on manual trigger or when 'reliability' label present
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'reliability')
+    continue-on-error: true  # Non-blocking
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | \
+            sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install k6
+
+      - name: Run invoice-audit smoke test
+        run: |
+          BASE_URL=${{ inputs.base_url || 'http://localhost:3000' }} \
+            k6 run --out json=load-tests/results/smoke-$(date +%Y%m%d-%H%M%S).json \
+            load-tests/k6/invoice-audit-smoke.js || true
+        continue-on-error: true
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.run_id }}
+          path: load-tests/results/
+          if-no-files-found: warn
+
+  db-pool-tests:
+    name: DB Pool Pressure (unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.x'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run DB pool pressure tests
+        run: pnpm --dir apps/web test -- --reporter=verbose tests/db-pool-pressure.test.ts
+        env:
+          PG_POOL_MAX: '10'
