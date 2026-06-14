@@ -17,7 +17,13 @@ export default function RunAuditButton({ jobId, disabled }: { jobId: string; dis
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
-        setError(`${data.code ?? 'ERROR'}: ${data.message ?? 'unknown'}`);
+        const code = typeof data?.code === 'string' ? data.code : 'ERROR';
+        const message = typeof data?.message === 'string'
+          ? data.message
+          : typeof data?.error === 'string'
+            ? data.error
+            : 'unknown';
+        setError(`${code}: ${message}`);
         return;
       }
       window.location.reload();

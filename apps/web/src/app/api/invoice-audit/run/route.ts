@@ -50,12 +50,22 @@ export async function POST(req: Request): Promise<Response> {
   await STORE.updateJob(body.job_id, { status: 'PARSING' });
 
   const parserToken = process.env.PARSER_WORKER_TOKEN;
-  if (!parserToken) throw new Error('PARSER_WORKER_TOKEN not configured');
+  if (!parserToken) {
+    await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
+    return err('STORAGE_AUTH_FAILED', 'PARSER_WORKER_TOKEN not configured');
+  }
   const workerUrl = process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000';
-  const parsed = new URL(workerUrl);
+  let parsed: URL;
+  try {
+    parsed = new URL(workerUrl);
+  } catch {
+    await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
+    return err('STORAGE_AUTH_FAILED', 'WORKER_URL must be a valid URL');
+  }
   const allowedHosts = ['127.0.0.1', 'localhost', '.fly.dev', '.internal'];
   if (!allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith(h))) {
-    return NextResponse.json({ error: 'WORKER_URL must point to internal host' }, { status: 500 });
+    await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
+    return err('STORAGE_AUTH_FAILED', 'WORKER_URL must point to internal host');
   }
   const parser = createParserClient({ baseUrl: workerUrl, token: parserToken });
   let parseRes;
