@@ -152,7 +152,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
+        run: pnpm --dir apps/web exec playwright install --with-deps
 
       - name: Run Playwright smoke tests
         run: pnpm --dir apps/web e2e
@@ -162,5 +162,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report/
+          path: apps/web/playwright-report/
           retention-days: 7
