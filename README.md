@@ -294,7 +294,7 @@ Copy-Item .env.example apps\web\.env.local
 
 Required values:
 
-- `DATABASE_URL`: Neon Postgres connection string. Use the pooled URL for Vercel.
+- `DATABASE_URL`: Neon Postgres connection string. Use the pooled URL for Vercel. Required in Vercel Production and Preview deployments; the web app refuses to fall back to in-memory job storage when `VERCEL=1`.
 - `BLOB_READ_WRITE_TOKEN`: Vercel Blob token. Use the private store token for private P2 uploads.
 - `WORKER_URL`: parser worker URL. Local default is `http://localhost:8000`.
 - `MCP_SERVER_URL`: validation server URL. Local default is `http://localhost:8080`.
@@ -411,7 +411,7 @@ The production path is:
 1. Push code to GitHub.
 2. Ensure Vercel project environment variables are set for Production, Preview, and Development.
 3. Use private Vercel Blob storage for invoice and evidence files.
-4. Use Neon pooled Postgres URL in `DATABASE_URL`.
+4. Set `DATABASE_URL` to the Neon pooled Postgres URL for every Vercel Production and Preview environment; deployments with `VERCEL=1` fail fast instead of using in-memory job storage when it is missing or unusable.
 5. Run `vercel --prod` after local verification.
 6. Smoke test a production API route such as `/api/audit/status?job_id=<known-job-id>`.
 
