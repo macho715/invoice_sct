@@ -42,7 +42,20 @@ export default function UploadForm() {
         if (!r.ok) { setErr(`${file.name}: ${body.code} — ${body.message}`); setBusy(false); setProgress(null); return; }
         jobId = jobId ?? body.job_id;
       }
-      if (jobId) router.push(`/invoice-audit/jobs/${jobId}`);
+      if (jobId) {
+        setProgress('검증 실행 중…');
+        const runRes = await fetch('/api/invoice-audit/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId })
+        });
+        if (!runRes.ok) {
+          const runBody = await runRes.json().catch(() => ({ message: `HTTP ${runRes.status}` }));
+          setErr(`검증 실행 실패: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
+          return;
+        }
+        router.push(`/invoice-audit/jobs/${jobId}`);
+      }
     } catch (e) {
       setErr((e as Error).message);
     } finally {
