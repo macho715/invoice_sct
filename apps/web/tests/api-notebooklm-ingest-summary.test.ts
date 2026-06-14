@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 
 vi.mock('@vercel/blob', () => ({ put: vi.fn(async () => ({ url: 'x', pathname: 'x' })) }));
@@ -8,6 +8,19 @@ import { STORE } from '../src/lib/job-store';
 import type { NormalizedInvoice, SourceFile } from '../src/lib/types';
 
 const HASH_A = 'a'.repeat(64);
+const ORIGINAL_NOTEBOOKLM_SECRET = process.env.NOTEBOOKLM_CALLBACK_SECRET;
+
+beforeEach(() => {
+  process.env.NOTEBOOKLM_CALLBACK_SECRET = 'test-secret';
+});
+
+afterAll(() => {
+  if (ORIGINAL_NOTEBOOKLM_SECRET === undefined) {
+    delete process.env.NOTEBOOKLM_CALLBACK_SECRET;
+  } else {
+    process.env.NOTEBOOKLM_CALLBACK_SECRET = ORIGINAL_NOTEBOOKLM_SECRET;
+  }
+});
 
 function signCallback(rawBody: string, secret = 'test-secret'): string {
   return 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
@@ -183,10 +196,14 @@ describe('POST /api/notebooklm/ingest-summary', () => {
   });
 
   it('rejects missing job_id', async () => {
+    const rawBody = JSON.stringify({ notebooklm_source_id: 'nlm_src_1', summary: validSummary() });
     const res = await POST(new Request('http://test/api/notebooklm/ingest-summary', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ notebooklm_source_id: 'nlm_src_1', summary: validSummary() })
+      headers: {
+        'content-type': 'application/json',
+        'x-notebooklm-signature': signCallback(rawBody)
+      },
+      body: rawBody
     }));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('BAD_REQUEST');
@@ -255,7 +272,6 @@ describe('POST /api/notebooklm/ingest-summary', () => {
 });
 
 describe('POST /api/notebooklm/ingest-summary (signed callback)', () => {
-  const ORIGINAL_SECRET = process.env.NOTEBOOKLM_CALLBACK_SECRET;
   let hasStubEnv = false;
 
   beforeAll(() => {
@@ -270,12 +286,6 @@ describe('POST /api/notebooklm/ingest-summary (signed callback)', () => {
   afterAll(() => {
     if (hasStubEnv) {
       vi.unstubAllEnvs();
-    } else {
-      if (ORIGINAL_SECRET === undefined) {
-        delete process.env.NOTEBOOKLM_CALLBACK_SECRET;
-      } else {
-        process.env.NOTEBOOKLM_CALLBACK_SECRET = ORIGINAL_SECRET;
-      }
     }
   });
 

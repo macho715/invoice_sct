@@ -1,20 +1,26 @@
 # SCT Invoice Audit Platform
 
-HVDC invoice and shipment audit workspace for the Samsung C&T HVDC Abu Dhabi project.
+## Overview
+
+Invoice and shipment audit workspace for SCT/DSV invoice verification.
 
 This repository contains the Phase 1 invoice audit MVP and the supporting SCT ontology validation assets. The current runtime is a 3-part system:
 
 - `apps/web`: Next.js app and API layer for upload, audit job orchestration, approval, and export.
-- `apps/worker-py`: FastAPI parser/export worker for Excel, Markdown, text, PDF text, and OpenDataLoader PDF JSON.
+- `apps/worker-py`: FastAPI parser/export worker for Excel, Markdown, text, PDF text, OpenDataLoader PDF JSON, and NotebookLM first-pass extraction orchestration.
 - `apps/mcp-server`: TypeScript validation server with 14 audit tools (rate, evidence, duplicate, tax, FX, shipment, cost, TYPE-B classification, HS/UAE customs, DEM/DET, router, explanation builder).
 
 Do not commit raw invoice files, raw contract rates, TRN, BOE, BL, container numbers, personal contact details, tokens, or original P2 evidence files.
 
-## Current Status (2026-06-13)
+## Current Status (2026-06-14)
 
 Cross-validated against Track 1 (shpiment v3.2 PRO, 9-gate system). P0-P2 gaps resolved: 14 MCP tools, 368 tests (Worker 95, MCP 186, Web 107). Typecheck 0 errors.
 
 The MVP has working local components for upload, job status, parser dispatch, validation traces, approval flow, 13-sheet workbook export, DSV Waybill field extraction, 3-way reconciliation, DLP export gate, HS/UAE customs compliance, and DEM/DET evidence checks.
+
+NotebookLM first-pass extraction is implemented as a helper path, not as source of truth. The worker route `POST /v1/notebooklm/run` can fetch a source PDF, convert it through MarkItDown/NotebookLM MCP, parse JSON-only output, and send an HMAC-signed callback to `POST /api/notebooklm/ingest-summary`. Parser results remain authoritative; parser missing plus NotebookLM success is `AMBER` manual review.
+
+Latest pushed evidence: `83d96d2` added the NotebookLM worker gate, `c674724` refreshed root docs, and `fb16a92` removed DLP references from the AGENTS patch. Current local verification recorded 123 worker tests passed, 12 NotebookLM web callback tests passed, web typecheck passed, and project documentation consistency passed. NotebookLM-focused worker verification adds MCP client coverage and passes 25 tests plus 3 route tests.
 
 Production deployment uses Vercel for the web app, Vercel Blob for file storage, and Neon Postgres through `DATABASE_URL` for persistence.
 
@@ -22,6 +28,30 @@ Production deployment uses Vercel for the web app, Vercel Blob for file storage,
 **Live**: [sct-ontology-invoice-audit.vercel.app](https://sct-ontology-invoice-audit-5ks96mt62-chas-projects-08028e73.vercel.app)
 
 GitHub Actions release gates may be skipped when billing prevents CI execution. In that case, run the local checks listed below and record the result in the handoff or release notes.
+
+## Quick Start
+
+Use the repository root for workspace-level commands.
+
+```powershell
+pnpm install
+pnpm --filter @invoice-audit/web typecheck
+pnpm --filter @invoice-audit/web test -- --run
+```
+
+Run the web app locally:
+
+```powershell
+cd apps\web
+pnpm dev
+```
+
+Run the worker test suite:
+
+```powershell
+cd apps\worker-py
+python -m pytest tests/ -q
+```
 
 ## Repository Layout
 
@@ -44,7 +74,7 @@ GitHub Actions release gates may be skipped when billing prevents CI execution. 
 ## Runtime Flow
 
 ```mermaid
-flowchart LR
+graph LR
   U[User upload] --> W[Next.js web/API]
   W --> B[Vercel Blob]
   W --> D[(Neon Postgres)]
@@ -53,6 +83,14 @@ flowchart LR
   W --> M[MCP validation server]
   M --> W
   W --> E[13-sheet audit workbook]
+```
+
+NotebookLM helper path:
+
+```text
+PDF source -> MarkItDown MCP -> NotebookLM add_source(type=text)
+-> ask_question JSON-only prompt -> worker parses summary
+-> HMAC callback -> web trust gate -> parser-compatible review
 ```
 
 ## Main Web Routes
@@ -74,6 +112,13 @@ flowchart LR
 - `POST /api/audit/approve`: approval gate action.
 - `POST /api/audit/export`: build export artifact.
 - `GET /api/export/download`: download exported workbook.
+- `POST /api/notebooklm/ingest-summary`: receive HMAC-signed NotebookLM first-pass summary.
+
+## Worker Routes
+
+- `POST /v1/parse`: parse source files through the Python worker.
+- `POST /v1/export`: generate workbook exports.
+- `POST /v1/notebooklm/run`: run the NotebookLM first-pass extraction worker pipeline.
 
 ## Environment
 
@@ -90,6 +135,11 @@ Required values:
 - `WORKER_URL`: parser worker URL. Local default is `http://localhost:8000`.
 - `MCP_SERVER_URL`: validation server URL. Local default is `http://localhost:8080`.
 - `NEXT_PUBLIC_APP_URL`: web app base URL. Local default is `http://localhost:3000`.
+- `MARKITDOWN_MCP_URL`: MarkItDown MCP endpoint used by the NotebookLM worker path.
+- `NOTEBOOKLM_MCP_URL`: NotebookLM MCP streamable HTTP endpoint.
+- `WEB_CALLBACK_URL`: web callback endpoint for worker-to-web summary delivery.
+- `NOTEBOOKLM_CALLBACK_SECRET`: HMAC secret used by worker callback signing and web callback verification.
+- `NOTEBOOKLM_DEFAULT_NOTEBOOK_ID`: optional default NotebookLM notebook id.
 
 Never paste secret values into issues, docs, prompts, or logs.
 
@@ -121,29 +171,47 @@ Open the local app at `http://localhost:3000`.
 
 ## Verification
 
+Command index for documentation consistency: `pnpm --filter @invoice-audit/web typecheck`, `pnpm --filter @invoice-audit/web test -- --run`, `pnpm --filter @invoice-audit/mcp-server test -- --run`, `cd apps/worker-py && python -m pytest tests/ -q`, `python -m pytest tests/ -q`, `python -m pytest -q -o addopts='' tests/test_notebooklm_route.py`.
+
 Web app:
 
 ```powershell
-pnpm --dir apps\web typecheck
-pnpm --dir apps\web test
-pnpm --dir apps\web build
+pnpm --filter @invoice-audit/web typecheck
+pnpm --filter @invoice-audit/web test -- --run
+pnpm --filter @invoice-audit/web build
 ```
 
 Worker:
 
 ```powershell
 cd apps\worker-py
-python -m py_compile app\routes\parse.py
-pytest -q
+python -m pytest tests/ -q
 ```
 
 MCP server:
 
 ```powershell
-cd apps\mcp-server
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm --filter @invoice-audit/mcp-server typecheck
+pnpm --filter @invoice-audit/mcp-server test -- --run
+pnpm --filter @invoice-audit/mcp-server build
+```
+
+NotebookLM focused checks:
+
+```powershell
+cd apps\web
+npx vitest run tests/api-notebooklm-ingest-summary.test.ts
+
+cd ..\worker-py
+python -m pytest tests/test_notebooklm_extractor.py tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py -q
+python -m pytest tests/test_notebooklm_route.py -q
+```
+
+Live NotebookLM/MarkItDown smoke check after setting the required MCP/callback env vars:
+
+```powershell
+cd apps\worker-py
+python scripts\notebooklm_live_smoke.py --job-id <job_id> --blob-url <pdf_blob_url> --notebook-id <optional_notebook_id>
 ```
 
 Workbook contract:
@@ -193,12 +261,15 @@ If CI is unavailable because of GitHub billing, record the local verification co
 - Mask TRN, BOE, BL, container numbers, emails, phone numbers, raw rates, and tokens in logs and docs.
 - Do not send raw P2 content to LLM prompts.
 - Keep approval gates for AMBER and ZERO findings.
+- Treat NotebookLM output as first-pass evidence only. Do not bypass parser/manual-review gates.
 
 ## Useful Docs
 
 - `docs/SYSTEM_ARCHITECTURE.md`: architecture notes.
 - `docs/LAYOUT.md`: repository layout notes.
-- `docs/PLAN.md`: implementation plan.
+- `docs/GUIDE.md`: operator and developer workflow guide.
+- `plan.md`: active implementation plan.
+- `plan-20260614-notelm-worker-gate.md`: NotebookLM worker gate implementation plan.
 - `docs/CHANGELOG.md`: documentation and project change history.
 - `docs/SECURITY_PRIVACY.md`: security and privacy guidance.
 - `apps/README.md`: app-level development notes.

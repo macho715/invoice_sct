@@ -1,5 +1,144 @@
 # Changelog
 
+## NotebookLM MCP Runtime Triage and Live Smoke Hardening - 2026-06-14
+
+### Added
+
+- Registered the user-provided NotebookLM URL in the local NotebookLM MCP library:
+  - URL: `https://notebooklm.google.com/notebook/2b70c1f5-6e08-47bb-801b-a3618004c3b5`
+  - Local notebook id: `invoice-audit-smoke-notebook`
+- Set Windows User env `NOTEBOOKLM_DEFAULT_NOTEBOOK_ID=invoice-audit-smoke-notebook`.
+- Started NotebookLM MCP over Streamable HTTP at `http://127.0.0.1:3003/mcp`.
+- Started MarkItDown MCP over Streamable HTTP at `http://127.0.0.1:3001/mcp`.
+- Added live smoke coverage for the real worker path:
+  - local temporary PDF served over HTTP
+  - MarkItDown MCP conversion
+  - NotebookLM MCP source insertion attempt
+  - worker callback path status reporting
+- Added false-positive protection for NotebookLM MCP tool failures.
+- Added callback rejection handling so `4xx` or `5xx` callback responses are no longer reported as successful `CALLBACK_SENT`.
+- Added nested NotebookLM MCP error extraction so failures under `data.result.message` are surfaced instead of collapsed to a generic error.
+
+### Changed
+
+- Updated the worker MCP client to use the current Python MCP SDK Streamable HTTP contract.
+- Replaced unsupported `streamable_http_client(..., timeout=...)` usage with an injected `httpx.AsyncClient`.
+- Enabled `follow_redirects=True` for MCP HTTP calls so MarkItDown `/mcp` -> `/mcp/` redirects work.
+- Updated NotebookLM `add_source` calls to use the real upstream schema:
+  - before: `{"type": "text", "text": "..."}`
+  - after: `{"type": "text", "content": "..."}`
+- Propagated `NOTEBOOKLM_DEFAULT_NOTEBOOK_ID` into both `add_source` and `ask_question`.
+- Hardened `NotebookLmOrchestrator.run()` result states:
+  - `NOTEBOOKLM_TOOL_FAILED` for upstream MCP `success:false`
+  - `CALLBACK_REJECTED` for callback HTTP status `>=400`
+- Updated tests to cover:
+  - MCP SDK timeout argument mismatch
+  - `add_source.content` argument mapping
+  - nested upstream tool failure messages
+  - callback rejection not being treated as success
+
+### Fixed
+
+- Fixed the first runtime blocker: MCP Python SDK rejected the old `timeout` keyword.
+- Fixed the second runtime blocker: NotebookLM MCP rejected the old `text` field for `add_source`.
+- Fixed MarkItDown runtime wrapper failure caused by `307 Temporary Redirect` on `/mcp`.
+- Fixed a false-success bug where NotebookLM `{"success":false,...}` output was treated as a source id.
+- Fixed a false-success bug where callback `404` still returned `CALLBACK_SENT`.
+- Fixed worker error reporting so the actual upstream selector timeout can be seen in worker output.
+
+### Verified
+
+- NotebookLM MCP `setup_auth` was executed with a visible browser and returned:
+  - `success: true`
+  - `status: authenticated`
+  - `authenticated: true`
+- NotebookLM MCP `list_notebooks` returned the registered notebook `invoice-audit-smoke-notebook`.
+- MarkItDown MCP worker wrapper call succeeded:
+  - `worker_markitdown=OK`
+- NotebookLM MCP worker wrapper call succeeded for `list_notebooks`:
+  - `worker_notebooklm=OK`
+- Focused worker tests passed:
+  - `python -m pytest tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py tests/test_notebooklm_route.py -q` -> 21 passed
+- Full worker test suite passed:
+  - `python -m pytest tests/ -q` -> 129 passed
+- `git diff --check` reported no patch errors for touched NotebookLM worker files.
+
+### Current Live Smoke Result
+
+- Live smoke now fails honestly instead of reporting false success.
+- Current result:
+  - `status: NOTEBOOKLM_UNAVAILABLE`
+  - `error_code: NOTEBOOKLM_TOOL_FAILED`
+  - detail includes upstream UI automation timeout from NotebookLM MCP.
+- Direct upstream `add_source` call after authentication returned:
+  - `success: false`
+  - `sourceCountBefore: 0`
+  - `sourceCountAfter: 0`
+  - `locator.waitFor: Timeout 10000ms exceeded`
+  - waiting for `locator('[role="dialog"]').first()` to become visible
+  - hidden dialog matched first: `aria-label="이모티콘 문자 팔레트"`
+
+### Upstream Findings
+
+- Confirmed the current failure is already represented upstream.
+- Relevant upstream issue:
+  - `PleasePrompto/notebooklm-mcp#46`
+  - covers empty-notebook `add_source` bootstrap failure and post-bootstrap source insertion failure.
+- Relevant upstream PR:
+  - `PleasePrompto/notebooklm-mcp#53`
+  - directly matches this session's failure.
+  - identifies hidden Emoji dialog false-positive from broad `[role="dialog"]` selector.
+  - proposes scoping to visible dialogs and excluding Emoji palette dialogs.
+- Additional relevant upstream PR:
+  - `PleasePrompto/notebooklm-mcp#55`
+  - updates current Add sources picker handling.
+- No merged upstream fix was confirmed in `npx notebooklm-mcp@latest` during this session.
+
+### Remaining Risks
+
+- `npx notebooklm-mcp@latest` can still fail until upstream PR #53 or #55 is merged and released.
+- Local live smoke cannot complete end-to-end while upstream `add_source` cannot add a source to the notebook.
+- Real Vercel callback success still requires:
+  - a real audit job id
+  - matching `NOTEBOOKLM_CALLBACK_SECRET` on the worker and Vercel deployment
+  - successful NotebookLM source insertion and JSON extraction
+- This changelog intentionally does not include raw PDF body, raw Markdown body, or callback secret values.
+
+### Next Candidate Action
+
+- Apply PR #53 or PR #55 locally to the NotebookLM MCP package or run from the contributor branch, then rerun live smoke.
+
+## NotebookLM Worker Gate and Documentation Refresh - 2026-06-14
+
+### Added
+
+- Added the NotebookLM worker gate implementation in commit `83d96d2`.
+- Added worker-side first-pass extraction orchestration through `POST /v1/notebooklm/run`.
+- Added web-side HMAC callback intake through `POST /api/notebooklm/ingest-summary`.
+- Added `apps/worker-py/scripts/notebooklm_live_smoke.py` for env-backed live MCP/callback smoke verification.
+
+### Changed
+
+- Refreshed root documentation for the NotebookLM worker gate in commit `c674724`.
+- Removed DLP references from the AGENTS patch in commit `fb16a92`.
+- Updated README and GUIDE to describe the parser-authoritative NotebookLM helper path, required environment variables, and focused verification commands.
+
+### Verified
+
+- Pushed commits to `origin/main`: `83d96d2`, `c674724`, `fb16a92`.
+- Worker tests: `python -m pytest tests/ -q` -> 123 passed.
+- NotebookLM worker focused tests: `python -m pytest -q -o addopts='' tests/test_notebooklm_extractor.py tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py` -> 25 passed.
+- NotebookLM worker route tests: `python -m pytest -q -o addopts='' tests/test_notebooklm_route.py` -> 3 passed.
+- Live smoke helper without env: `python scripts/notebooklm_live_smoke.py --job-id test_job --blob-url http://test/blob.pdf` -> `ENV_MISSING`.
+- NotebookLM web callback tests: `npx vitest run tests/api-notebooklm-ingest-summary.test.ts` -> 12 passed.
+- Web typecheck: `pnpm --filter @invoice-audit/web typecheck` -> pass.
+- Root docs verification: `root_docs_batch_update.py verify` -> passed, score 100.0.
+
+### Unverified
+
+- Real MarkItDown MCP, NotebookLM MCP, and persistent Chrome host deployment were not verified in this session.
+- Current NotebookLM confidence is based on mocked worker tests and web callback tests, not a live NotebookLM browser session.
+
 ## Documented Current State - 2026-05-25
 
 ### Added

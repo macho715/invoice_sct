@@ -10,9 +10,11 @@ from app.notebooklm.extractor import parse_extraction
 
 
 @pytest.fixture
-def orchestrator():
-    os.environ["WEB_CALLBACK_URL"] = "http://test/web/callback"
-    os.environ["NOTEBOOKLM_CALLBACK_SECRET"] = "test-secret"
+def orchestrator(monkeypatch):
+    monkeypatch.setenv("MARKITDOWN_MCP_URL", "http://test/markitdown/mcp")
+    monkeypatch.setenv("NOTEBOOKLM_MCP_URL", "http://test/notebooklm/mcp")
+    monkeypatch.setenv("WEB_CALLBACK_URL", "http://test/web/callback")
+    monkeypatch.setenv("NOTEBOOKLM_CALLBACK_SECRET", "test-secret")
     return NotebookLmOrchestrator()
 
 
@@ -39,7 +41,9 @@ class TestOrchestratorHappyPath:
                 expected = "sha256=" + hmac.new(b"test-secret", content.encode(), hashlib.sha256).hexdigest()
                 assert headers["X-NotebookLM-Signature"] == expected
                 mock_post.called = True
-                return MagicMock()
+                response = MagicMock()
+                response.status_code = 202
+                return response
 
             mock_fetch_instance = MagicMock()
             mock_fetch_instance.get = AsyncMock(side_effect=get)
@@ -47,32 +51,45 @@ class TestOrchestratorHappyPath:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_fetch_instance)
             mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            # Mock NotebookLM client
-            with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
-                mock_instance = MagicMock()
-                mock_instance.add_source = AsyncMock(return_value="src_123")
-                mock_instance.ask_question = AsyncMock(return_value=markdown)
-                mock_nlm.return_value = mock_instance
+            # Mock MarkItDown and NotebookLM clients
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value=markdown)
+                with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
+                    mock_instance = MagicMock()
+                    mock_instance.add_source = AsyncMock(return_value="src_123")
+                    mock_instance.ask_question = AsyncMock(return_value=markdown)
+                    mock_nlm.return_value = mock_instance
 
-                result = await orchestrator.run(
-                    job_id="job_1",
-                    blob_url="http://test/blob.pdf",
-                )
+                    result = await orchestrator.run(
+                        job_id="job_1",
+                        blob_url="http://test/blob.pdf",
+                    )
 
         assert result["status"] == "CALLBACK_SENT"
         assert result["notebooklm_source_id"] == "src_123"
+        assert result["callback_status"] is not None
         assert result["source_sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
 
 
 class TestOrchestratorFailures:
     @pytest.mark.asyncio
+    async def test_missing_notebooklm_url_returns_stable_error(self, monkeypatch):
+        monkeypatch.setenv("MARKITDOWN_MCP_URL", "http://test/markitdown/mcp")
+        monkeypatch.delenv("NOTEBOOKLM_MCP_URL", raising=False)
+        monkeypatch.setenv("WEB_CALLBACK_URL", "http://test/web/callback")
+        monkeypatch.setenv("NOTEBOOKLM_CALLBACK_SECRET", "test-secret")
+
+        result = await NotebookLmOrchestrator().run("job_1", "http://test/blob")
+
+        assert result["status"] == "NOTEBOOKLM_UNAVAILABLE"
+        assert result["error_code"] == "NOTEBOOKLM_MCP_URL_NOT_SET"
+
+    @pytest.mark.asyncio
     async def test_markitdown_failure_sends_no_callback(self, orchestrator):
         """If MarkItDown fails, no callback is sent."""
-        os.environ.pop("MARKITDOWN_MCP_URL", None)
-
         with patch("httpx.AsyncClient") as mock_client:
             mock_fetch = MagicMock()
-            mock_fetch.content = b""
+            mock_fetch.content = b"PDF content"
             mock_fetch.raise_for_status = MagicMock()
 
             mock_instance = MagicMock()
@@ -81,9 +98,12 @@ class TestOrchestratorFailures:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            result = await orchestrator.run("job_1", "http://test/blob")
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value="")
+                result = await orchestrator.run("job_1", "http://test/blob")
 
         assert result["status"] == "NOTEBOOKLM_UNAVAILABLE"
+        assert result["error_code"] == "MARKITDOWN_FAILED"
         mock_instance.post.assert_not_called()
 
     @pytest.mark.asyncio
@@ -102,14 +122,46 @@ class TestOrchestratorFailures:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
-                mock_instance2 = MagicMock()
-                mock_instance2.add_source = AsyncMock(side_effect=McpClientUnavailable("not set"))
-                mock_nlm.return_value = mock_instance2
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value="markdown")
+                with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
+                    mock_instance2 = MagicMock()
+                    mock_instance2.add_source = AsyncMock(side_effect=McpClientUnavailable("not set"))
+                    mock_nlm.return_value = mock_instance2
 
-                result = await orchestrator.run("job_1", "http://test/blob")
+                    result = await orchestrator.run("job_1", "http://test/blob")
 
         assert result["status"] == "NOTEBOOKLM_UNAVAILABLE"
+        mock_instance.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_add_source_tool_failure_sends_no_callback(self, orchestrator):
+        """If NotebookLM returns success:false, do not treat the response as a source id."""
+        from app.notebooklm.mcp_client import McpToolError
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_fetch = MagicMock()
+            mock_fetch.content = b"PDF content"
+            mock_fetch.raise_for_status = MagicMock()
+
+            mock_instance = MagicMock()
+            mock_instance.get = AsyncMock(return_value=mock_fetch)
+            mock_instance.post = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value="markdown")
+                with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
+                    mock_instance2 = MagicMock()
+                    mock_instance2.add_source = AsyncMock(side_effect=McpToolError("Failed to authenticate session"))
+                    mock_nlm.return_value = mock_instance2
+
+                    result = await orchestrator.run("job_1", "http://test/blob")
+
+        assert result["status"] == "NOTEBOOKLM_UNAVAILABLE"
+        assert result["error_code"] == "NOTEBOOKLM_TOOL_FAILED"
+        assert result["detail"] == "Failed to authenticate session"
         mock_instance.post.assert_not_called()
 
     @pytest.mark.asyncio
@@ -126,13 +178,15 @@ class TestOrchestratorFailures:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
-                mock_instance2 = MagicMock()
-                mock_instance2.add_source = AsyncMock(return_value="src_1")
-                mock_instance2.ask_question = AsyncMock(side_effect=Exception("ask failed"))
-                mock_nlm.return_value = mock_instance2
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value="markdown")
+                with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
+                    mock_instance2 = MagicMock()
+                    mock_instance2.add_source = AsyncMock(return_value="src_1")
+                    mock_instance2.ask_question = AsyncMock(side_effect=Exception("ask failed"))
+                    mock_nlm.return_value = mock_instance2
 
-                result = await orchestrator.run("job_1", "http://test/blob")
+                    result = await orchestrator.run("job_1", "http://test/blob")
 
         assert result["status"] == "NOTEBOOKLM_UNAVAILABLE"
         mock_instance.post.assert_not_called()
@@ -145,14 +199,15 @@ class TestOrchestratorFailures:
             mock_fetch.content = b"PDF content"
             mock_fetch.raise_for_status = MagicMock()
 
-            mock_post = MagicMock()
             posted_payload = {}
 
             async def get(url):
                 return mock_fetch
             async def post(url, content, headers):
                 posted_payload.update(json.loads(content))
-                return MagicMock()
+                response = MagicMock()
+                response.status_code = 202
+                return response
 
             mock_instance = MagicMock()
             mock_instance.get = AsyncMock(side_effect=get)
@@ -160,15 +215,53 @@ class TestOrchestratorFailures:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
-                mock_instance2 = MagicMock()
-                mock_instance2.add_source = AsyncMock(return_value="src_1")
-                mock_instance2.ask_question = AsyncMock(return_value="not parseable json at all")
-                mock_nlm.return_value = mock_instance2
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value="markdown")
+                with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
+                    mock_instance2 = MagicMock()
+                    mock_instance2.add_source = AsyncMock(return_value="src_1")
+                    mock_instance2.ask_question = AsyncMock(return_value="not parseable json at all")
+                    mock_nlm.return_value = mock_instance2
 
-                result = await orchestrator.run("job_1", "http://test/blob")
+                    result = await orchestrator.run("job_1", "http://test/blob")
 
         assert result["status"] == "CALLBACK_SENT"
+        assert result["callback_status"] == 202
         # Verify low-confidence callback was sent
         assert posted_payload["summary"]["confidence"] == 0.0
         assert "JSON_PARSE_FAILED" in posted_payload["summary"]["flags"]
+
+    @pytest.mark.asyncio
+    async def test_callback_rejected_is_not_reported_as_sent(self, orchestrator):
+        """If Vercel rejects the callback, surface that status instead of false success."""
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_fetch = MagicMock()
+            mock_fetch.content = b"PDF content"
+            mock_fetch.raise_for_status = MagicMock()
+
+            async def get(url):
+                return mock_fetch
+
+            async def post(url, content, headers):
+                response = MagicMock()
+                response.status_code = 404
+                return response
+
+            mock_instance = MagicMock()
+            mock_instance.get = AsyncMock(side_effect=get)
+            mock_instance.post = AsyncMock(side_effect=post)
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.notebooklm.orchestrator.MarkItDownMcpClient") as mock_mid:
+                mock_mid.return_value.convert_pdf_bytes = AsyncMock(return_value="markdown")
+                with patch("app.notebooklm.orchestrator.NotebookLmMcpClient") as mock_nlm:
+                    mock_instance2 = MagicMock()
+                    mock_instance2.add_source = AsyncMock(return_value="src_1")
+                    mock_instance2.ask_question = AsyncMock(return_value='{"doc_kind":"INVOICE","confidence":0.9}')
+                    mock_nlm.return_value = mock_instance2
+
+                    result = await orchestrator.run("job_1", "http://test/blob")
+
+        assert result["status"] == "CALLBACK_REJECTED"
+        assert result["callback_status"] == 404

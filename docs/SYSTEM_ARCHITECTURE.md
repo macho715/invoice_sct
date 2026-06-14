@@ -4,6 +4,10 @@
 
 SCT Invoice Audit Platform — 3-app architecture for HVDC invoice processing, cost guard validation, and approval-gate workflows in the Samsung C&T Abu Dhabi HVDC project.
 
+## System Purpose
+
+The system turns uploaded invoice and shipment evidence into parser-compatible audit results, validation findings, approval status, and workbook exports. NotebookLM extraction is a first-pass helper path for review evidence only; the deterministic parser and audit gates remain authoritative.
+
 ## Components
 
 | Component | Runtime | Host | Role |
@@ -19,7 +23,7 @@ SCT Invoice Audit Platform — 3-app architecture for HVDC invoice processing, c
 ## Data Flow
 
 ```mermaid
-flowchart LR
+graph LR
     U[Upload] --> B[Vercel Blob]
     B --> W["apps/web API"]
     W --> D[(Neon Postgres)]
@@ -222,7 +226,7 @@ The Cloudflare ontology MCP runtime served its purpose as a proof-of-concept for
 ### Mermaid graph
 
 ```mermaid
-flowchart TB
+graph TB
   subgraph Repository
     SRC[Source files] --> CFG[Config/build files]
     CFG --> DOC[Root documentation]

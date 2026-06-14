@@ -2,89 +2,149 @@
 
 ## User Guide
 
-This guide explains the current operational workflow for the HVDC ontology-grounded ChatGPT App.
+This guide describes the verified local workflow for the `invoice_sct` invoice audit platform.
 
 ## Quick Start
 
-1. Install dependencies with `npm ci`.
-2. Rebuild generated Worker assets with `npm run generate:worker-assets`.
-3. Run local Worker development with `npm run dev`.
-4. Run the release gate with `npm run verify`.
-5. Deploy with `npm run worker:deploy`.
+Use the repository root for workspace-level commands.
+
+```powershell
+pnpm install
+pnpm --filter @invoice-audit/web typecheck
+pnpm --filter @invoice-audit/web test -- --run
+```
+
+Run the web app locally from `apps/web`.
+
+```powershell
+cd apps/web
+pnpm dev
+```
+
+Run the Python worker tests from `apps/worker-py`.
+
+```powershell
+cd apps/worker-py
+python -m pytest tests/ -q
+```
 
 ## Developer Workflow
 
-Use this default loop for code or widget changes:
+Use this loop for web, worker, or MCP changes:
 
 ```text
-edit source -> npm run generate:worker-assets -> npm run typecheck -> npm test -> npm run worker:dry-run
+inspect current git diff -> update focused tests -> implement -> run targeted tests -> run typecheck -> review git status
 ```
 
-For deployment, use:
+Common verification commands:
 
-```text
-npm run worker:deploy
-```
-
-That command runs `npm run verify` before `wrangler deploy`.
-
-## Widget Workflow
-
-1. Edit `public/hvdc-answer-widget.html`.
-2. Run `npm run generate:worker-assets`.
-3. Run `npx vitest run tests/widget.test.ts --exclude ".claude/**"` for focused widget regression.
-4. Run `npm run verify` before deployment.
-5. Confirm the output template remains `ui://hvdc/answer-card-v10.html` unless intentionally bumping the resource URI.
-
-## Case Status Workflow
-
-Use `get_hvdc_case_status` for case-based warehouse and site status lookup.
-
-For Case No. `207721`, the current deployed smoke returns:
-
-- shipment unit: `WHCASE-207721`
-- report status: `WARN`
-- latest event: `M100_FINAL_DELIVERED`
-- latest date: `2025-05-13`
-- warehouse in: `2024-01-19`
-- warehouse out: `2025-05-13`
-- canonical events: `6`
-- case card fields: `36`
-
-## Warehouse Status D1 Workflow
-
-| Command | Use |
+| Area | Command |
 | --- | --- |
-| `npm run d1:seed-wh-status:dry` | Preview WH status seed from Excel/D1 projection. |
-| `npm run d1:seed-wh-status` | Seed WH status projection to remote D1. |
-| `npm run d1:reconcile-wh-status` | Reconcile D1 projection and produce traceability report. |
-| `npm run d1:rollback-wh-status:dry` | Preview rollback by ingest ID. |
+| Web typecheck | `pnpm --filter @invoice-audit/web typecheck` |
+| Web tests | `pnpm --filter @invoice-audit/web test -- --run` |
+| NotebookLM callback tests | `cd apps/web && npx vitest run tests/api-notebooklm-ingest-summary.test.ts` |
+| MCP server tests | `pnpm --filter @invoice-audit/mcp-server test -- --run` |
+| Worker tests | `cd apps/worker-py && python -m pytest tests/ -q` |
+| Root docs verify | `python C:\Users\jichu\.agents\skills\root-docs-batch-update\scripts\root_docs_batch_update.py verify --repo . --report .codex/root-docs-write.json` |
 
-## Governance and Security Workflow
+## Operational Flow
 
-Run `npm run verify:governance` when changing Decision Card governance, rulepack execution fields, SCT card reports, PII/NDA scans, or source-corpus audit logic.
+```mermaid
+graph LR
+  User[User uploads invoice evidence] --> Web[apps/web Next.js API]
+  Web --> Blob[Vercel Blob]
+  Web --> Store[Job store / Postgres or in-memory fallback]
+  Web --> Worker[apps/worker-py parser]
+  Web --> MCP[apps/mcp-server validation tools]
+  Worker --> Audit[Normalized invoice result]
+  MCP --> Audit
+  Audit --> Review[PASS / AMBER / ZERO review]
+```
 
-Run `npm run audit:source-pii` when source corpus PII/NDA pattern evidence needs to be refreshed.
+## NotebookLM Worker Gate
 
-Run `npm run scan:sct-pii` when SCT card output surface PII/NDA patterns need to be checked.
+The NotebookLM path is a first-pass helper and not the source of truth.
+
+Expected flow:
+
+```text
+PDF source -> MarkItDown MCP -> markdown -> NotebookLM add_source(type=text)
+-> ask_question JSON-only prompt -> worker parses summary -> HMAC callback
+-> web callback gate -> parser-compatible adapter -> manual-review rules
+```
+
+Key local verification:
+
+```powershell
+cd apps/web
+npx vitest run tests/api-notebooklm-ingest-summary.test.ts
+
+cd ..\worker-py
+python -m pytest tests/test_notebooklm_extractor.py tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py -q
+python -m pytest tests/test_notebooklm_route.py -q
+```
+
+Live smoke verification after setting the required MCP/callback environment variables:
+
+```powershell
+cd apps/worker-py
+python scripts/notebooklm_live_smoke.py --job-id <job_id> --blob-url <pdf_blob_url> --notebook-id <optional_notebook_id>
+```
+
+Required environment variables for the worker NotebookLM path:
+
+| Variable | Purpose |
+| --- | --- |
+| `MARKITDOWN_MCP_URL` | MarkItDown MCP endpoint used by the worker. |
+| `NOTEBOOKLM_MCP_URL` | NotebookLM MCP streamable HTTP endpoint. |
+| `WEB_CALLBACK_URL` | Vercel callback endpoint, usually `/api/notebooklm/ingest-summary`. |
+| `NOTEBOOKLM_CALLBACK_SECRET` | HMAC secret for worker-to-web callback verification. |
+| `NOTEBOOKLM_DEFAULT_NOTEBOOK_ID` | Optional default NotebookLM notebook id. |
+
+Latest pushed evidence:
+
+| Commit | Meaning |
+| --- | --- |
+| `83d96d2` | Added the NotebookLM worker gate implementation. |
+| `c674724` | Refreshed root docs for the NotebookLM worker gate. |
+| `fb16a92` | Removed DLP references from the AGENTS patch. |
+
+Latest local verification snapshot:
+
+| Check | Result |
+| --- | --- |
+| Current full worker tests | `python -m pytest tests/ -q` -> 123 passed |
+| Current NotebookLM worker tests | `python -m pytest -q -o addopts='' tests/test_notebooklm_extractor.py tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py` -> 25 passed |
+| Current NotebookLM worker route tests | `python -m pytest -q -o addopts='' tests/test_notebooklm_route.py` -> 3 passed |
+| Live smoke helper without env | `python scripts/notebooklm_live_smoke.py --job-id test_job --blob-url http://test/blob.pdf` -> `ENV_MISSING` with required env list |
+| NotebookLM web callback tests | `npx vitest run tests/api-notebooklm-ingest-summary.test.ts` -> 12 passed |
+| Web typecheck | `pnpm --filter @invoice-audit/web typecheck` -> pass |
+| Root docs verify | `root_docs_batch_update.py verify` -> passed, score 100.0 |
+
+## Web Audit Workflow
+
+1. Upload invoice and evidence files through the web app.
+2. Create or inspect the audit job.
+3. Run parser and validation tools.
+4. Review `PASS`, `AMBER`, or `ZERO` status.
+5. Use manual review for low-confidence NotebookLM summaries, parser failures, or high-impact field mismatches.
+
+The callback gate rejects invalid HMAC signatures and source hash mismatches when configured.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| Widget change not visible in ChatGPT | Confirm `server/src/generated/widget-html.ts` was regenerated and deployed. If ChatGPT caches the old iframe, start a new chat or bump the widget resource URI intentionally. |
-| `/mcp` returns 406 | Send `Accept: application/json, text/event-stream`. |
-| Case lookup returns text only | Confirm the tool result includes `structuredContent.report` and output template `ui://hvdc/answer-card-v10.html`. |
-| D1 case status is stale | Re-run WH status seed/reconcile commands and verify migration `0006`/`0007` exists. |
-| Generated files drift | Run `npm run generate:worker-assets` and check git diff before commit. |
+| NotebookLM callback returns `401` | Confirm `NOTEBOOKLM_CALLBACK_SECRET` and `X-NotebookLM-Signature` use the same raw body. |
+| NotebookLM callback returns `409` | Confirm `source_sha256` or `source_hash` matches the stored source file hash. |
+| Worker returns `NOTEBOOKLM_UNAVAILABLE` | Check MarkItDown MCP, NotebookLM MCP, and required worker environment variables. |
+| Web tests use in-memory job store | This is expected when `DATABASE_URL` is unset in local tests. |
+| Docs consistency fails on Mermaid | Ensure `docs/SYSTEM_ARCHITECTURE.md` and `docs/LAYOUT.md` include `mermaid` blocks beginning with `graph`. |
 
-## Operational Smoke Test
+## Documentation Set
 
-Use PowerShell with the MCP Accept header:
-
-```powershell
-$base = "https://hvdc-ontology-chatgpt-app.mscho715.workers.dev"
-Invoke-WebRequest -Uri "$base/healthz"
-$body = @{ jsonrpc = "2.0"; id = 1; method = "tools/call"; params = @{ name = "get_hvdc_case_status"; arguments = @{ caseNo = "207721" } } } | ConvertTo-Json -Depth 8
-Invoke-WebRequest -Uri "$base/mcp" -Method Post -ContentType "application/json" -Headers @{ Accept = "application/json, text/event-stream" } -Body $body
-```
+- `README.md` gives the top-level project overview.
+- `docs/SYSTEM_ARCHITECTURE.md` describes system components and data flow.
+- `docs/LAYOUT.md` maps directories and entrypoints.
+- `docs/CHANGELOG.md` records verified current-state changes.
+- `docs/GUIDE.md` provides operator and developer workflow guidance.

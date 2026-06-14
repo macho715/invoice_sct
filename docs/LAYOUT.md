@@ -1,6 +1,6 @@
 # Repository Layout
 
-## Current Structure
+## Repository Layout
 
 ```
 SCT_ONTOLOGY-main/
@@ -225,7 +225,7 @@ The current layout reflects the invoice audit platform (Phase 1 MVP), which repl
 ### Mermaid graph
 
 ```mermaid
-flowchart TD
+graph TD
   ROOT[Repository root] --> SRC[src / app code]
   ROOT --> DOCS[docs / markdown]
   ROOT --> AGENTS[agent profiles]
