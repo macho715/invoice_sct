@@ -17,6 +17,7 @@ describe('middleware API auth', () => {
     expect(middleware(apiRequest(undefined, '203.0.113.20', '/api/files/ingest')).status).toBe(200);
     expect(middleware(apiRequest(undefined, '203.0.113.21', '/api/audit/status?job_id=j1')).status).toBe(200);
     expect(middleware(apiRequest(undefined, '203.0.113.22', '/api/invoice-audit/run')).status).toBe(200);
+    expect(middleware(apiRequest(undefined, '203.0.113.23', '/api/export/download?job_id=j1')).status).toBe(200);
   });
 
   it('rejects API requests when API_SECRET_KEY is missing', async () => {

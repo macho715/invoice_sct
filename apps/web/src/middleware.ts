@@ -8,7 +8,8 @@ const TEXT_ENCODER = new TextEncoder();
 const PUBLIC_UI_API_ROUTES = [
   '/api/files/ingest',
   '/api/audit/status',
-  '/api/invoice-audit/run'
+  '/api/invoice-audit/run',
+  '/api/export/download'
 ];
 
 let reqCounter = 0;
