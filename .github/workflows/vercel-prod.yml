@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_run:
-    workflows: ["Release Gate (MVP SC-001..SC-013)"]
-    types:
-      - completed
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -29,8 +25,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
-    # Prevent double-deploy: only fire on push to main, not workflow_run
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
