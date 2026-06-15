@@ -7,6 +7,7 @@ from app.routes.health import router as health_router
 from app.routes.parse import router as parse_router
 from app.routes.export import router as export_router
 from app.routes.notebooklm import router as notebooklm_router
+from app.routes.vision import router as vision_router
 from app.telemetry import init_telemetry
 
 
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(parse_router)
     app.include_router(export_router, prefix="/v1")
     app.include_router(notebooklm_router, prefix="/v1")
+    app.include_router(vision_router, prefix="")
     return app
 
 

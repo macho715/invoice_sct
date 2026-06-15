@@ -82,6 +82,7 @@ class TestNotebookLmMcpClient:
 
     @pytest.mark.asyncio
     async def test_add_source_extracts_source_id_from_json_result(self, monkeypatch):
+        # Clear global show_browser toggles so the default (no show_browser arg) is exercised.
         monkeypatch.delenv("NOTEBOOKLM_SHOW_BROWSER", raising=False)
         monkeypatch.delenv("NOTEBOOKLM_ADD_SOURCE_SHOW_BROWSER", raising=False)
         client = NotebookLmMcpClient("http://notebooklm.test/mcp")
@@ -216,6 +217,7 @@ class TestNotebookLmMcpClient:
 
     @pytest.mark.asyncio
     async def test_ask_question_calls_expected_tool(self, monkeypatch):
+        # Clear global show_browser toggles so the default (no show_browser arg) is exercised.
         monkeypatch.delenv("NOTEBOOKLM_SHOW_BROWSER", raising=False)
         monkeypatch.delenv("NOTEBOOKLM_ASK_SHOW_BROWSER", raising=False)
         client = NotebookLmMcpClient("http://notebooklm.test/mcp")

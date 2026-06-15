@@ -1,12 +1,10 @@
 import hashlib
 import hmac
 import json
-import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.notebooklm.orchestrator import NotebookLmOrchestrator
-from app.notebooklm.extractor import parse_extraction
 
 
 @pytest.fixture
@@ -15,11 +13,9 @@ def orchestrator(monkeypatch):
     monkeypatch.setenv("NOTEBOOKLM_MCP_URL", "http://test/notebooklm/mcp")
     monkeypatch.setenv("WEB_CALLBACK_URL", "http://test/web/callback")
     monkeypatch.setenv("NOTEBOOKLM_CALLBACK_SECRET", "test-secret")
-    monkeypatch.setattr(
-        "app.notebooklm.orchestrator.socket.getaddrinfo",
-        lambda host, port: [(None, None, None, "", ("8.8.8.8", 0))],
-    )
-    return NotebookLmOrchestrator()
+    instance = NotebookLmOrchestrator()
+    monkeypatch.setattr(instance, "_is_safe_blob_url", lambda url: True)
+    return instance
 
 
 class TestOrchestratorHappyPath:
@@ -78,7 +74,7 @@ class TestOrchestratorHappyPath:
 class TestOrchestratorFailures:
     def test_rejects_private_blob_url(self, monkeypatch):
         def fake_getaddrinfo(host, port):
-            if host == "public.example":
+            if host == "store.public.blob.vercel-storage.com":
                 return [(None, None, None, "", ("8.8.8.8", 0))]
             return [(None, None, None, "", ("127.0.0.1", 0))]
 
@@ -88,7 +84,7 @@ class TestOrchestratorFailures:
         assert orchestrator._is_safe_blob_url("http://127.0.0.1/blob.pdf") is False
         assert orchestrator._is_safe_blob_url("http://localhost/blob.pdf") is False
         assert orchestrator._is_safe_blob_url("file:///tmp/blob.pdf") is False
-        assert orchestrator._is_safe_blob_url("https://public.example/blob.pdf") is True
+        assert orchestrator._is_safe_blob_url("https://store.public.blob.vercel-storage.com/blob.pdf") is True
 
     @pytest.mark.asyncio
     async def test_missing_notebooklm_url_returns_stable_error(self, monkeypatch):
@@ -283,3 +279,66 @@ class TestOrchestratorFailures:
 
         assert result["status"] == "CALLBACK_REJECTED"
         assert result["callback_status"] == 404
+
+
+class TestSsrGuard:
+    def test_is_public_ip_rejects_loopback(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_public_ip("127.0.0.1") is False
+
+    def test_is_public_ip_rejects_private_ipv4(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_public_ip("10.0.0.1") is False
+        assert o._is_public_ip("192.168.1.1") is False
+        assert o._is_public_ip("172.16.0.1") is False
+
+    def test_is_public_ip_rejects_shared_address_space(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_public_ip("100.64.0.1") is False
+
+    def test_is_public_ip_accepts_public_ipv4(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_public_ip("8.8.8.8") is True
+
+    def test_is_safe_blob_url_rejects_non_http_scheme(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("ftp://example.com/file") is False
+        assert o._is_safe_blob_url("file:///etc/passwd") is False
+
+    def test_is_safe_blob_url_rejects_missing_hostname(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("http:///path") is False
+
+    def test_is_safe_blob_url_rejects_localhost(self):
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("http://localhost:3000/file") is False
+        assert o._is_safe_blob_url("http://127.0.0.1/file") is False
+
+    def test_is_safe_blob_url_rejects_untrusted_public_domain(self, monkeypatch):
+        monkeypatch.setattr("socket.getaddrinfo", lambda hostname, port: [(None, None, None, None, ("8.8.8.8", 0))])
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("https://example.com/file.pdf") is False
+
+    def test_is_safe_blob_url_accepts_allowed_blob_domain(self, monkeypatch):
+        monkeypatch.setattr("socket.getaddrinfo", lambda hostname, port: [(None, None, None, None, ("8.8.8.8", 0))])
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("https://store.public.blob.vercel-storage.com/file.pdf") is True
+
+    def test_is_safe_blob_url_rejects_rebound_allowed_blob_domain(self, monkeypatch):
+        monkeypatch.setattr("socket.getaddrinfo", lambda hostname, port: [(None, None, None, None, ("127.0.0.1", 0))])
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("https://store.public.blob.vercel-storage.com/file.pdf") is False
+
+    def test_is_safe_blob_url_uses_configured_exact_allowlist(self, monkeypatch):
+        monkeypatch.setenv("NOTEBOOKLM_BLOB_ALLOWED_HOSTS", "signed.example.com")
+        monkeypatch.setattr("socket.getaddrinfo", lambda hostname, port: [(None, None, None, None, ("8.8.8.8", 0))])
+        o = NotebookLmOrchestrator()
+        assert o._is_safe_blob_url("https://signed.example.com/file.pdf") is True
+        assert o._is_safe_blob_url("https://other.example.com/file.pdf") is False
+
+    @pytest.mark.asyncio
+    async def test_invalid_blob_url_returns_error(self, orchestrator, monkeypatch):
+        monkeypatch.setattr(orchestrator, "_is_safe_blob_url", lambda url: False)
+        result = await orchestrator.run("job_1", "http://bad.local/blob")
+        assert result["status"] == "NOTEBOOKLM_UNAVAILABLE"
+        assert result["error_code"] == "INVALID_BLOB_URL"

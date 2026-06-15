@@ -21,7 +21,9 @@ export const ErrorCodes = [
   'FX_POLICY_REQUIRED',
   'FX_POLICY_VALIDATION_FAILED',
   'PARSE_PDF_UNSUPPORTED',      // P3B EC-016 (415)
-  'PARSE_PDF_LOW_CONFIDENCE'    // P3B/P3C (422) - low conf forces AMBER
+  'PARSE_PDF_LOW_CONFIDENCE',   // P3B/P3C (422) - low conf forces AMBER
+  'INVALID_REQUEST',            // EC-020 (400)
+  'CONFIRM_FAILED'              // EC-021 (500)
 ] as const;
 export type ErrorCode = typeof ErrorCodes[number];
 
@@ -47,7 +49,9 @@ const HTTP_BY_CODE: Record<ErrorCode, number> = {
   FX_POLICY_REQUIRED: 403,
   FX_POLICY_VALIDATION_FAILED: 422,
   PARSE_PDF_UNSUPPORTED: 415,
-  PARSE_PDF_LOW_CONFIDENCE: 422
+  PARSE_PDF_LOW_CONFIDENCE: 422,
+  INVALID_REQUEST: 400,
+  CONFIRM_FAILED: 500
 };
 
 export function httpForError(code: ErrorCode): number {

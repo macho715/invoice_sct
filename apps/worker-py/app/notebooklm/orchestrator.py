@@ -5,7 +5,7 @@ import json
 import os
 import socket
 from urllib.parse import urlparse
-from typing import Any, Optional
+from typing import Optional
 import httpx
 
 from .extractor import parse_extraction
@@ -13,6 +13,7 @@ from .mcp_client import MarkItDownMcpClient, NotebookLmMcpClient, McpClientUnava
 from .prompts import EXTRACTION_PROMPT
 
 STRICT_JSON_RETRY_SUFFIX = "\n\nReturn JSON only. No prose, no markdown fences, no comments."
+DEFAULT_BLOB_ALLOWED_HOSTS = (".blob.vercel-storage.com",)
 
 
 class NotebookLmOrchestrator:
@@ -98,14 +99,23 @@ class NotebookLmOrchestrator:
             ip_obj = ipaddress.ip_address(ip_str)
         except ValueError:
             return False
-        return not (
-            ip_obj.is_private
-            or ip_obj.is_loopback
-            or ip_obj.is_link_local
-            or ip_obj.is_multicast
-            or ip_obj.is_reserved
-            or ip_obj.is_unspecified
-        )
+        return ip_obj.is_global
+
+    def _blob_allowed_hosts(self) -> tuple[str, ...]:
+        raw = os.environ.get("NOTEBOOKLM_BLOB_ALLOWED_HOSTS", "")
+        configured = tuple(host.strip().lower() for host in raw.split(",") if host.strip())
+        return configured or DEFAULT_BLOB_ALLOWED_HOSTS
+
+    def _is_allowed_blob_hostname(self, hostname: str) -> bool:
+        normalized = hostname.rstrip(".").lower()
+        for allowed in self._blob_allowed_hosts():
+            allowed = allowed.rstrip(".").lower()
+            if allowed.startswith("."):
+                if normalized.endswith(allowed):
+                    return True
+            elif normalized == allowed:
+                return True
+        return False
 
     def _is_safe_blob_url(self, blob_url: str) -> bool:
         try:
@@ -116,6 +126,8 @@ class NotebookLmOrchestrator:
         if parsed.scheme not in {"http", "https"}:
             return False
         if not parsed.hostname:
+            return False
+        if not self._is_allowed_blob_hostname(parsed.hostname):
             return False
 
         try:
