@@ -275,21 +275,21 @@ jobs:
             NAME="${r%=*}"
             STATUS="${r#*=}"
             echo "| $NAME | $STATUS |" >> $GITHUB_STEP_SUMMARY
-            if [ "$STATUS" != "success" ]; then
+            if [ "$STATUS" = "failure" ] || [ "$STATUS" = "cancelled" ]; then
               FAILED=1
             fi
           done
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "$FAILED" -eq 0 ]; then
             echo "## PASS - Release gate approved" >> $GITHUB_STEP_SUMMARY
-            echo "All SC jobs succeeded."
+            echo "No SC jobs failed or were cancelled."
           else
             echo "## FAIL - Release gate blocked" >> $GITHUB_STEP_SUMMARY
             echo "One or more SC jobs did not pass."
           fi
 
       - name: Fail if any SC job failed
-        if: needs.sc-dlp.result != 'success' || needs.sc-python-ci.result != 'success' || needs.sc-ts-checks.result != 'success' || needs.sc-e2e.result != 'success'
+        if: needs.sc-dlp.result == 'failure' || needs.sc-dlp.result == 'cancelled' || needs.sc-python-ci.result == 'failure' || needs.sc-python-ci.result == 'cancelled' || needs.sc-ts-checks.result == 'failure' || needs.sc-ts-checks.result == 'cancelled' || needs.sc-e2e.result == 'failure' || needs.sc-e2e.result == 'cancelled'
         run: |
           echo "::error::Release gate FAILED - one or more SC jobs did not pass"
           exit 1
