@@ -15,6 +15,10 @@ def orchestrator(monkeypatch):
     monkeypatch.setenv("NOTEBOOKLM_MCP_URL", "http://test/notebooklm/mcp")
     monkeypatch.setenv("WEB_CALLBACK_URL", "http://test/web/callback")
     monkeypatch.setenv("NOTEBOOKLM_CALLBACK_SECRET", "test-secret")
+    monkeypatch.setattr(
+        "app.notebooklm.orchestrator.socket.getaddrinfo",
+        lambda host, port: [(None, None, None, "", ("8.8.8.8", 0))],
+    )
     return NotebookLmOrchestrator()
 
 
@@ -72,6 +76,20 @@ class TestOrchestratorHappyPath:
 
 
 class TestOrchestratorFailures:
+    def test_rejects_private_blob_url(self, monkeypatch):
+        def fake_getaddrinfo(host, port):
+            if host == "public.example":
+                return [(None, None, None, "", ("8.8.8.8", 0))]
+            return [(None, None, None, "", ("127.0.0.1", 0))]
+
+        monkeypatch.setattr("app.notebooklm.orchestrator.socket.getaddrinfo", fake_getaddrinfo)
+        orchestrator = NotebookLmOrchestrator()
+
+        assert orchestrator._is_safe_blob_url("http://127.0.0.1/blob.pdf") is False
+        assert orchestrator._is_safe_blob_url("http://localhost/blob.pdf") is False
+        assert orchestrator._is_safe_blob_url("file:///tmp/blob.pdf") is False
+        assert orchestrator._is_safe_blob_url("https://public.example/blob.pdf") is True
+
     @pytest.mark.asyncio
     async def test_missing_notebooklm_url_returns_stable_error(self, monkeypatch):
         monkeypatch.setenv("MARKITDOWN_MCP_URL", "http://test/markitdown/mcp")
