@@ -200,5 +200,5 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 Earlier the repository ran a Cloudflare Worker serving the SCT ontology ChatGPT App (`server/src/`,
 `public/`, `data/corpus/`, `wh status/`, root `tests/`, D1 migrations `0001-0007`). That runtime was
 deleted and replaced by the current invoice audit platform; D1 migrations are kept for reference only,
-superseded by Postgres `0008`–`0012`. Full change history: [`CHANGELOG.md`](../CHANGELOG.md). See
-[`SYSTEM_ARCHITECTURE.md`](../SYSTEM_ARCHITECTURE.md) for the full architecture.
+superseded by Postgres `0008`–`0012`. Full change history: [`CHANGELOG.md`](./CHANGELOG.md). See
+[`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md) for the full architecture.

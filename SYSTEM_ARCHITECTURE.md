@@ -12,7 +12,7 @@ authoritative.
 
 ## Rule #0 — OR Intake & Final Excel Guarantee
 
-> Highest-priority behavior (see [`CLAUDE.md`](../CLAUDE.md) §0). On conflict with any gate or
+> Highest-priority behavior (see [`CLAUDE.md`](./CLAUDE.md) §0). On conflict with any gate or
 > verdict, Rule #0 wins.
 
 Uploading an **Excel invoice OR a PDF** — either alone, or both — always produces a downloadable
@@ -248,4 +248,4 @@ The platform originally ran as a single Cloudflare Worker serving the SCT ontolo
 D1-backed MCP tools, corpus search, and Decision Card widgets. That runtime was decommissioned and
 replaced by the current `apps/web` + `apps/worker-py` + `apps/mcp-server` architecture; legacy D1
 migrations `0001-0007` remain in the repo for reference only (current migrations `0008-0012` target
-Neon Postgres). Full change history: [`CHANGELOG.md`](../CHANGELOG.md).
+Neon Postgres). Full change history: [`CHANGELOG.md`](./CHANGELOG.md).
