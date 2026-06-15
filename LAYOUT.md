@@ -19,7 +19,7 @@ SCT_ONTOLOGY-main/
 │   │   ├── app/middleware/     # Audit log middleware (FR-025)
 │   │   ├── app/notebooklm/     # MarkItDown → NotebookLM orchestrator + MCP client
 │   │   ├── app/exporters/      # 13-sheet workbook export logic
-│   │   └── tests/              # Pytest (166 tests)
+│   │   └── tests/              # Pytest (165 tests)
 │   │
 │   └── mcp-server/             # Hono MCP validation server (Google Cloud Run, standalone)
 │       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
@@ -186,7 +186,7 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 | Web typecheck | `pnpm --dir apps/web typecheck` |
 | Web tests | `pnpm --dir apps/web test` (167) |
 | Web build | `pnpm --dir apps/web build` |
-| Worker tests | `cd apps/worker-py && pytest -q` (166) |
+| Worker tests | `cd apps/worker-py && pytest -q` (165) |
 | Worker syntax | `python -m py_compile apps/worker-py/app/routes/parse.py` |
 | MCP typecheck | `cd apps/mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps/mcp-server && pnpm test` (186) |

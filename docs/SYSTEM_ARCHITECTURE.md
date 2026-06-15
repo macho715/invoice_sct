@@ -194,7 +194,7 @@ Assembled by `apps/web/src/lib/workbook-builder.ts`; rendered to xlsx by the wor
 | App | Host | Status | Workflow |
 |---|---|---|---|
 | apps/web | Vercel | Live (`sct-ontology-invoice-audit.vercel.app`) | `.github/workflows/vercel-prod.yml` |
-| apps/worker-py | Google Cloud Run | **Live** — `hvdc-invoice-parser` (`dsv-invoice`/`asia-northeast3`, public). `PARSER_WORKER_URL` → its `*.run.app` URL. | `apps/worker-py/deploy-cloudrun.sh` |
+| apps/worker-py | Google Cloud Run | **Live** — `hvdc-invoice-parser` (`dsv-invoice`/`asia-northeast3`). ⚠ Deployed `--allow-unauthenticated`; the worker does **not** yet validate the `PARSER_WORKER_TOKEN` it receives — a known hardening gap (see Security). `PARSER_WORKER_URL` → its `*.run.app` URL. | `apps/worker-py/deploy-cloudrun.sh` |
 | apps/mcp-server | Google Cloud Run | Not deployed yet (worker alone serves the audit flow) | `apps/mcp-server/deploy-cloudrun.sh` |
 
 > Worker deploy detail (URL, public-auth caveat, the BuildKit Dockerfile fix):
@@ -235,19 +235,25 @@ sensitive evidence in environment variables.
   connections to Vercel Blob + Neon only.
 - `.gitignore` excludes `**/private/**`, `**/DSV_SHIPMENT_FULL_PACKAGE_*/**`, and PII template
   patterns. Never commit secrets, raw rates, or P2 identifiers.
+- ⚠ **Worker auth hardening (OPEN):** `apps/worker-py` is deployed `--allow-unauthenticated` and does
+  **not** validate the `PARSER_WORKER_TOKEN` the web app sends; `/v1/parse` fetches a caller-supplied
+  `blob_url` server-side (`_fetch_blob`). As-is this is a public parser/export service for private
+  audit data plus an arbitrary-URL fetch (SSRF) surface. Before treating public exposure as
+  acceptable: restrict the service to `apps/web` via Cloud Run IAM (ID-token, as done for
+  `markitdown-mcp`) **or** enforce bearer-token validation in the worker, and constrain `blob_url` to
+  the allowed private Blob host.
 
 ## Verification Baseline (2026-06-15)
 
 | Component | Tests | Typecheck |
 |---|---|---|
 | apps/web | 167 | 0 errors |
-| apps/worker-py | 166 | py_compile OK |
+| apps/worker-py | 165 | py_compile OK |
 | apps/mcp-server | 186 | 0 errors |
-| **Total** | **519** | **0 errors** |
+| **Total** | **518** | **0 errors** |
 
-> worker count is `pytest -q` excluding the untracked in-progress Vision-rules test
-> still in the working tree; includes the 3 DSV-matrix parser tests. Full tree
-> (with all in-progress Vision tests) reports 172.
+> worker count is `pytest -q` from a clean checkout of tracked files (includes the 3 DSV-matrix
+> parser tests). Local working trees with in-progress Vision work may report a higher number.
 
 ## History
 
@@ -256,3 +262,75 @@ D1-backed MCP tools, corpus search, and Decision Card widgets. That runtime was 
 replaced by the current `apps/web` + `apps/worker-py` + `apps/mcp-server` architecture; legacy D1
 migrations `0001-0007` remain in the repo for reference only (current migrations `0008-0012` target
 Neon Postgres). Full change history: [`CHANGELOG.md`](../CHANGELOG.md).
+
+
+## Codex Documentation Update — 2026-06-15T17:51:50.268914+00:00
+
+**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
+
+**Purpose:** This section reflects detected source, config, and agent components as an architecture inventory.
+
+### Evidence inventory
+
+**Source/code files sampled:**
+- `apps\markitdown-mcp\deploy.sh`
+- `apps\mcp-server\db\migrate-rate-cards.sql`
+- `apps\mcp-server\db\seed-rate-cards.sql`
+- `apps\mcp-server\deploy-cloudrun.sh`
+- `apps\mcp-server\src\__tests__\router.test.ts`
+- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
+- `apps\mcp-server\src\db.ts`
+- `apps\mcp-server\src\main.ts`
+- `apps\mcp-server\src\schemas\dlp-guard.ts`
+- `apps\mcp-server\src\telemetry.ts`
+- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
+- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
+
+**Documentation files sampled:**
+- `.hermes\plans\auto-20260614-013800.md`
+- `.vercel\README.txt`
+- `20260615_AUTOPILOT_REVIEW_MarkItDown_GoogleVision_통합_v1.md`
+- `20260615_VisionFallback_Orchestration_구현작업서_v1.md`
+- `20260615_google_vision_gcp_auth_worklog.md`
+- `20260615_google_vision_pdf_parser_logic_guide.md`
+- `20260615_구현작업서_MarkItDown_GoogleVision_통합_v1.md`
+- `CHANGELOG.md`
+- `CLAUDE.md`
+- `GUIDE.md`
+- `LAYOUT.md`
+- `README.md`
+
+**Config/build files sampled:**
+- `.claude\settings.local.json`
+- `.codex\root-docs-dryrun-latest.json`
+- `.codex\root-docs-scan.json`
+- `.codex\root-docs-write.json`
+- `.github\dependabot.yml`
+- `.github\workflows\codeql.yml`
+- `.github\workflows\python-worker-ci.yml`
+- `.github\workflows\release-gate.yml`
+- `.github\workflows\reliability.yml`
+- `.github\workflows\secret-scan.yml`
+- `.github\workflows\vercel-prod.yml`
+- `.github\workflows\web-ci.yml`
+
+**Agent profile files sampled:**
+- No agent profile detected; this update records the absence explicitly.
+
+### Mermaid graph
+
+```mermaid
+flowchart TB
+  subgraph Repository
+    SRC[Source files] --> CFG[Config/build files]
+    CFG --> DOC[Root documentation]
+    AG[Agent profiles] --> DOC
+  end
+  DOC --> QA[Doc-code alignment verification]
+```
+
+### Verification notes
+
+- Append-only update generated by `root-docs-batch-update`.
+- Code/config/doc/agent inventory counts: code=290, docs=193, config=705, agent_profiles=0.
+- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.
