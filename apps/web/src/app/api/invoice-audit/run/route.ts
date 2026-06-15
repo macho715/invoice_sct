@@ -40,11 +40,19 @@ export async function POST(req: Request): Promise<Response> {
   const files = await STORE.listSourceFiles(body.job_id);
   if (files.length === 0) return err('INVALID_STATE', 'no source files');
 
-  const invoiceFile = files.find(f => f.file_type === 'xlsx' || f.file_type === 'md' || f.file_type === 'txt');
-  const evidenceFiles = files.filter(f => f.file_type === 'pdf');
+  // Rule #0 (CLAUDE.md): Excel invoice OR PDF evidence — either alone must yield a
+  // final Excel. Prefer a structured doc (xlsx/md/txt) as the invoice source; if none
+  // was uploaded, fall back to the first PDF as the primary invoice source and treat
+  // the remaining PDFs as evidence. A PDF source typically yields 0 structured lines,
+  // which the zero-lines guard below routes to AMBER/REVIEW_REQUIRED — still producing
+  // a result the workbook can be built from. We never 409 a PDF-only upload.
+  const docInvoice = files.find(f => f.file_type === 'xlsx' || f.file_type === 'md' || f.file_type === 'txt');
+  const pdfFiles = files.filter(f => f.file_type === 'pdf');
+  const invoiceFile = docInvoice ?? pdfFiles[0];
+  const evidenceFiles = docInvoice ? pdfFiles : pdfFiles.slice(1);
 
   if (!invoiceFile) {
-    return err('INVALID_STATE', 'invoice file required (xlsx, md, or txt) — PDF-only uploads are evidence, not invoices');
+    return err('INVALID_STATE', 'no invoice or evidence file uploaded (expected xlsx, md, txt, or pdf)');
   }
 
   await STORE.updateJob(body.job_id, { status: 'PARSING' });

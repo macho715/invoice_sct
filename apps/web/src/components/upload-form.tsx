@@ -69,7 +69,7 @@ export default function UploadForm() {
   return (
     <form className="card" onSubmit={onSubmit}>
       <h2>Upload invoice or evidence</h2>
-      <p>Invoice required: <code>.xlsx</code>, <code>.md</code>, or <code>.txt</code>. Evidence: <code>.pdf</code> files can be added with the invoice.</p>
+      <p>Upload an Excel invoice (<code>.xlsx</code>, <code>.md</code>, <code>.txt</code>) <strong>or</strong> a <code>.pdf</code> — either one alone produces a final Excel audit pack. You can also upload both together.</p>
       <input
         className="input"
         type="file"

@@ -156,7 +156,7 @@ describe('POST /api/invoice-audit/run', () => {
     await expect(STORE.getJob(jobId)).resolves.toMatchObject({ status: 'FAILED', verdict: 'FAILED' });
   });
 
-  it('rejects PDF-only evidence without leaving the job stuck in PARSING', async () => {
+  it('accepts a PDF-only upload as the invoice source and routes to AMBER review (Rule #0 OR semantics)', async () => {
     const fd = new FormData();
     fd.set('file', new File(['%PDF-1.4 minimal'], 'pod.pdf', { type: 'application/pdf' }));
     const ingest = await INGEST_POST(new Request('http://test/api/files/ingest', {
@@ -166,18 +166,30 @@ describe('POST /api/invoice-audit/run', () => {
     }));
     const uploaded = await ingest.json();
 
+    // Worker parses a PDF into evidence candidates with zero structured invoice lines.
+    // Persistent mock (not Once): the zero-lines guard returns AMBER before any MCP
+    // validation, and stray background tasks must not starve the parse call's mock.
+    fetchMock.mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ parse_result_id: 'pr_pdf', job_id: uploaded.job_id, file_id: 'f_pdf', normalized: { invoice_id: 'inv_pdf', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [{ source_file_id: 'f_pdf', text_span: 'POD', confidence: 0.9 }], parser_confidence: 0.9, parser_version: 'parser-0.2.0-pdf-0.1.0' } })
+    });
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+
     const run = await POST(new Request('http://test/api/invoice-audit/run', {
       method: 'POST',
       body: JSON.stringify({ job_id: uploaded.job_id }),
       headers: { 'content-type': 'application/json' }
     }));
 
-    expect(run.status).toBe(409);
-    await expect(run.json()).resolves.toMatchObject({
-      code: 'INVALID_STATE',
-      message: expect.stringContaining('invoice file required')
-    });
-    await expect(STORE.getJob(uploaded.job_id)).resolves.toMatchObject({ status: 'UPLOADED' });
+    // No 409: the PDF becomes the invoice source. Zero structured lines -> AMBER review,
+    // so a result still exists and the final Excel workbook can be built (Rule #0).
+    expect(run.status).toBe(202);
+    const body = await run.json();
+    expect(body.status).toBe('REVIEW_REQUIRED');
+    expect(body.verdict).toBe('AMBER');
+    expect(body.action_items[0].issue_type).toBe('NO_INVOICE_LINES_EXTRACTED');
+    await expect(STORE.getJob(uploaded.job_id)).resolves.toMatchObject({ status: 'REVIEW_REQUIRED', verdict: 'AMBER' });
   });
 
   it('does NOT trigger NotebookLM when NOTEBOOKLM_ENABLED is unset', async () => {

@@ -2,6 +2,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+// Encode each path segment but preserve '/' so the dev-blob catch-all route
+// ([...path]) receives proper segments. encodeURIComponent on the whole path
+// turns '/' into '%2F', which breaks Next.js catch-all parsing (500 on fetch).
+function encodeBlobPath(filename: string): string {
+  return filename.split('/').map(encodeURIComponent).join('/');
+}
+
 export interface BlobUploadResult {
   blob_ref: string;
   sha256: string;
@@ -43,7 +50,7 @@ export async function uploadToBlob(file: File, jobId: string): Promise<BlobUploa
       sha256,
       size_bytes: buf.byteLength,
       mime_type: file.type || 'application/octet-stream',
-      blob_url: `${base}/api/dev/blob/${encodeURIComponent(filename)}`
+      blob_url: `${base}/api/dev/blob/${encodeBlobPath(filename)}`
     };
   }
 
@@ -71,7 +78,7 @@ export async function getSignedDownloadUrl(blobRef: string): Promise<string> {
   if (blobRef.startsWith('local:')) {
     const filename = blobRef.slice('local:'.length);
     const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3000';
-    return `${base}/api/dev/blob/${encodeURIComponent(filename)}`;
+    return `${base}/api/dev/blob/${encodeBlobPath(filename)}`;
   }
 
   if (blobRef.startsWith('blob:')) {

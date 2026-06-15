@@ -114,7 +114,8 @@ export async function POST(req: Request): Promise<Response> {
     mkdirSync(join(devBlobDir, `exports/${jobId}`), { recursive: true });
     writeFileSync(target, buffer);
     const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3000';
-    signedUrl = `${base}/api/dev/blob/${encodeURIComponent(filename)}`;
+    // Encode per segment (preserve '/') so the dev-blob catch-all route resolves it.
+    signedUrl = `${base}/api/dev/blob/${filename.split('/').map(encodeURIComponent).join('/')}`;
   } else {
     const { put } = await import('@vercel/blob');
     const res = await put(filename, buffer, {
