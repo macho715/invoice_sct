@@ -15,6 +15,29 @@ beforeEach(() => {
   delete process.env.PARSER_WORKER_URL;
   delete process.env.WORKER_URL;
   delete process.env.PARSER_WORKER_TOKEN;
+  // Phase 1 NotebookLM trigger is flag-gated; keep it OFF for all existing tests so
+  // the sequential fetch mocks below are not consumed by a background trigger call.
+  delete process.env.NOTEBOOKLM_ENABLED;
+  delete process.env.NOTEBOOKLM_NOTEBOOK_ID;
+});
+
+// Wait for the fire-and-forget NotebookLM trigger (void async in the route) to flush.
+async function waitFor(pred: () => boolean, timeoutMs = 500): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (pred()) return true;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return pred();
+}
+
+function calledNotebookLm(): boolean {
+  return fetchMock.mock.calls.some((c) => String(c[0]).includes('/v1/notebooklm/run'));
+}
+
+const PARSE_OK = (jobId: string) => ({
+  ok: true, status: 200,
+  json: async () => ({ parse_result_id: 'pr1', job_id: jobId, file_id: 'f1', normalized: { invoice_id: 'inv1', invoice_header: { currency: 'AED' }, invoice_lines: [{ line_id: 'l1', description: 'TRUCKING', currency: 'AED', amount: 100, qty: 2, rate: 50, source_ref: { sheet: 'S', row: 2, col: '0' } }], evidence_candidates: [], parser_confidence: 0.9, parser_version: 'parser-0.1.0' } })
 });
 
 async function setupJob(): Promise<{ jobId: string; fileId: string }> {
@@ -155,5 +178,58 @@ describe('POST /api/invoice-audit/run', () => {
       message: expect.stringContaining('invoice file required')
     });
     await expect(STORE.getJob(uploaded.job_id)).resolves.toMatchObject({ status: 'UPLOADED' });
+  });
+
+  it('does NOT trigger NotebookLM when NOTEBOOKLM_ENABLED is unset', async () => {
+    const { jobId } = await setupJob();
+    fetchMock
+      .mockResolvedValueOnce(PARSE_OK(jobId))
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: {} }) });
+    process.env.CF_MCP_BASE_URL = 'https://cf.example';
+    process.env.CF_MCP_TIMEOUT_MS = '1000';
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+    const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: jobId }), headers: { 'content-type': 'application/json' } }));
+    expect(r.status).toBe(202);
+    await waitFor(() => calledNotebookLm(), 150); // give any stray background task a chance
+    expect(calledNotebookLm()).toBe(false);
+  });
+
+  it('triggers /v1/notebooklm/run when NOTEBOOKLM_ENABLED=true, without changing the verdict', async () => {
+    const { jobId } = await setupJob();
+    process.env.NOTEBOOKLM_ENABLED = 'true';
+    process.env.CF_MCP_BASE_URL = 'https://cf.example';
+    process.env.CF_MCP_TIMEOUT_MS = '1000';
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/v1/notebooklm/run')) return { ok: true, status: 200, json: async () => ({ job_id: jobId, status: 'CALLBACK_SENT' }) };
+      if (u.includes('/v1/parse')) return PARSE_OK(jobId);
+      return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: {} }) }; // CF MCP — benign, tools fall back
+    });
+    const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: jobId }), headers: { 'content-type': 'application/json' } }));
+    expect(r.status).toBe(202); // verdict pipeline unaffected by the parallel trigger
+    const triggered = await waitFor(() => calledNotebookLm());
+    expect(triggered).toBe(true);
+  });
+
+  it('NotebookLM trigger failure is isolated — route still returns its verdict', async () => {
+    const { jobId } = await setupJob();
+    process.env.NOTEBOOKLM_ENABLED = 'true';
+    process.env.CF_MCP_BASE_URL = 'https://cf.example';
+    process.env.CF_MCP_TIMEOUT_MS = '1000';
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/v1/notebooklm/run')) throw Object.assign(new Error('worker down'), { name: 'TypeError' });
+      if (u.includes('/v1/parse')) return PARSE_OK(jobId);
+      return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: {} }) };
+    });
+    const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: jobId }), headers: { 'content-type': 'application/json' } }));
+    expect(r.status).toBe(202);
+    const body = await r.json();
+    expect(body.status).toBe('REVIEW_REQUIRED');
   });
 });
