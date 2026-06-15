@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -13,6 +14,26 @@ try:
 except ImportError:
     streamable_http_client = None
     ClientSession = None
+
+
+def _fetch_id_token(audience: str) -> str:
+    """Mint a Google-signed ID token for `audience` (a Cloud Run service URL).
+
+    Uses Application Default Credentials / the Cloud Run metadata server so a
+    worker on Cloud Run can call an IAM-protected (`--no-allow-unauthenticated`)
+    MCP service. Raises McpClientUnavailable if google-auth is missing or the
+    mint fails (the orchestrator treats that as MARKITDOWN_FAILED).
+    """
+    try:
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+    except ImportError as e:  # pragma: no cover - exercised via patched tests
+        raise McpClientUnavailable("google-auth not installed for ID token") from e
+    try:
+        request = google.auth.transport.requests.Request()
+        return google.oauth2.id_token.fetch_id_token(request, audience)
+    except Exception as e:
+        raise McpClientUnavailable(f"failed to mint ID token: {e!r}") from e
 
 
 class McpClientUnavailable(Exception):
@@ -64,16 +85,33 @@ def _result_to_text(result: Any) -> str:
 
 
 class StreamableMcpClient:
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 30.0):
+    def __init__(self, base_url: Optional[str] = None, timeout: float = 30.0, use_id_token: bool = False):
         self.base_url = base_url
         if not self.base_url:
             raise McpClientUnavailable("MCP base URL not set")
         self.timeout = timeout
+        self.use_id_token = use_id_token
+
+    def _auth_headers(self) -> dict[str, str]:
+        """Authorization header for IAM-protected Cloud Run MCP services.
+
+        Empty when `use_id_token` is off (the default), so the httpx client is
+        constructed exactly as before for non-Cloud-Run / public endpoints.
+        """
+        if not self.use_id_token:
+            return {}
+        parsed = urlparse(self.base_url)
+        audience = f"{parsed.scheme}://{parsed.netloc}"
+        return {"Authorization": f"Bearer {_fetch_id_token(audience)}"}
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         if streamable_http_client is None or ClientSession is None:
             raise McpClientUnavailable("MCP Python SDK not installed")
-        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as http_client:
+        http_kwargs: dict[str, Any] = {"timeout": self.timeout, "follow_redirects": True}
+        headers = self._auth_headers()
+        if headers:
+            http_kwargs["headers"] = headers
+        async with httpx.AsyncClient(**http_kwargs) as http_client:
             async with streamable_http_client(self.base_url, http_client=http_client) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
@@ -86,7 +124,11 @@ class StreamableMcpClient:
 class MarkItDownMcpClient(StreamableMcpClient):
     def __init__(self, base_url: Optional[str] = None, timeout: Optional[float] = None):
         resolved_timeout = timeout if timeout is not None else _float_env("MARKITDOWN_MCP_TIMEOUT_MS", 30.0)
-        super().__init__(base_url or os.environ.get("MARKITDOWN_MCP_URL"), timeout=resolved_timeout)
+        super().__init__(
+            base_url or os.environ.get("MARKITDOWN_MCP_URL"),
+            timeout=resolved_timeout,
+            use_id_token=_bool_env("MARKITDOWN_MCP_USE_ID_TOKEN"),
+        )
 
     async def convert_pdf_bytes(self, pdf_bytes: bytes) -> str:
         data_uri = "data:application/pdf;base64," + base64.b64encode(pdf_bytes).decode("ascii")

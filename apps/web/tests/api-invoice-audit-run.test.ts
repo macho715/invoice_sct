@@ -118,6 +118,27 @@ describe('POST /api/invoice-audit/run', () => {
     }
   });
 
+  it('allows token-protected parser workers hosted on Cloud Run (.run.app)', async () => {
+    const { jobId } = await setupJob();
+    fetchMock.mockResolvedValueOnce(PARSE_OK(jobId));
+    process.env.PARSER_WORKER_URL = 'https://hvdc-invoice-parser-abc123-an.a.run.app';
+    process.env.PARSER_WORKER_TOKEN = 't';
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', {
+      method: 'POST',
+      body: JSON.stringify({ job_id: jobId }),
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('https://hvdc-invoice-parser-abc123-an.a.run.app'),
+      expect.any(Object)
+    );
+    if (!r.ok) {
+      await expect(r.json()).resolves.not.toMatchObject({ code: 'STORAGE_AUTH_FAILED' });
+    }
+  });
+
   it('returns structured error when PARSER_WORKER_TOKEN is missing', async () => {
     const { jobId } = await setupJob();
     process.env.PARSER_WORKER_URL = 'http://localhost:8000';
