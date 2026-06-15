@@ -162,6 +162,7 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 
 ## Rules
 
+- **Root docs always in root**: `README.md`, `SYSTEM_ARCHITECTURE.md`, `LAYOUT.md`, `CHANGELOG.md`, `CLAUDE.md`, `AGENTS.md` must **always** exist in the repository root. Never move, delete, or relocate them out of root. `docs/` copies are mirrors/extended versions; the root copies are canonical.
 - Numbers: 2 decimal places, comma thousands. Dates: YYYY-MM-DD.
 - Currency columns: mark USD or AED explicitly.
 - Invoice amount delta > 2% → highlight + reason memo.

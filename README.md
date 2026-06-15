@@ -201,6 +201,13 @@ The worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) 
 **Google Cloud Run** (Fly.io is decommissioned). See the full runbook:
 [`docs/20260615_cloud-run-migration-runbook.md`](./docs/20260615_cloud-run-migration-runbook.md).
 
+> **Status (2026-06-15):** the **worker is live in prod** on Cloud Run — project
+> `dsv-invoice`, region `asia-northeast3`, service `hvdc-invoice-parser`, deployed
+> `--allow-unauthenticated` (public; worker does no inbound token check). Vercel
+> `PARSER_WORKER_URL` points at its `*.run.app` URL. mcp-server and markitdown-mcp
+> are **not** deployed yet (the worker alone serves the audit flow). Actual URL,
+> auth caveat, and the BuildKit Dockerfile fix are in runbook §11.
+
 1. One-time: enable `run`, `cloudbuild`, `artifactregistry` APIs; connect billing on the GCP project.
 2. Worker: `cd apps/worker-py && GCP_PROJECT=<proj> GCP_REGION=<region> ./deploy-cloudrun.sh` (`--port 8000`).
 3. MCP server (only if external clients need it): `cd apps/mcp-server && … ./deploy-cloudrun.sh` (`--port 3000`).
@@ -216,8 +223,19 @@ The worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) 
 
 ## Docs
 
+> **Root-doc rule (always preserved in the repository root):** these six
+> canonical documents must **always exist in the repo root** —
+> [`README.md`](./README.md), [`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md),
+> [`LAYOUT.md`](./LAYOUT.md), [`CHANGELOG.md`](./CHANGELOG.md),
+> [`CLAUDE.md`](./CLAUDE.md), [`AGENTS.md`](./AGENTS.md). Do not move, delete, or
+> relocate them out of root. The `docs/` copies are mirrors/extended versions;
+> the root copies are the canonical entry points.
+
+- [`README.md`](./README.md) — this file (overview, runtime flow, routes, deploy)
+- [`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md) — system architecture (root canonical)
+- [`LAYOUT.md`](./LAYOUT.md) — repository layout (root canonical)
+- [`CHANGELOG.md`](./CHANGELOG.md) — full change history
 - [`CLAUDE.md`](./CLAUDE.md) — project rules (Rule #0, architecture, constraints)
 - [`AGENTS.md`](./AGENTS.md) — agent operating rules
-- [`CHANGELOG.md`](./CHANGELOG.md) — full change history
 - [`docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md`](./docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md) — canonical 3-layer role definition
-- [`docs/SYSTEM_ARCHITECTURE.md`](./docs/SYSTEM_ARCHITECTURE.md) · [`docs/LAYOUT.md`](./docs/LAYOUT.md) · [`docs/GUIDE.md`](./docs/GUIDE.md)
+- [`docs/SYSTEM_ARCHITECTURE.md`](./docs/SYSTEM_ARCHITECTURE.md) · [`docs/LAYOUT.md`](./docs/LAYOUT.md) · [`docs/GUIDE.md`](./docs/GUIDE.md) — mirrored/extended docs
