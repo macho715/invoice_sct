@@ -32,8 +32,8 @@ Three apps plus shared packages. Canonical role definition:
 | Layer | Role | Must not do |
 | --- | --- | --- |
 | **`apps/web`** (Next.js 15, Vercel) | Upload, audit orchestration, gate (PASS/AMBER/ZERO/FAILED), approval, 13-sheet workbook, NotebookLM callback receiver. **Final audit authority.** | Directly automate Chrome / NotebookLM. |
-| **`apps/worker-py`** (FastAPI, Fly.io) | Parse (`xlsx/md/txt/pdf/pdf_json` + DSV waybill), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet export, MarkItDown→NotebookLM orchestration. | Produce the final business verdict. |
-| **`apps/mcp-server`** (Hono, Fly.io) | Standalone JSON-RPC MCP server for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. | — |
+| **`apps/worker-py`** (FastAPI, Google Cloud Run) | Parse (`xlsx/md/txt/pdf/pdf_json` + DSV waybill), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet export, MarkItDown→NotebookLM orchestration. | Produce the final business verdict. |
+| **`apps/mcp-server`** (Hono, Google Cloud Run) | Standalone JSON-RPC MCP server for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. | — |
 
 Shared packages: `packages/tools` (14 validation tools — single source of truth),
 `packages/database` (Neon Postgres pool), `packages/contracts` (Zod schemas),
@@ -63,7 +63,7 @@ graph LR
 ```bash
 pnpm install
 pnpm --dir apps/web typecheck    # 0 errors
-pnpm --dir apps/web test         # 166 tests
+pnpm --dir apps/web test         # 167 tests
 pnpm --dir apps/web build
 ```
 
@@ -120,6 +120,8 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 - `POST /api/audit/export` — build export artifact *(public — browser-initiated)*
 - `GET /api/export/download?job_id=…` — stream the exported workbook *(public)*
 - `POST /api/notebooklm/ingest-summary` — receive HMAC-signed NotebookLM summary
+- `POST /api/fx-policy` — FX policy check
+- `POST /mcp` — in-process MCP tools endpoint
 
 **Worker** (`apps/worker-py`)
 
@@ -150,10 +152,11 @@ cp .env.example apps/web/.env.local
 | `DATABASE_URL` | Neon Postgres (pooled). Required in Vercel Prod/Preview — no in-memory fallback when `VERCEL=1`. |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token (private store). `dev-stub*` enables local on-disk blob. |
 | `API_SECRET_KEY` | Bearer secret enforced by middleware on non-public API routes. |
-| `PARSER_WORKER_URL` / `WORKER_URL` | Parser/export worker base URL (local default `http://127.0.0.1:8000`). |
+| `PARSER_WORKER_URL` / `WORKER_URL` | Parser/export worker base URL (local default `http://127.0.0.1:8000`). Run route allows only `localhost`, `127.0.0.1`, `.run.app` (Cloud Run), `.internal`, `.vercel.app` hosts. |
 | `PARSER_WORKER_TOKEN` | Bearer token the web app sends to the worker. |
 | `NEXT_PUBLIC_BASE_URL` | Web app base URL (local default `http://127.0.0.1:3000`). |
 | `MARKITDOWN_MCP_URL` / `NOTEBOOKLM_MCP_URL` | NotebookLM helper path MCP endpoints. |
+| `MARKITDOWN_MCP_USE_ID_TOKEN` | `true` → worker attaches a Cloud Run ID token when calling an IAM-protected MarkItDown MCP service (default off). |
 | `WEB_CALLBACK_URL` / `NOTEBOOKLM_CALLBACK_SECRET` | Worker → web callback URL + HMAC secret. |
 | `NOTEBOOKLM_DEFAULT_NOTEBOOK_ID` / `NOTEBOOKLM_ENABLED` | Optional NotebookLM notebook id / trigger flag (default off). |
 | `VISION_ENABLED` / `GOOGLE_CLOUD_PROJECT` | Google Vision OCR path (default off; stub until enabled + `google-cloud-vision` installed). |
@@ -162,7 +165,7 @@ Never paste secret values into issues, docs, prompts, or logs.
 
 ## Verification
 
-Baseline (2026-06-15): **502 tests** — apps/web 166, apps/worker-py 150, apps/mcp-server 186.
+Baseline (2026-06-15): **515 tests** — apps/web 167, apps/worker-py 162, apps/mcp-server 186.
 
 ```bash
 # Web
@@ -183,7 +186,7 @@ Final exports must keep these sheets in exact order — do not rename, remove, r
 · `05_Duplicate_Check` · `06_Rate_Check` · `07_Tax_FX_Check` · `08_Shipment_Match`
 · `90_Source_Data` · `91_Audit_Detail` · `92_Evidence_Issues` · `99_Manifest`
 
-## Deployment
+### Web (`apps/web`) → Vercel
 
 1. Merge to `main` (PRs gated by CI: TS checks, Python CI, Playwright smoke, CodeQL, gitleaks).
 2. Ensure Vercel env vars are set for Production, Preview, and Development.
@@ -191,6 +194,18 @@ Final exports must keep these sheets in exact order — do not rename, remove, r
 4. `DATABASE_URL` must be the Neon pooled URL in every Vercel env (`VERCEL=1` fails fast otherwise).
 5. `vercel --prod` after local verification; the prod alias is `sct-ontology-invoice-audit.vercel.app`.
 6. Smoke test: PDF-only upload → run → `/api/audit/export` → `/api/export/download` = valid 13-sheet xlsx.
+
+### Worker + MCP server → Google Cloud Run
+
+The worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) deploy to
+**Google Cloud Run** (Fly.io is decommissioned). See the full runbook:
+[`docs/20260615_cloud-run-migration-runbook.md`](./docs/20260615_cloud-run-migration-runbook.md).
+
+1. One-time: enable `run`, `cloudbuild`, `artifactregistry` APIs; connect billing on the GCP project.
+2. Worker: `cd apps/worker-py && GCP_PROJECT=<proj> GCP_REGION=<region> ./deploy-cloudrun.sh` (`--port 8000`).
+3. MCP server (only if external clients need it): `cd apps/mcp-server && … ./deploy-cloudrun.sh` (`--port 3000`).
+4. MarkItDown MCP (optional helper path): `cd apps/markitdown-mcp && … ./deploy.sh`.
+5. Point Vercel `PARSER_WORKER_URL` at the worker's `*.run.app` URL; the run-route allowlist accepts `.run.app`.
 
 ## Security
 

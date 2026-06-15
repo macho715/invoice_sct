@@ -1,4 +1,4 @@
-# ARCHIVED 2026-06-14 — CF Worker runtime deprecated. MCP server deploys via Fly.io.
+# ARCHIVED 2026-06-14 — CF Worker runtime deprecated. MCP server deploys via Google Cloud Run.
 name = "hvdc-ontology-chatgpt-app"
 main = "server/src/worker.ts"
 compatibility_date = "2026-05-13"

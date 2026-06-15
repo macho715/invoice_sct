@@ -2,11 +2,14 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import os
 import socket
 from urllib.parse import urlparse
 from typing import Optional
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from .extractor import parse_extraction
 from .mcp_client import MarkItDownMcpClient, NotebookLmMcpClient, McpClientUnavailable, McpToolError
@@ -145,7 +148,8 @@ class NotebookLmOrchestrator:
     async def _call_markitdown(self, pdf_bytes: bytes) -> Optional[str]:
         try:
             return await MarkItDownMcpClient(self.markitdown_url).convert_pdf_bytes(pdf_bytes)
-        except Exception:
+        except Exception as e:
+            logger.error("MarkItDown MCP call failed: %r", e)
             return None
 
     async def _send_callback(self, payload: dict) -> int:

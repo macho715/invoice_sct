@@ -40,6 +40,85 @@ class TestMarkItDownMcpClient:
 
         assert client.timeout == 45.0
 
+    def test_no_auth_header_by_default(self, monkeypatch):
+        monkeypatch.delenv("MARKITDOWN_MCP_USE_ID_TOKEN", raising=False)
+        client = MarkItDownMcpClient("https://md-abc-an.a.run.app/mcp")
+        assert client.use_id_token is False
+        assert client._auth_headers() == {}
+
+    def test_adds_bearer_header_when_id_token_enabled(self, monkeypatch):
+        monkeypatch.setenv("MARKITDOWN_MCP_USE_ID_TOKEN", "true")
+        captured = {}
+
+        def fake_fetch(audience):
+            captured["audience"] = audience
+            return "tok123"
+
+        with patch("app.notebooklm.mcp_client._fetch_id_token", fake_fetch):
+            client = MarkItDownMcpClient("https://md-abc-an.a.run.app/mcp")
+            headers = client._auth_headers()
+
+        assert headers == {"Authorization": "Bearer tok123"}
+        # Audience is the Cloud Run service origin, not the /mcp path.
+        assert captured["audience"] == "https://md-abc-an.a.run.app"
+
+    @pytest.mark.asyncio
+    async def test_call_tool_passes_id_token_header_when_enabled(self, monkeypatch):
+        monkeypatch.setenv("MARKITDOWN_MCP_USE_ID_TOKEN", "true")
+        client = MarkItDownMcpClient("https://md-abc-an.a.run.app/mcp", timeout=12.0)
+
+        class FakeHttpClient:
+            def __init__(self, timeout=None, follow_redirects=None, headers=None):
+                self.timeout = timeout
+                self.follow_redirects = follow_redirects
+                self.headers = headers
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+        class FakeStreamContext:
+            async def __aenter__(self):
+                return "read", "write", lambda: None
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+        class FakeSession:
+            def __init__(self, read, write):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def initialize(self):
+                return None
+
+            async def call_tool(self, name, arguments):
+                return {"content": [{"text": "ok"}]}
+
+        calls = {}
+
+        def fake_streamable_http_client(url, **kwargs):
+            calls["kwargs"] = kwargs
+            return FakeStreamContext()
+
+        with (
+            patch("app.notebooklm.mcp_client._fetch_id_token", lambda audience: "tok123"),
+            patch("app.notebooklm.mcp_client.httpx.AsyncClient", FakeHttpClient),
+            patch("app.notebooklm.mcp_client.streamable_http_client", fake_streamable_http_client),
+            patch("app.notebooklm.mcp_client.ClientSession", FakeSession),
+        ):
+            result = await client.call_tool_text("convert_to_markdown", {"uri": "data:text/plain,hello"})
+
+        assert result == "ok"
+        assert calls["kwargs"]["http_client"].headers == {"Authorization": "Bearer tok123"}
+
     @pytest.mark.asyncio
     async def test_convert_pdf_bytes_uses_data_uri(self):
         pdf_bytes = b"%PDF-1.4 sample"
