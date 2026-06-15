@@ -28,7 +28,11 @@ export default function DownloadAuditButton({ jobId }: { jobId: string }) {
         return;
       }
 
-      window.location.href = data.signed_url ?? data.url ?? `/api/export/download?job_id=${encodeURIComponent(jobId)}`;
+      // Always download through the server-streaming route. The export step's
+      // signed_url points at a PRIVATE Vercel Blob whose downloadUrl 403s for an
+      // unauthenticated browser navigation; /api/export/download fetches the blob
+      // server-side (with the token) and streams the bytes back (Rule #0).
+      window.location.href = `/api/export/download?job_id=${encodeURIComponent(jobId)}`;
     } catch (e) {
       setError(`EXPORT_FAILED: ${(e as Error).message}`);
     } finally {
