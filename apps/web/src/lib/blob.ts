@@ -75,6 +75,13 @@ function resolveBlobAccess(): BlobAccess {
 }
 
 export async function getSignedDownloadUrl(blobRef: string): Promise<string> {
+  // Public client-direct uploads (>4.5MB path via @vercel/blob/client) are stored
+  // as `puburl:<url>`. The blob is public, so the URL is directly fetchable — no
+  // presign needed, and this works regardless of the BLOB_ACCESS setting.
+  if (blobRef.startsWith('puburl:')) {
+    return blobRef.slice('puburl:'.length);
+  }
+
   if (blobRef.startsWith('local:')) {
     const filename = blobRef.slice('local:'.length);
     const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3000';
@@ -102,6 +109,15 @@ export async function getSignedDownloadUrl(blobRef: string): Promise<string> {
 }
 
 export async function streamFromBlob(blobRef: string): Promise<Buffer> {
+  if (blobRef.startsWith('puburl:')) {
+    const url = blobRef.slice('puburl:'.length);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download blob: ${response.status} ${response.statusText}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+
   if (blobRef.startsWith('local:')) {
     const filename = blobRef.slice('local:'.length);
     const target = join(DEV_LOCAL_BLOB_DIR, filename);

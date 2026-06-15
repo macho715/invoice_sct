@@ -7,6 +7,8 @@ const MAX_REQ = 60;
 const TEXT_ENCODER = new TextEncoder();
 const PUBLIC_UI_API_ROUTES = [
   '/api/files/ingest',
+  '/api/files/blob-upload',
+  '/api/files/register',
   '/api/audit/status',
   '/api/audit/export',
   '/api/invoice-audit/run',
