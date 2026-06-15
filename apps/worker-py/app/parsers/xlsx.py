@@ -145,12 +145,111 @@ def _cell_str(cell) -> str | None:
     s = str(cell).strip()
     return s if s else None
 
+def _clean_header(s: str) -> str:
+    """Collapse embedded newlines / repeated spaces in a column header."""
+    return re.sub(r'\s+', ' ', str(s or '').strip())
+
+def _is_charge_col(norm_header: str) -> bool:
+    """A DSV summary-matrix charge column (one charge component per column).
+    Excludes grand-total / total-amount / remark / BOE meta columns."""
+    h = norm_header.lower()
+    if not h:
+        return False
+    if 'grand total' in h or 'total amount' in h or 'remark' in h:
+        return False
+    if 'bill of entry' in h or 'boe' in h:
+        return False
+    if any(k in h for k in ('charge', 'surcharge', 'duty', 'at cost')):
+        return True
+    return 'amount' in h  # e.g. "ADDITIONAL AMOUNT" (totals already excluded above)
+
+def _try_parse_matrix(rows: list, *, ws_title: str, file_id: str, parser_version: str) -> NormalizedInvoice | None:
+    """Detect & decompose a DSV summary-matrix layout (charge=column, shipment=row).
+
+    Returns a NormalizedInvoice with one line per non-empty charge cell, or None
+    when the sheet is not a matrix (caller then falls back to the flat parser).
+    Charge values are USD (the per-charge columns sum to GRAND TOTAL (USD))."""
+    for i in range(min(20, len(rows))):
+        row = list(rows[i])
+        norm = [_clean_header(str(c or '')).lower() for c in row]
+        charge_cols = [(j, _clean_header(str(row[j]))) for j, h in enumerate(norm) if _is_charge_col(h)]
+        if len(charge_cols) < 3:
+            continue
+        cmap = _detect_headers(row)
+        shp_col = cmap.get('shipment_ref')
+        if shp_col is None:
+            continue
+        job_col = cmap.get('job_number')
+        gt_usd = next((j for j, h in enumerate(norm) if 'grand total' in h and 'usd' in h), None)
+
+        lines: list[InvoiceLine] = []
+        for r_idx, drow in enumerate(rows[i + 1:], start=i + 2):
+            shp = _cell_str(drow[shp_col]) if shp_col < len(drow) else None
+            if not shp:
+                break  # end of contiguous shipment block (blank / TOTAL row)
+            job = _cell_str(drow[job_col]) if job_col is not None and job_col < len(drow) else None
+            for cj, cname in charge_cols:
+                if cj >= len(drow):
+                    continue
+                val = _cell_num(drow[cj])
+                if val is None or val == 0:
+                    continue
+                lines.append(InvoiceLine(
+                    line_id=normalize_line_id(file_id, ws_title, r_idx, cj),
+                    description=cname,
+                    normalized_description=cname.upper(),
+                    currency='USD',
+                    amount=float(val),
+                    qty=None,
+                    rate=None,
+                    source_ref={'sheet': ws_title, 'row': r_idx, 'col': str(cj)},
+                    shipment_ref=shp,
+                    job_number=job,
+                    for_charge_component=cname,
+                ))
+        if not lines:
+            return None
+
+        invoice_total: float | None = None
+        for trow in rows[i + 1:]:
+            cells = [_clean_header(str(c or '')).lower() for c in trow]
+            if any('total amount' in c or c == 'total' or 'grand total' in c for c in cells):
+                if gt_usd is not None and gt_usd < len(trow):
+                    invoice_total = _cell_num(trow[gt_usd])
+                if invoice_total is None:
+                    for c in trow:
+                        v = _cell_num(c)
+                        if v is not None:
+                            invoice_total = v
+                            break
+                if invoice_total is not None:
+                    break
+
+        return NormalizedInvoice(
+            invoice_id=f"inv_{file_id}",
+            invoice_header=InvoiceHeader(
+                invoice_no=None, vendor=None, issue_date=None,
+                currency='USD', invoice_total=invoice_total
+            ),
+            invoice_lines=lines,
+            evidence_candidates=[],
+            parser_confidence=0.85,
+            parser_version=parser_version
+        )
+    return None
+
 def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version: str) -> NormalizedInvoice:
     wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise ValueError("empty xlsx")
+
+    # DSV summary-matrix layout (charge-per-column) — decompose into charge lines.
+    # Falls through to the flat one-charge-per-row parser when not a matrix.
+    matrix = _try_parse_matrix(rows, ws_title=ws.title, file_id=file_id, parser_version=parser_version)
+    if matrix is not None:
+        return matrix
 
     header_fields = _detect_header_fields(rows)
 
