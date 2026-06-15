@@ -49,6 +49,7 @@ jobs:
   checks:
     name: "Checks (${{ matrix.app }})"
     needs: [root-install]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -59,10 +60,57 @@ jobs:
           - packages/shared
           - packages/tools
           - packages/database
-    uses: ./.github/workflows/_ts-checks.yml
-    with:
-      working-directory: ${{ matrix.app }}
-      node-version: "20"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ${{ matrix.app }}
+
+      - name: Typecheck
+        run: pnpm typecheck
+        working-directory: ${{ matrix.app }}
+
+      - name: Detect optional scripts
+        id: scripts
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const scripts = pkg.scripts || {};
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_lint=${Boolean(scripts.lint)}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_test=${Boolean(scripts.test)}\n`);
+          NODE
+        working-directory: ${{ matrix.app }}
+
+      - name: Lint
+        if: steps.scripts.outputs.has_lint == 'true'
+        run: pnpm lint
+        working-directory: ${{ matrix.app }}
+
+      - name: Test
+        if: steps.scripts.outputs.has_test == 'true'
+        run: pnpm run test -- --run
+        working-directory: ${{ matrix.app }}
 
   build:
     name: Build
