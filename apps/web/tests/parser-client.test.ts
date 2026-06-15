@@ -38,4 +38,49 @@ describe('parser-client', () => {
     expect((r.normalized as { parser_confidence: number }).parser_confidence).toBe(0.91);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
+
+  describe('runNotebookLm', () => {
+    it('POSTs to /v1/notebooklm/run with bearer + job_id/blob_url and returns worker status', async () => {
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ job_id: 'j1', status: 'CALLBACK_SENT', notebooklm_source_id: 'src1' }) });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      const r = await c.runNotebookLm({ job_id: 'j1', blob_url: 'http://signed/inv', notebook_id: 'nb1' });
+      expect(r.status).toBe('CALLBACK_SENT');
+      expect(r.notebooklm_source_id).toBe('src1');
+      const [url, opts] = fetchMock.mock.calls[0];
+      expect(String(url)).toContain('/v1/notebooklm/run');
+      expect((opts as any).headers.authorization).toBe('Bearer tok');
+      expect(JSON.parse((opts as any).body)).toEqual({ job_id: 'j1', blob_url: 'http://signed/inv', notebook_id: 'nb1' });
+    });
+
+    it('omits notebook_id from body when not provided (worker schema is extra-forbid)', async () => {
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ job_id: 'j1', status: 'CALLBACK_SENT' }) });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      await c.runNotebookLm({ job_id: 'j1', blob_url: 'http://signed/inv' });
+      const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+      expect(body).not.toHaveProperty('notebook_id');
+      expect(body).toEqual({ job_id: 'j1', blob_url: 'http://signed/inv' });
+    });
+
+    it('returns TRIGGER_REJECTED on non-2xx without throwing', async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'down' });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      const r = await c.runNotebookLm({ job_id: 'j1', blob_url: 'http://signed/inv' });
+      expect(r.status).toBe('TRIGGER_REJECTED');
+      expect(r.error_code).toBe('503');
+    });
+
+    it('treats abort/timeout as a successful TRIGGER (worker keeps running)', async () => {
+      const timeoutErr = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+      fetchMock.mockRejectedValueOnce(timeoutErr);
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      const r = await c.runNotebookLm({ job_id: 'j1', blob_url: 'http://signed/inv' });
+      expect(r.status).toBe('TRIGGERED');
+    });
+
+    it('rethrows unexpected network errors', async () => {
+      fetchMock.mockRejectedValueOnce(Object.assign(new Error('boom'), { name: 'TypeError' }));
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      await expect(c.runNotebookLm({ job_id: 'j1', blob_url: 'http://signed/inv' })).rejects.toThrow(/boom/);
+    });
+  });
 });

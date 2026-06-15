@@ -94,6 +94,38 @@ export async function POST(req: Request): Promise<Response> {
   });
   await STORE.setNormalizedInvoice(body.job_id, parseRes.normalized as any);
 
+  // Phase 1: MarkItDown -> NotebookLM dual-extraction trigger (verification path).
+  // Flag-gated (default OFF) and fire-and-forget — the pdfplumber result above stays
+  // the source of truth for validation/gate. The worker (Fly, long-running) runs the
+  // orchestrator and POSTs its first-pass extraction to /api/notebooklm/ingest-summary,
+  // which cross-checks it against this parser result. A trigger failure must never
+  // affect the audit verdict, so it is fully isolated in a catch.
+  // NOTE: enabling this sends invoice/evidence content to the external NotebookLM
+  // service — confirm P2/DLP policy before flipping NOTEBOOKLM_ENABLED on in prod.
+  if (process.env.NOTEBOOKLM_ENABLED === 'true') {
+    const nbJobId = body.job_id;
+    const nbBlobRef = invoiceFile.blob_ref;
+    void (async () => {
+      try {
+        const nbBlobUrl = await getSignedDownloadUrl(nbBlobRef);
+        const res = await parser.runNotebookLm({
+          job_id: nbJobId,
+          blob_url: nbBlobUrl,
+          notebook_id: process.env.NOTEBOOKLM_NOTEBOOK_ID
+        });
+        await STORE.appendTrace(nbJobId, {
+          step: 'NOTEBOOKLM', input_ref: nbBlobRef,
+          output_ref: res.status ?? 'TRIGGERED', attributedTo: 'run-route:notebooklm-trigger'
+        });
+      } catch {
+        await STORE.appendTrace(nbJobId, {
+          step: 'NOTEBOOKLM', input_ref: nbBlobRef,
+          output_ref: 'TRIGGER_FAILED', attributedTo: 'run-route:notebooklm-trigger'
+        }).catch(() => undefined);
+      }
+    })();
+  }
+
   // P0-4: parser extracted zero invoice lines (empty/unmapped invoice, or PDF text
   // with no structured lines). Validating [] would yield empty COST-GUARD results and
   // a false PASS, so short-circuit to AMBER and route to human review instead.

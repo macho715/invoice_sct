@@ -3,18 +3,22 @@
 3-app architecture for HVDC invoice processing + cost guard + approval gates.
 Samsung C&T HVDC Abu Dhabi project. ADNOC/DSV partnership.
 
+## DLP 정책 (2026-06-15 추가)
+
+**DLP는 시스템에 추가하지 않음** — 새로운 DLP(Data Loss Prevention) 기능·모듈·도구를 시스템에 추가하지 않음. 기존 P2 DLP 규칙은 2026-06-15에 제거됨.
+
 ## Quick Commands
 
 ```bash
 # Web app (Next.js 15)
 cd apps/web && pnpm dev          # localhost:3000
 pnpm --dir apps/web typecheck    # 0 errors baseline
-pnpm --dir apps/web test         # 107 tests
+pnpm --dir apps/web test         # 157 tests
 pnpm --dir apps/web build        # production build
 
 # Python worker (FastAPI)
 cd apps/worker-py && uvicorn app.main:app --port 8000
-cd apps/worker-py && pytest -q   # 95 tests
+cd apps/worker-py && pytest -q   # 149 tests
 
 # MCP server (Hono, standalone)
 cd apps/mcp-server && pnpm dev   # localhost:8080
@@ -86,11 +90,9 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 
 ## Key Constraints
 
-- **P2 DLP**: No invoices, rates, TRN, BOE, BL, container numbers, or PII committed. Strict `.gitignore` entries.
 - **13-sheet workbook contract**: Exact order enforced. `00_Decision` through `99_Manifest`.
 - **Approval gates**: PASS/AMBER/ZERO/FAILED. ZERO blocks export. AMBER needs reviewer approval.
 - **3-way reconciliation**: Final Subtotal = Line_Audit = TYPE-B (±0.01 tolerance)
-- **DLP**: 16 P2 categories defined in `dlp-scanner.ts` (`scanForDlpViolations`/`assertDlpClean`). NOTE (2026-06-14, operator decision): the `/api/export/download` route no longer DLP-re-scans the workbook before delivery — the final Excel is delivered without a download-time `scanWorkbook` gate. DLP scanning of the assembled workbook is therefore not enforced at download; rely on upstream source/commit DLP discipline.
 - **Currency**: AED/USD only. FX policy check via `check_fx_policy`.
 - **CSP header**: `Content-Security-Policy` set in `apps/web/next.config.js` — restricts script-src, connect-src (Vercel Blob + Neon), frame-ancestors 'none'.
 - **Batch validation**: `check_rate_card_batch({checks: [{charge_code, lane, rate}, ...]})` collapses N line calls into 1 query (performance plan v1).
@@ -99,34 +101,34 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 
 | Path | What |
 |---|---|
-| `apps/web/src/lib/` | Core logic: job-store, gate-bridge, MCP tools, DLP, parser-client, blob, types |
+| `apps/web/src/lib/` | Core logic: job-store, gate-bridge, MCP tools, parser-client, blob, types |
 | `apps/web/src/lib/types.ts` | Zod schemas — JobStatus, Verdict, InvoiceLine, SourceFile, etc. |
-| `apps/web/src/app/api/` | 11 API route handlers |
-| `apps/web/tests/` | 23 Vitest test files |
+| `apps/web/src/app/api/` | 12 API route handlers |
+| `apps/web/tests/` | 30 Vitest test files |
 | `apps/worker-py/app/parsers/` | xlsx, md, txt, pdf, pdf_json, dsv_waybill parsers |
 | `apps/worker-py/app/exporters/` | 13-sheet workbook export |
 | `apps/mcp-server/src/tools/` | 14 validation tools (re-export from @invoice-audit/tools) |
 | `packages/tools/src/` | **14 MCP tools (single source of truth)** — check_rate_card, check_rate_card_batch, etc. |
 | `packages/database/src/index.ts` | Postgres pool singleton (shared by web + mcp-server) |
 | `packages/contracts/` | Shared Zod schemas |
-| `packages/shared/` | Hash, redaction, DLP helpers |
-| `migrations/` | Postgres DDL (0008-0010) |
+| `packages/shared/` | Hash, redaction helpers |
+| `packages/telemetry/` | OpenTelemetry helpers (@invoice-audit/telemetry, used by web + mcp-server) |
+| `migrations/` | Postgres DDL (0008-0011) |
 | `.github/workflows/` | 8 CI/CD workflows |
-| `shpiment/` | DSV shipment reference (P2, gitignored) |
+| `shpiment/` | DSV shipment reference (gitignored) |
 | `domestic/` | Korean domestic invoice runtime |
 
-## Verification Baseline (2026-06-14)
+## Verification Baseline (2026-06-15)
 
-- apps/web: 107 tests, typecheck 0 errors
-- apps/worker-py: 95 tests, py_compile OK
-- apps/mcp-server: 186 tests, typecheck 0 errors
-- **Total: 388 tests, 0 type errors**
+- apps/web: 157 tests (30 files), `pnpm test`
+- apps/worker-py: 149 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov)
+- apps/mcp-server: 186 tests (16 files), `pnpm test`
+- **Total: 492 tests passing**
 
 ## Rules
 
 - Numbers: 2 decimal places, comma thousands. Dates: YYYY-MM-DD.
 - Currency columns: mark USD or AED explicitly.
 - Invoice amount delta > 2% → highlight + reason memo.
-- DLP: never paste raw P2 content into prompts, logs, or docs.
 - File names: YYYYMMDD_description_v1.ext
 - Output language: Korean (internal), business English (external).
