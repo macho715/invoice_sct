@@ -43,15 +43,15 @@ COPY pyproject.toml uv.lock ./
 # --frozen: fail if uv.lock would be modified (CI safety)
 # --no-dev: production runtime; dev deps (pytest) excluded
 # --no-install-project: install deps first, project added in next layer
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+# NOTE: no BuildKit `--mount=type=cache` — Cloud Build's default docker builder
+# runs without BuildKit, which rejects that syntax. Plain RUN is portable.
+RUN uv sync --frozen --no-dev --no-install-project
 
 # ---- Source layer ----------------------------------------------------------
 COPY app ./app
 
 # Install the project itself (editable not needed in image)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 
 # ---------- Stage 2: runtime (slim, non-root) --------------------------------
