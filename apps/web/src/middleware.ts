@@ -8,8 +8,14 @@ const TEXT_ENCODER = new TextEncoder();
 const PUBLIC_UI_API_ROUTES = [
   '/api/files/ingest',
   '/api/audit/status',
+  '/api/audit/export',
   '/api/invoice-audit/run',
   '/api/export/download'
+];
+
+// Prefix-matched public routes (variable/catch-all paths).
+const PUBLIC_UI_API_PREFIXES = [
+  '/api/dev/blob/' // dev-stub blob serving; the route self-guards with isDevStub (403 in prod)
 ];
 
 let reqCounter = 0;
@@ -36,7 +42,8 @@ function constantTimeEqualEdge(actual: string, expected: string): boolean {
 }
 
 function isPublicUiApiRoute(pathname: string): boolean {
-  return PUBLIC_UI_API_ROUTES.includes(pathname);
+  return PUBLIC_UI_API_ROUTES.includes(pathname)
+    || PUBLIC_UI_API_PREFIXES.some(prefix => pathname.startsWith(prefix));
 }
 
 function applyRateLimit(req: NextRequest): NextResponse | null {
