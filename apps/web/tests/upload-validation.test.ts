@@ -4,9 +4,16 @@ import { getUploadFileKind, getUploadSelectionError, hasInvoiceFile } from '../s
 const file = (name: string, type = '') => ({ name, type }) as File;
 
 describe('upload validation', () => {
-  it('requires an invoice file for audit execution', () => {
-    expect(getUploadSelectionError([file('pod.pdf', 'application/pdf')])).toContain('Invoice file required');
+  it('accepts a PDF-only upload (Rule #0 OR semantics)', () => {
+    // PDF alone is now valid — the run route uses it as the invoice source.
+    expect(getUploadSelectionError([file('pod.pdf', 'application/pdf')])).toBeNull();
+    // hasInvoiceFile still distinguishes structured invoices from PDF sources.
     expect(hasInvoiceFile([file('pod.pdf', 'application/pdf')])).toBe(false);
+  });
+
+  it('rejects a selection with no supported file', () => {
+    expect(getUploadSelectionError([file('archive.zip', 'application/zip')])).toContain('supported file');
+    expect(getUploadSelectionError([])).toContain('at least one file');
   });
 
   it('accepts xlsx/md/txt as invoice candidates with pdf evidence', () => {
