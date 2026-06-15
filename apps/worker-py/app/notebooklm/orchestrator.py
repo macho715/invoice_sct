@@ -1,7 +1,10 @@
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
+import socket
+from urllib.parse import urlparse
 from typing import Any, Optional
 import httpx
 
@@ -29,6 +32,8 @@ class NotebookLmOrchestrator:
             return {"status": "NOTEBOOKLM_UNAVAILABLE", "error_code": "WEB_CALLBACK_URL_NOT_SET"}
         if not self.callback_secret:
             return {"status": "NOTEBOOKLM_UNAVAILABLE", "error_code": "NOTEBOOKLM_CALLBACK_SECRET_NOT_SET"}
+        if not self._is_safe_blob_url(blob_url):
+            return {"status": "NOTEBOOKLM_UNAVAILABLE", "error_code": "INVALID_BLOB_URL"}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             pdf_resp = await client.get(blob_url)
@@ -87,6 +92,43 @@ class NotebookLmOrchestrator:
             "source_sha256": source_sha256,
             "callback_status": callback_status,
         }
+
+    def _is_public_ip(self, ip_str: str) -> bool:
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+        return not (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_reserved
+            or ip_obj.is_unspecified
+        )
+
+    def _is_safe_blob_url(self, blob_url: str) -> bool:
+        try:
+            parsed = urlparse(blob_url)
+        except Exception:
+            return False
+
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        if not parsed.hostname:
+            return False
+
+        try:
+            addrinfos = socket.getaddrinfo(parsed.hostname, None)
+        except socket.gaierror:
+            return False
+
+        for info in addrinfos:
+            ip_str = info[4][0]
+            if not self._is_public_ip(ip_str):
+                return False
+
+        return True
 
     async def _call_markitdown(self, pdf_bytes: bytes) -> Optional[str]:
         try:
