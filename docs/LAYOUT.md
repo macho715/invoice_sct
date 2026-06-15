@@ -13,13 +13,13 @@ SCT_ONTOLOGY-main/
 │   │
 │   ├── worker-py/              # Python FastAPI parser/exporter (Google Cloud Run)
 │   │   ├── app/routes/         # /v1/parse, /v1/export, /v1/notebooklm/run, /v1/preflight, /v1/vision/*, /health
-│   │   ├── app/parsers/        # xlsx, md, txt, pdf, pdf_json, DSV waybill
+│   │   ├── app/parsers/        # xlsx (+ DSV summary-matrix decomposition), md, txt, pdf, pdf_json, DSV waybill
 │   │   ├── app/services/       # vision_client (stub), vision_normalizer
 │   │   ├── app/validators/     # numeric_integrity (PASS/AMBER)
 │   │   ├── app/middleware/     # Audit log middleware (FR-025)
 │   │   ├── app/notebooklm/     # MarkItDown → NotebookLM orchestrator + MCP client
 │   │   ├── app/exporters/      # 13-sheet workbook export logic
-│   │   └── tests/              # Pytest (162 tests)
+│   │   └── tests/              # Pytest (165 tests)
 │   │
 │   └── mcp-server/             # Hono MCP validation server (Google Cloud Run, standalone)
 │       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
@@ -82,7 +82,7 @@ SCT_ONTOLOGY-main/
 | `apps/web/tests/` | Vitest coverage for API routes, gate logic, and runtime helpers |
 | `apps/web/e2e/` | Playwright smoke tests |
 | `apps/worker-py/app/routes/` | FastAPI route handlers: parse, export, notebooklm, vision/preflight, health |
-| `apps/worker-py/app/parsers/` | File parsers: xlsx, md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
+| `apps/worker-py/app/parsers/` | File parsers: xlsx (auto-detects DSV summary-matrix layout → charge-level line decomposition), md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
 | `apps/worker-py/app/services/` | Google Vision client (stub) + OCR-JSON normalizer (flag-gated) |
 | `apps/worker-py/app/validators/` | `numeric_integrity` — line-level `qty × rate = amount` (PASS/AMBER) |
 | `apps/worker-py/app/notebooklm/` | MarkItDown → NotebookLM orchestrator + MCP client (SSRF-guarded) |
@@ -186,7 +186,7 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 | Web typecheck | `pnpm --dir apps/web typecheck` |
 | Web tests | `pnpm --dir apps/web test` (167) |
 | Web build | `pnpm --dir apps/web build` |
-| Worker tests | `cd apps/worker-py && pytest -q` (162) |
+| Worker tests | `cd apps/worker-py && pytest -q` (165) |
 | Worker syntax | `python -m py_compile apps/worker-py/app/routes/parse.py` |
 | MCP typecheck | `cd apps/mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps/mcp-server && pnpm test` (186) |
@@ -200,3 +200,73 @@ Earlier the repository ran a Cloudflare Worker serving the SCT ontology ChatGPT 
 deleted and replaced by the current invoice audit platform; D1 migrations are kept for reference only,
 superseded by Postgres `0008`–`0012`. Full change history: [`CHANGELOG.md`](../CHANGELOG.md). See
 [`SYSTEM_ARCHITECTURE.md`](../SYSTEM_ARCHITECTURE.md) for the full architecture.
+
+
+## Codex Documentation Update — 2026-06-15T17:51:50.268914+00:00
+
+**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
+
+**Purpose:** This section maps the detected repository layout and documentation surface.
+
+### Evidence inventory
+
+**Source/code files sampled:**
+- `apps\markitdown-mcp\deploy.sh`
+- `apps\mcp-server\db\migrate-rate-cards.sql`
+- `apps\mcp-server\db\seed-rate-cards.sql`
+- `apps\mcp-server\deploy-cloudrun.sh`
+- `apps\mcp-server\src\__tests__\router.test.ts`
+- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
+- `apps\mcp-server\src\db.ts`
+- `apps\mcp-server\src\main.ts`
+- `apps\mcp-server\src\schemas\dlp-guard.ts`
+- `apps\mcp-server\src\telemetry.ts`
+- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
+- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
+
+**Documentation files sampled:**
+- `.hermes\plans\auto-20260614-013800.md`
+- `.vercel\README.txt`
+- `20260615_AUTOPILOT_REVIEW_MarkItDown_GoogleVision_통합_v1.md`
+- `20260615_VisionFallback_Orchestration_구현작업서_v1.md`
+- `20260615_google_vision_gcp_auth_worklog.md`
+- `20260615_google_vision_pdf_parser_logic_guide.md`
+- `20260615_구현작업서_MarkItDown_GoogleVision_통합_v1.md`
+- `CHANGELOG.md`
+- `CLAUDE.md`
+- `GUIDE.md`
+- `LAYOUT.md`
+- `README.md`
+
+**Config/build files sampled:**
+- `.claude\settings.local.json`
+- `.codex\root-docs-dryrun-latest.json`
+- `.codex\root-docs-scan.json`
+- `.codex\root-docs-write.json`
+- `.github\dependabot.yml`
+- `.github\workflows\codeql.yml`
+- `.github\workflows\python-worker-ci.yml`
+- `.github\workflows\release-gate.yml`
+- `.github\workflows\reliability.yml`
+- `.github\workflows\secret-scan.yml`
+- `.github\workflows\vercel-prod.yml`
+- `.github\workflows\web-ci.yml`
+
+**Agent profile files sampled:**
+- No agent profile detected; this update records the absence explicitly.
+
+### Mermaid graph
+
+```mermaid
+flowchart TD
+  ROOT[Repository root] --> SRC[src / app code]
+  ROOT --> DOCS[docs / markdown]
+  ROOT --> AGENTS[agent profiles]
+  ROOT --> CONFIG[config/build files]
+```
+
+### Verification notes
+
+- Append-only update generated by `root-docs-batch-update`.
+- Code/config/doc/agent inventory counts: code=290, docs=193, config=705, agent_profiles=0.
+- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.

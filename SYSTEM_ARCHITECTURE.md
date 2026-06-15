@@ -32,7 +32,7 @@ The intake decision lives in `apps/web/src/app/api/invoice-audit/run/route.ts`
 | Component | Runtime | Host | Role |
 |---|---|---|---|
 | **apps/web** | Next.js 15 (App Router) | Vercel | Upload UI, audit workspace, API orchestration, gate + approval, workbook export dispatch, NotebookLM callback receiver. **Final audit authority.** |
-| **apps/worker-py** | FastAPI (Python) | Google Cloud Run | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
+| **apps/worker-py** | FastAPI (Python) | Google Cloud Run (**live in prod**: `dsv-invoice` / `asia-northeast3`, service `hvdc-invoice-parser`) | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill; xlsx supports **DSV summary-matrix → charge-level line decomposition**), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
 | **apps/mcp-server** | Hono (TypeScript) | Google Cloud Run | Standalone MCP JSON-RPC server — 14 audit tools for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. |
 | **packages/tools** | TypeScript (ESM) | — | **14 MCP validation tools — single source of truth**, shared by `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC) |
 | **packages/database** | TypeScript (ESM) | — | Postgres pool singleton (Neon) — shared by `apps/web` and `apps/mcp-server` |
@@ -117,7 +117,7 @@ Browser-facing routes are public via middleware; all others require an `API_SECR
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/parse` | POST | Parse uploaded file (xlsx/md/txt/pdf/pdf_json + DSV waybill). Aliases: `/parse` (deprecated), `/parse/pdf-json`. |
+| `/v1/parse` | POST | Parse uploaded file (xlsx/md/txt/pdf/pdf_json + DSV waybill). xlsx auto-detects the DSV summary-matrix layout (charge=column, shipment=row) and decomposes each non-empty charge cell into its own line (currency USD, `invoice_total` from the TOTAL AMOUNT (USD) row); falls back to the flat one-charge-per-row parser otherwise. Aliases: `/parse` (deprecated), `/parse/pdf-json`. |
 | `/v1/export` | POST | Build the 13-sheet audit workbook |
 | `/v1/notebooklm/run` | POST | MarkItDown → NotebookLM first-pass orchestrator (callback to web) |
 | `/v1/preflight` | POST | Classify a PDF (text/scanned/encrypted) → `recommended_route`, `requires_vision`, `requires_markitdown` *(flag-gated)* |
@@ -191,11 +191,14 @@ Assembled by `apps/web/src/lib/workbook-builder.ts`; rendered to xlsx by the wor
 
 ## Deployment
 
-| App | Host | Workflow |
-|---|---|---|
-| apps/web | Vercel | `.github/workflows/vercel-prod.yml` |
-| apps/worker-py | Google Cloud Run | `apps/worker-py/deploy-cloudrun.sh` |
-| apps/mcp-server | Google Cloud Run | `apps/mcp-server/deploy-cloudrun.sh` |
+| App | Host | Status | Workflow |
+|---|---|---|---|
+| apps/web | Vercel | Live (`sct-ontology-invoice-audit.vercel.app`) | `.github/workflows/vercel-prod.yml` |
+| apps/worker-py | Google Cloud Run | **Live** — `hvdc-invoice-parser` (`dsv-invoice`/`asia-northeast3`). ⚠ Deployed `--allow-unauthenticated`; the worker does **not** yet validate the `PARSER_WORKER_TOKEN` it receives — a known hardening gap (see Security). `PARSER_WORKER_URL` → its `*.run.app` URL. | `apps/worker-py/deploy-cloudrun.sh` |
+| apps/mcp-server | Google Cloud Run | Not deployed yet (worker alone serves the audit flow) | `apps/mcp-server/deploy-cloudrun.sh` |
+
+> Worker deploy detail (URL, public-auth caveat, the BuildKit Dockerfile fix):
+> [`docs/20260615_cloud-run-migration-runbook.md`](./docs/20260615_cloud-run-migration-runbook.md) §11.
 
 CI: `web-ci.yml`, `python-worker-ci.yml`, `release-gate.yml`, `vercel-preview.yml`, `codeql.yml`,
 `reliability.yml`, `secret-scan.yml`.
@@ -232,15 +235,25 @@ sensitive evidence in environment variables.
   connections to Vercel Blob + Neon only.
 - `.gitignore` excludes `**/private/**`, `**/DSV_SHIPMENT_FULL_PACKAGE_*/**`, and PII template
   patterns. Never commit secrets, raw rates, or P2 identifiers.
+- ⚠ **Worker auth hardening (OPEN):** `apps/worker-py` is deployed `--allow-unauthenticated` and does
+  **not** validate the `PARSER_WORKER_TOKEN` the web app sends; `/v1/parse` fetches a caller-supplied
+  `blob_url` server-side (`_fetch_blob`). As-is this is a public parser/export service for private
+  audit data plus an arbitrary-URL fetch (SSRF) surface. Before treating public exposure as
+  acceptable: restrict the service to `apps/web` via Cloud Run IAM (ID-token, as done for
+  `markitdown-mcp`) **or** enforce bearer-token validation in the worker, and constrain `blob_url` to
+  the allowed private Blob host.
 
 ## Verification Baseline (2026-06-15)
 
 | Component | Tests | Typecheck |
 |---|---|---|
 | apps/web | 167 | 0 errors |
-| apps/worker-py | 162 | py_compile OK |
+| apps/worker-py | 165 | py_compile OK |
 | apps/mcp-server | 186 | 0 errors |
-| **Total** | **515** | **0 errors** |
+| **Total** | **518** | **0 errors** |
+
+> worker count is `pytest -q` from a clean checkout of tracked files (includes the 3 DSV-matrix
+> parser tests). Local working trees with in-progress Vision work may report a higher number.
 
 ## History
 
