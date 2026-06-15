@@ -4,12 +4,13 @@
 > onto Google Cloud Run. **This doc is the plan/runbook only — no resources are
 > created by reading it.**
 >
-> **⛔ HARD BLOCKER (2026-06-15): billing is NOT enabled on project `dsv-invoice`**
-> (`gcloud billing projects describe dsv-invoice` → `billingEnabled: False`). Cloud
-> Run deploy, Cloud Build, Artifact Registry, and GCS bucket creation all require
-> billing. This is the **same blocker** that stopped the Google Vision GCS smoke
-> (see `20260615_google_vision_gcp_auth_worklog.md` §10). Connect a billing account
-> first; then Vision OCR and Cloud Run unblock together.
+> **✅ RESOLVED (2026-06-15 later): billing IS now enabled on `dsv-invoice`**
+> (`gcloud billing projects describe dsv-invoice` → `billingEnabled: True`). The
+> worker has since been **deployed to Cloud Run and is live in prod** — see
+> **§11 Deployment outcome** below for the actual service URL, auth decision, and
+> the BuildKit Dockerfile gotcha that had to be fixed. (Historical note: this was
+> the same blocker that stopped the Google Vision GCS smoke,
+> `20260615_google_vision_gcp_auth_worklog.md` §10.)
 
 ## 0. Current state (verified 2026-06-15)
 
@@ -17,7 +18,8 @@
 |---|---|---|
 | Vercel web | Up (`sct-ontology-invoice-audit.vercel.app`) | `vercel env ls` returns prod vars |
 | MarkItDown → NotebookLM trigger | **OFF** | `NOTEBOOKLM_ENABLED` absent in Vercel prod env; `run/route.ts:113` gate never fires |
-| Worker (Fly `hvdc-invoice-parser`) | **Down** | Fly trial ended (`trial has ended`) |
+| Worker (Fly `hvdc-invoice-parser`) | **Decommissioned** | Fly trial ended; replaced by Cloud Run (§11) |
+| Worker (Cloud Run `hvdc-invoice-parser`) | **Live** | `…asia-northeast3.run.app/health` → 200 (§11) |
 | Worker code wiring | OK | `mcp>=1.2` dep present; `MarkItDownMcpClient` → `convert_to_markdown` |
 
 So MarkItDown MCP is **wired but never invoked in prod**. Goal: host worker +
@@ -217,6 +219,50 @@ step and a callback to `/api/notebooklm/ingest-summary`.
 
 - NotebookLM MCP persistent-browser host (VM + cookie volume).
 - PDF real line extraction (Phase 2.5) to promote PDF-only beyond AMBER.
+
+## 11. Deployment outcome (2026-06-15 — worker live in prod)
+
+Billing was connected on `dsv-invoice`, and the **worker** was deployed. (The
+markitdown-mcp + mcp-server services were NOT deployed in this round — worker
+only, which is all the Excel→final-Excel audit flow needs.)
+
+| Item | Value |
+|---|---|
+| Project / region | `dsv-invoice` / `asia-northeast3` |
+| Service | `hvdc-invoice-parser` |
+| Service URL | `https://hvdc-invoice-parser-571352991204.asia-northeast3.run.app` |
+| Auth | **`--allow-unauthenticated` (public)** — chosen for immediate function |
+| Scaling | `--min-instances 0 --max-instances 5`, 1Gi / 1CPU, `--timeout 600` |
+| Verify | `/health` → 200; `POST /v1/export` → 200 (returns 13-sheet xlsx base64) |
+| Vercel rewire | `PARSER_WORKER_URL` → the `.run.app` URL (old `*.fly.dev` value removed; it had a stray `\r\n`); prod redeployed |
+
+**⚠️ BuildKit Dockerfile gotcha (fixed).** `gcloud run deploy --source` builds via
+Cloud Build's default docker builder, which runs **without BuildKit** and rejects
+`RUN --mount=type=cache,target=…` (`the --mount option requires BuildKit`). The
+two uv-sync RUN steps in `apps/worker-py/Dockerfile` were changed to plain `RUN`.
+Without this the build fails. (Committed separately.)
+
+**⚠️ Auth caveat.** The worker does **no inbound token validation** (only CORS +
+audit-log middleware). With `--allow-unauthenticated` the `/v1/parse` and
+`/v1/export` endpoints are publicly reachable; the `Bearer PARSER_WORKER_TOKEN`
+that Vercel sends is ignored. Acceptable short-term (worker only handles signed
+blob URLs and computes no secrets), but hardening to IAM ID-token auth (§3 option
+1, plus a Vercel-side token minter) is a recommended follow-up.
+
+### Redeploy / repoint commands (actual)
+
+```bash
+GCLOUD="…/google-cloud-sdk/bin/gcloud.cmd"   # not on PATH; use full path
+"$GCLOUD" services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --project dsv-invoice
+cd apps/worker-py
+"$GCLOUD" run deploy hvdc-invoice-parser --project dsv-invoice --region asia-northeast3 \
+  --source . --port 8000 --allow-unauthenticated \
+  --min-instances 0 --max-instances 5 --memory 1Gi --cpu 1 --timeout 600
+# then point Vercel at it (no trailing newline):
+vercel env rm PARSER_WORKER_URL production --yes
+printf '%s' 'https://hvdc-invoice-parser-571352991204.asia-northeast3.run.app' | vercel env add PARSER_WORKER_URL production
+vercel redeploy <latest-prod-url>   # env applies to NEW deployments only
+```
 
 ## Done (billing-independent prerequisites, 2026-06-15)
 
