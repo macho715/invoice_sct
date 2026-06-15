@@ -49,7 +49,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Replay check
-  const replayKey = `${jobId}|${job.parser_version}|${job.rule_version}`;
+  const replayKey = `${jobId}|${exportKind}|${job.parser_version}|${job.rule_version}`;
   const existing = EXPORTS_MAP.get(replayKey);
   if (existing) {
     return NextResponse.json({

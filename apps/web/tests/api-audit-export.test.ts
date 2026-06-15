@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { POST as EXPORT_POST } from '../src/app/api/audit/export/route';
 import { STORE } from '../src/lib/job-store';
+import { EXPORTS_MAP } from '../src/lib/export-store';
 
 describe('POST /api/audit/export', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    EXPORTS_MAP.clear();
   });
 
   it('JOB_NOT_FOUND', async () => {
@@ -140,6 +142,30 @@ describe('POST /api/audit/export', () => {
     expect(body.job_id).toBe(job.job_id);
     expect(body.signed_url).toContain('/api/dev/blob/');
     expect(body.kind).toBe('FINAL_APPROVED');
+  });
+
+  it('keeps FINAL_APPROVED and REVIEW_PACK replay cache entries separate', async () => {
+    const job = await STORE.createJob({ created_by: 'user_1' });
+    await STORE.updateJob(job.job_id, { status: 'APPROVED', verdict: 'ZERO' });
+    await STORE.setResult(job.job_id, { verdict: 'ZERO', line_results: [], action_items: [] });
+
+    const finalRes = await EXPORT_POST(
+      new Request('http://test/api/audit/export', {
+        method: 'POST',
+        body: JSON.stringify({ job_id: job.job_id, kind: 'FINAL_APPROVED' })
+      })
+    );
+    expect(finalRes.status).toBe(200);
+    expect((await finalRes.json()).kind).toBe('FINAL_APPROVED');
+
+    const reviewRes = await EXPORT_POST(
+      new Request('http://test/api/audit/export', {
+        method: 'POST',
+        body: JSON.stringify({ job_id: job.job_id, kind: 'REVIEW_PACK' })
+      })
+    );
+    expect(reviewRes.status).toBe(200);
+    expect((await reviewRes.json()).kind).toBe('REVIEW_PACK');
   });
 
 });

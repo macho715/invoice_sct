@@ -35,23 +35,23 @@ function newJobId(prefix = 'job'): string {
   return `${prefix}_${Date.now().toString(36)}_${rand}`;
 }
 
-/** In-memory PDF placeholder (under 4.5 MB). */
-function smallPdfBuffer(): Buffer {
-  return Buffer.from('%PDF-1.4\n% minimal fixture for e2e\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n', 'utf-8');
+/** Minimal XLSX-shaped payload. The route validates file type, not workbook contents. */
+function smallXlsxBuffer(): Buffer {
+  return Buffer.from('PK\u0003\u0004 minimal xlsx fixture for e2e\n', 'utf-8');
 }
 
 /** Synthetic > 4.5 MB payload. */
-function largePdfBuffer(): Buffer {
+function largeXlsxBuffer(): Buffer {
   const filler = 'A'.repeat(1024); // 1 KB
   const buf = Buffer.alloc(DIRECT_UPLOAD_LIMIT + 1, filler);
-  // Stamp a PDF header so the extension sniff still works in some flows.
-  buf.write('%PDF-1.4\n', 0, 'utf-8');
+  // Stamp a ZIP header so the extension sniff still works in some flows.
+  buf.write('PK\u0003\u0004\n', 0, 'utf-8');
   return buf;
 }
 
 /** Returns true if the local Next.js server is reachable. */
 async function backendUp(api: APIRequestContext): Promise<boolean> {
-  const deadline = Date.now() + 15_000;
+  const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
     try {
       const r = await api.get('/invoice-audit', { timeout: 5_000 });
@@ -97,10 +97,10 @@ test.beforeEach(async ({ page, request }, testInfo) => {
 });
 
 // ---------------------------------------------------------------------------
-// 1) Upload small invoice (PDF) — under 4.5MB, should hit /api/files/ingest
+// 1) Upload small invoice (XLSX) — under 4.5MB, should hit /api/files/ingest
 // ---------------------------------------------------------------------------
 
-test('1. uploads small PDF (< 4.5 MB) via /api/files/ingest', async ({ page, request }) => {
+test('1. uploads small XLSX invoice (< 4.5 MB) via /api/files/ingest', async ({ page, request }) => {
   let directUploadHits = 0;
   await page.context().route('**/api/files/direct-upload*', (route) => {
     directUploadHits += 1;
@@ -108,8 +108,8 @@ test('1. uploads small PDF (< 4.5 MB) via /api/files/ingest', async ({ page, req
   });
 
   // Drive the form directly: the route handler doesn't depend on the page DOM.
-  const r = await request.post('/api/files/ingest', { headers: AUTH_HEADER, multipart: { file: { name: 'e2e_small.pdf', mimeType: 'application/pdf', buffer: smallPdfBuffer() } } });
-  expect(r.status(), 'ingest should accept small PDF').toBe(201);
+  const r = await request.post('/api/files/ingest', { headers: AUTH_HEADER, multipart: { file: { name: 'e2e_small.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: smallXlsxBuffer() } } });
+  expect(r.status(), 'ingest should accept small XLSX invoice').toBe(201);
   const body = await r.json();
   expect(body.job_id, 'response should include a job_id').toMatch(/^job_/);
   expect(body.status).toBe('UPLOADED');
@@ -123,15 +123,15 @@ test('1. uploads small PDF (< 4.5 MB) via /api/files/ingest', async ({ page, req
 });
 
 // ---------------------------------------------------------------------------
-// 2) Upload large invoice (PDF) — over 4.5MB, should require client direct upload
+// 2) Upload large invoice (XLSX) — over 4.5MB, should require client direct upload
 // ---------------------------------------------------------------------------
 
-test('2. large PDF (>= 4.5 MB) requires client direct upload to Vercel Blob', async ({ request }) => {
-  const big = largePdfBuffer();
+test('2. large XLSX invoice (>= 4.5 MB) requires client direct upload to Vercel Blob', async ({ request }) => {
+  const big = largeXlsxBuffer();
   // Server-side guard: 413 + UPLOAD_TOO_LARGE_REQUIRES_CLIENT_UPLOAD.
   const r = await request.post('/api/files/ingest', {
     headers: AUTH_HEADER,
-    multipart: { file: { name: 'e2e_large.pdf', mimeType: 'application/pdf', buffer: big } },
+    multipart: { file: { name: 'e2e_large.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: big } },
   });
   expect(r.status(), 'server should reject > 4.5 MB with 413').toBe(413);
   const body = await r.json();
@@ -156,7 +156,7 @@ test('3. polls /api/audit/status until terminal state', async ({ request, page }
   // 3a. Create a job via the ingest route so we have a valid jobId.
   const ingest = await request.post('/api/files/ingest', {
     headers: AUTH_HEADER,
-    multipart: { file: { name: 'e2e_poll.pdf', mimeType: 'application/pdf', buffer: smallPdfBuffer() } },
+    multipart: { file: { name: 'e2e_poll.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: smallXlsxBuffer() } },
   });
   expect(ingest.status(), 'ingest before polling').toBe(201);
   const { job_id } = await ingest.json();
@@ -322,15 +322,15 @@ test('7. ZERO verdict allows FINAL_APPROVED export per Rule #1', async ({ reques
 // 8) DLP enforced — filename containing P2 pattern must be blocked
 // ---------------------------------------------------------------------------
 
-test('8. DLP blocks upload whose filename embeds a P2 pattern', async ({ request, page }) => {
+test('8. DLP blocks upload whose invoice filename embeds a P2 pattern', async ({ request, page }) => {
   // P2 patterns include BL_NUMBER (\bBL[-\s]?[A-Z0-9]{6,20}\b) and EMAIL.
   // The DLP scan is part of plan §6.1 #4 (dlp-scanner) and route enforces it.
-  const suspiciousName = 'invoice_BL-AB1234567_2026.pdf';
+  const suspiciousName = 'invoice_BL-AB1234567_2026.xlsx';
 
   // Try a regular ingest with a P2-bearing filename.
   const r = await request.post('/api/files/ingest', {
     headers: AUTH_HEADER,
-    multipart: { file: { name: suspiciousName, mimeType: 'application/pdf', buffer: smallPdfBuffer() } },
+    multipart: { file: { name: suspiciousName, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: smallXlsxBuffer() } },
   });
 
   // The DLP guard may either (a) reject the upload (4xx) or (b) accept but
