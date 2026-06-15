@@ -81,7 +81,9 @@ class TestNotebookLmMcpClient:
         assert client.timeout == 300.0
 
     @pytest.mark.asyncio
-    async def test_add_source_extracts_source_id_from_json_result(self):
+    async def test_add_source_extracts_source_id_from_json_result(self, monkeypatch):
+        monkeypatch.delenv("NOTEBOOKLM_SHOW_BROWSER", raising=False)
+        monkeypatch.delenv("NOTEBOOKLM_ADD_SOURCE_SHOW_BROWSER", raising=False)
         client = NotebookLmMcpClient("http://notebooklm.test/mcp")
 
         with patch.object(
@@ -213,7 +215,9 @@ class TestNotebookLmMcpClient:
         assert set(calls["kwargs"]) == {"http_client"}
 
     @pytest.mark.asyncio
-    async def test_ask_question_calls_expected_tool(self):
+    async def test_ask_question_calls_expected_tool(self, monkeypatch):
+        monkeypatch.delenv("NOTEBOOKLM_SHOW_BROWSER", raising=False)
+        monkeypatch.delenv("NOTEBOOKLM_ASK_SHOW_BROWSER", raising=False)
         client = NotebookLmMcpClient("http://notebooklm.test/mcp")
 
         with patch.object(client, "call_tool_text", AsyncMock(return_value='{"confidence":1}')) as call_tool:
