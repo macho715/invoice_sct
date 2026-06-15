@@ -53,9 +53,9 @@ graph LR
   P --> W
   W --> M[in-process MCP tools]
   M --> W
-  W --> G[Gate PASS/AMBER/ZERO]
-  G --> E[/v1/export → 13-sheet xlsx/]
-  E --> DL[/api/export/download]
+  W --> G["Gate PASS/AMBER/ZERO"]
+  G --> E["/v1/export → 13-sheet xlsx"]
+  E --> DL["/api/export/download"]
 ```
 
 ## Quick Start
