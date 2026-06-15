@@ -13,13 +13,13 @@ SCT_ONTOLOGY-main/
 │   │
 │   ├── worker-py/              # Python FastAPI parser/exporter (Google Cloud Run)
 │   │   ├── app/routes/         # /v1/parse, /v1/export, /v1/notebooklm/run, /v1/preflight, /v1/vision/*, /health
-│   │   ├── app/parsers/        # xlsx, md, txt, pdf, pdf_json, DSV waybill
+│   │   ├── app/parsers/        # xlsx (+ DSV summary-matrix decomposition), md, txt, pdf, pdf_json, DSV waybill
 │   │   ├── app/services/       # vision_client (stub), vision_normalizer
 │   │   ├── app/validators/     # numeric_integrity (PASS/AMBER)
 │   │   ├── app/middleware/     # Audit log middleware (FR-025)
 │   │   ├── app/notebooklm/     # MarkItDown → NotebookLM orchestrator + MCP client
 │   │   ├── app/exporters/      # 13-sheet workbook export logic
-│   │   └── tests/              # Pytest (162 tests)
+│   │   └── tests/              # Pytest (166 tests)
 │   │
 │   └── mcp-server/             # Hono MCP validation server (Google Cloud Run, standalone)
 │       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
@@ -82,7 +82,7 @@ SCT_ONTOLOGY-main/
 | `apps/web/tests/` | Vitest coverage for API routes, gate logic, and runtime helpers |
 | `apps/web/e2e/` | Playwright smoke tests |
 | `apps/worker-py/app/routes/` | FastAPI route handlers: parse, export, notebooklm, vision/preflight, health |
-| `apps/worker-py/app/parsers/` | File parsers: xlsx, md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
+| `apps/worker-py/app/parsers/` | File parsers: xlsx (auto-detects DSV summary-matrix layout → charge-level line decomposition), md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
 | `apps/worker-py/app/services/` | Google Vision client (stub) + OCR-JSON normalizer (flag-gated) |
 | `apps/worker-py/app/validators/` | `numeric_integrity` — line-level `qty × rate = amount` (PASS/AMBER) |
 | `apps/worker-py/app/notebooklm/` | MarkItDown → NotebookLM orchestrator + MCP client (SSRF-guarded) |
@@ -186,7 +186,7 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 | Web typecheck | `pnpm --dir apps/web typecheck` |
 | Web tests | `pnpm --dir apps/web test` (167) |
 | Web build | `pnpm --dir apps/web build` |
-| Worker tests | `cd apps/worker-py && pytest -q` (162) |
+| Worker tests | `cd apps/worker-py && pytest -q` (166) |
 | Worker syntax | `python -m py_compile apps/worker-py/app/routes/parse.py` |
 | MCP typecheck | `cd apps/mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps/mcp-server && pnpm test` (186) |
