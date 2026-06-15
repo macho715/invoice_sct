@@ -91,9 +91,13 @@ export async function GET(req: Request): Promise<Response> {
     }
     try {
       const parserUrl = process.env.PARSER_WORKER_URL ?? process.env.WORKER_URL ?? 'http://127.0.0.1:8000';
+      const parserToken = process.env.PARSER_WORKER_TOKEN ?? '';
       const resp = await fetch(`${parserUrl}/v1/export`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(parserToken ? { Authorization: `Bearer ${parserToken}` } : {}),
+        },
         body: JSON.stringify(exportReq),
       });
       if (!resp.ok) {
