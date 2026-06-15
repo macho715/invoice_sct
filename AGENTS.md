@@ -94,12 +94,14 @@ Use repository root for workspace commands unless noted.
 # [ASSUMPTION] Production deployment target is changing from Vercel/Fly/Neon toward Google Cloud. Verify the approved cutover plan before replacing existing deployment workflows.
 
 ## Security / Privacy
-- Treat uploaded invoices, PDFs, Excel files, Markdown artifacts, OCR JSON, and workbook exports as P2/NDA data.
-- Never commit raw invoices, raw contract rates, TRN, BOE, BL, container numbers, emails, phone numbers, tokens, private URLs, or original P2 evidence.
+- LP/DLP is not a system component for this repository. Do not add LP or DLP as a new gate, service, module, verdict source, upload blocker, export blocker, or workflow phase.
+- Existing P2/DLP policy language is removed from the active repository rules. Do not reintroduce P2/DLP-based blocking unless the user explicitly asks for a new policy change.
+- Treat uploaded invoices, PDFs, Excel files, Markdown artifacts, OCR JSON, and workbook exports as private audit data.
+- Never commit raw invoices, raw contract rates, TRN, BOE, BL, container numbers, emails, phone numbers, tokens, private URLs, or original evidence.
 - Never paste secret values into issues, docs, prompts, logs, screenshots, or test fixtures.
 - Secret names are allowed only when necessary: `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `API_SECRET_KEY`, `CALLBACK_HMAC_SECRET`, `NOTEBOOKLM_CALLBACK_SECRET`, `MCP_SHARED_SECRET`.
 - Keep approval gates for AMBER and ZERO findings.
-- Do not add new DLP modules unless explicitly requested; preserve redaction, secret scanning, and private storage controls.
+- Preserve redaction, secret scanning, and private storage controls as safety controls, but do not label them as LP/DLP gates.
 - Use `.gitleaks.toml` and `secret-scan.yml` as the current secret-scan baseline.
 
 ## Google Vision / GCS Rules
@@ -121,9 +123,9 @@ Use repository root for workspace commands unless noted.
 ## NotebookLM / NoteLM Rules
 - Default policy: `NOTEBOOKLM_POLICY=OFF`.
 - Use only for redacted/synthetic samples or explicit manual approval.
-- For P2/NDA documents, do not auto-send Markdown to NotebookLM.
+- Do not auto-send private audit documents to NotebookLM without explicit manual approval.
 - NotebookLM success without parser confidence is AMBER manual review, not PASS.
-- NotebookLM used on P2 without approval is ZERO.
+- NotebookLM used without approval is ZERO.
 
 ## Audit Logic Rules
 - Verdict rank: `PASS < AMBER < ZERO < FAILED`.
