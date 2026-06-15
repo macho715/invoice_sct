@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.middleware.audit_log import AuditLogMiddleware
+from app.middleware.worker_auth import WorkerAuthMiddleware
 from app.routes.health import router as health_router
 from app.routes.parse import router as parse_router
 from app.routes.export import router as export_router
@@ -26,6 +27,11 @@ def create_app() -> FastAPI:
     # fully-resolved request (origin headers, etc.) and runs INSIDE the
     # CORS response handling.
     app.add_middleware(AuditLogMiddleware)
+
+    # Worker app-token gate (shared secret). No-op until PARSER_WORKER_TOKEN is
+    # set, so dev/test/health are unaffected; in prod it gates the public
+    # Cloud Run endpoint that Vercel calls with a Bearer token.
+    app.add_middleware(WorkerAuthMiddleware)
 
     app.include_router(health_router)
     app.include_router(parse_router)
