@@ -1,5 +1,30 @@
 # Changelog
 
+## Cloud Run migration + Fly.io removal - 2026-06-15
+
+> **Scope:** Move the worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) off Fly.io onto **Google Cloud Run** (project `dsv-invoice`), and scaffold a Cloud Run **MarkItDown MCP** service. Billing-independent code/doc prerequisites only — the actual `gcloud run deploy` is gated on connecting billing to `dsv-invoice` (`billingEnabled=False` as of this date). Cloud Run migration prep shipped via PR #20 to `feat/cloud-run-markitdown-prep`.
+
+### Added
+
+- **`apps/markitdown-mcp/`** — Cloud Run image for the Microsoft `markitdown-mcp` server (`--http`, binds `0.0.0.0:$PORT`) + `deploy.sh` (`--no-allow-unauthenticated`, session affinity, `--min-instances 1`) + README. Stateless → scale-to-zero friendly.
+- **`apps/worker-py/deploy-cloudrun.sh`**, **`apps/mcp-server/deploy-cloudrun.sh`** — Cloud Run deploy scripts (worker `--port 8000 --timeout 600`; mcp-server `--port 3000`). No Dockerfile changes needed.
+- **`docs/20260615_cloud-run-migration-runbook.md`** — full migration runbook (prereqs, deploy, IAM/ID-token, env, Vercel rewire, smoke, rollback). Records the billing hard-blocker.
+- **Worker → Cloud Run ID-token auth** — `MarkItDownMcpClient` mints a Cloud Run ID token (audience = service origin) and attaches `Authorization: Bearer` when `MARKITDOWN_MCP_USE_ID_TOKEN=true`; off by default (unchanged behavior). New `_fetch_id_token`/`_auth_headers` in `app/notebooklm/mcp_client.py` + 3 tests.
+
+### Changed
+
+- **`run/route.ts` host allowlist** — added `.run.app` so Vercel can reach a Cloud Run worker (`PARSER_WORKER_URL`). Verified by a new accepted-host test.
+- **`orchestrator.py`** — MarkItDown MCP call failures are now logged (`logger.error`) instead of silently swallowed.
+- **Docs** — README, SYSTEM_ARCHITECTURE (root + `docs/`), LAYOUT (root + `docs/`), CLAUDE.md (root + `docs/`), `wrangler.toml`: host/deployment tables, env-var allowlist note, and component tables now say **Google Cloud Run** instead of Fly.io.
+
+### Removed
+
+- **Fly.io** — deleted `apps/worker-py/fly.toml` and `apps/mcp-server/fly.toml`; removed `.fly.dev` from the worker host allowlist; scrubbed Fly.io comments from `apps/worker-py/Dockerfile`; removed stale `fly-*.yml` workflow references from the docs (the Fly deploy workflows were already removed from `.github/workflows/`).
+
+### Verification
+
+- apps/web **167** passed (`pnpm test`, 0 typecheck errors) · apps/mcp-server **186** passed · apps/worker-py **162** passed (working tree; includes an in-progress, uncommitted Google Vision test set under `app/services/`).
+
 ## Rule #0 OR Intake — PDF-only uploads always yield a final Excel - 2026-06-15
 
 > **Scope:** Make the platform honor Rule #0 (CLAUDE.md §0): uploading an **Excel invoice OR a PDF** (either alone, or both) must always produce a downloadable final Excel (13-sheet audit pack). Fixes three blockers discovered and verified end-to-end against the production deployment. Shipped via PR #18 (`3f2e82e`) and PR #19 (`a6770fa`) to `macho715/invoice_sct:main`; deployed to prod alias `sct-ontology-invoice-audit.vercel.app`.

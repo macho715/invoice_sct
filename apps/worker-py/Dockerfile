@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # ----------------------------------------------------------------------------
 # Invoice Audit Parser — Python Worker
-# Runtime: Fly.io (Q-002 resolved)
+# Runtime: Google Cloud Run
 # PDF: pdfplumber (current); OpenDataLoader (Java) ready for activation
 # ----------------------------------------------------------------------------
 
@@ -58,14 +58,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.11-slim AS runtime
 
 LABEL org.opencontainers.image.title="invoice-audit-parser" \
-      org.opencontainers.image.description="HVDC Invoice Audit Python worker (Fly.io runtime)" \
+      org.opencontainers.image.description="HVDC Invoice Audit Python worker (Google Cloud Run runtime)" \
       org.opencontainers.image.source="https://github.com/samsungct/hvdc-invoice-audit"
 
 # ---- System runtime deps ---------------------------------------------------
 # - libpoppler-cpp: pdfplumber's pdftotext/PDFMiner backend
 # - default-jre-headless: OpenJDK 21 for OpenDataLoader (activated later)
 # - fonts: improved CJK rendering for any PDF text extraction
-# - curl: for Fly.io health checks
+# - curl: for container health checks
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -89,7 +89,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Non-root user (Fly.io + security baseline)
+# Non-root user (security baseline)
 RUN groupadd --system --gid 1001 app \
     && useradd --system --uid 1001 --gid app --create-home --shell /bin/bash app
 
@@ -110,7 +110,7 @@ USER app
 
 EXPOSE 8000
 
-# Health check — Fly.io will hit this on the internal port
+# Health check — Cloud Run / container runtime hits this on the internal port
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl --fail --silent http://127.0.0.1:8000/health || exit 1
 

@@ -32,8 +32,8 @@ The intake decision lives in `apps/web/src/app/api/invoice-audit/run/route.ts`
 | Component | Runtime | Host | Role |
 |---|---|---|---|
 | **apps/web** | Next.js 15 (App Router) | Vercel | Upload UI, audit workspace, API orchestration, gate + approval, workbook export dispatch, NotebookLM callback receiver. **Final audit authority.** |
-| **apps/worker-py** | FastAPI (Python) | Fly.io | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
-| **apps/mcp-server** | Hono (TypeScript) | Fly.io | Standalone MCP JSON-RPC server — 14 audit tools for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. |
+| **apps/worker-py** | FastAPI (Python) | Google Cloud Run | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
+| **apps/mcp-server** | Hono (TypeScript) | Google Cloud Run | Standalone MCP JSON-RPC server — 14 audit tools for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. |
 | **packages/tools** | TypeScript (ESM) | — | **14 MCP validation tools — single source of truth**, shared by `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC) |
 | **packages/database** | TypeScript (ESM) | — | Postgres pool singleton (Neon) — shared by `apps/web` and `apps/mcp-server` |
 | **packages/contracts** | TypeScript | — | Shared invoice, validation, and export Zod schemas |
@@ -194,8 +194,8 @@ Assembled by `apps/web/src/lib/workbook-builder.ts`; rendered to xlsx by the wor
 | App | Host | Workflow |
 |---|---|---|
 | apps/web | Vercel | `.github/workflows/vercel-prod.yml` |
-| apps/worker-py | Fly.io | `.github/workflows/fly-worker-deploy.yml` |
-| apps/mcp-server | Fly.io | `.github/workflows/fly-mcp-server-deploy.yml` |
+| apps/worker-py | Google Cloud Run | `apps/worker-py/deploy-cloudrun.sh` |
+| apps/mcp-server | Google Cloud Run | `apps/mcp-server/deploy-cloudrun.sh` |
 
 CI: `web-ci.yml`, `python-worker-ci.yml`, `release-gate.yml`, `vercel-preview.yml`, `codeql.yml`,
 `reliability.yml`, `secret-scan.yml`.
@@ -208,7 +208,7 @@ Production alias: `sct-ontology-invoice-audit.vercel.app`.
 |---|---|---|
 | `DATABASE_URL` | Yes | Neon Postgres (pooled). No in-memory fallback when `VERCEL=1`. |
 | `BLOB_READ_WRITE_TOKEN` | Yes | Vercel Blob token (private store) for uploads, signed worker downloads, export artifacts. |
-| `PARSER_WORKER_URL` or `WORKER_URL` | Yes | Worker base URL (`PARSER_WORKER_URL` precedence). Run route accepts only `localhost`, `127.0.0.1`, `.fly.dev`, `.internal` hosts. |
+| `PARSER_WORKER_URL` or `WORKER_URL` | Yes | Worker base URL (`PARSER_WORKER_URL` precedence). Run route accepts only `localhost`, `127.0.0.1`, `.run.app`, `.internal`, `.vercel.app` hosts. |
 | `PARSER_WORKER_TOKEN` | Yes | Bearer token `apps/web` sends to the worker. |
 | `API_SECRET_KEY` | Yes | Bearer secret enforced by middleware on non-public API routes. |
 | `WEB_CALLBACK_URL` / `NOTEBOOKLM_CALLBACK_SECRET` | If NotebookLM on | Worker→web callback URL + HMAC secret. |
@@ -237,10 +237,10 @@ sensitive evidence in environment variables.
 
 | Component | Tests | Typecheck |
 |---|---|---|
-| apps/web | 166 | 0 errors |
-| apps/worker-py | 150 | py_compile OK |
+| apps/web | 167 | 0 errors |
+| apps/worker-py | 162 | py_compile OK |
 | apps/mcp-server | 186 | 0 errors |
-| **Total** | **502** | **0 errors** |
+| **Total** | **515** | **0 errors** |
 
 ## History
 

@@ -8,10 +8,10 @@ SCT_ONTOLOGY-main/
 │   │   ├── src/app/api/        # 13 API routes (upload, GCS upload, audit, export, fx, mcp)
 │   │   ├── src/lib/            # Job store, gate-bridge, cf-mcp-client, parser client, blob, error codes
 │   │   │   └── mcp/            # In-process MCP validation tools port
-│   │   ├── tests/              # Vitest (28 files, 166 tests)
+│   │   ├── tests/              # Vitest (30 files, 167 tests)
 │   │   └── e2e/                # Playwright smoke tests
 │   │
-│   ├── worker-py/              # Python FastAPI parser/exporter (Fly.io)
+│   ├── worker-py/              # Python FastAPI parser/exporter (Google Cloud Run)
 │   │   ├── app/routes/         # /v1/parse, /v1/export, /v1/notebooklm/run, /v1/preflight, /v1/vision/*, /health
 │   │   ├── app/parsers/        # xlsx, md, txt, pdf, pdf_json, DSV waybill
 │   │   ├── app/services/       # vision_client (stub), vision_normalizer
@@ -19,9 +19,9 @@ SCT_ONTOLOGY-main/
 │   │   ├── app/middleware/     # Audit log middleware (FR-025)
 │   │   ├── app/notebooklm/     # MarkItDown → NotebookLM orchestrator + MCP client
 │   │   ├── app/exporters/      # 13-sheet workbook export logic
-│   │   └── tests/              # Pytest (22 files, 150 tests)
+│   │   └── tests/              # Pytest (162 tests)
 │   │
-│   └── mcp-server/             # Hono MCP validation server (Fly.io, standalone)
+│   └── mcp-server/             # Hono MCP validation server (Google Cloud Run, standalone)
 │       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
 │       ├── src/schemas/        # validation schemas (incl. dlp-guard.ts)
 │       └── db/                 # Rate card migrations + seeds
@@ -54,8 +54,6 @@ SCT_ONTOLOGY-main/
 │
 ├── .github/workflows/          # CI/CD workflows
 │   ├── codeql.yml
-│   ├── fly-mcp-server-deploy.yml
-│   ├── fly-worker-deploy.yml
 │   ├── python-worker-ci.yml
 │   ├── release-gate.yml
 │   ├── reliability.yml
@@ -186,9 +184,9 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 | Area | Command |
 |---|---|
 | Web typecheck | `pnpm --dir apps/web typecheck` |
-| Web tests | `pnpm --dir apps/web test` (166) |
+| Web tests | `pnpm --dir apps/web test` (167) |
 | Web build | `pnpm --dir apps/web build` |
-| Worker tests | `cd apps/worker-py && pytest -q` (150) |
+| Worker tests | `cd apps/worker-py && pytest -q` (162) |
 | Worker syntax | `python -m py_compile apps/worker-py/app/routes/parse.py` |
 | MCP typecheck | `cd apps/mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps/mcp-server && pnpm test` (186) |

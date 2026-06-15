@@ -45,12 +45,12 @@ Samsung C&T HVDC Abu Dhabi project. ADNOC/DSV partnership.
 # Web app (Next.js 15)
 cd apps/web && pnpm dev          # localhost:3000
 pnpm --dir apps/web typecheck    # 0 errors baseline
-pnpm --dir apps/web test         # 166 tests
+pnpm --dir apps/web test         # 167 tests
 pnpm --dir apps/web build        # production build
 
 # Python worker (FastAPI)
 cd apps/worker-py && uvicorn app.main:app --port 8000
-cd apps/worker-py && pytest -q   # 149 tests
+cd apps/worker-py && pytest -q   # 162 tests
 
 # MCP server (Hono, standalone)
 cd apps/mcp-server && pnpm dev   # localhost:8080
@@ -72,12 +72,12 @@ apps/web (Next.js, Vercel)
   ├── Imports MCP tools from @invoice-audit/tools (14 tools, single source of truth)
   └── fetch → apps/worker-py for /v1/parse, /v1/export, /v1/notebooklm/run (flag-gated)
 
-apps/worker-py (FastAPI, Fly.io)
+apps/worker-py (FastAPI, Google Cloud Run)
   ├── /v1/parse — xlsx/md/txt/pdf/pdf_json + DSV waybill (alias /parse, deprecated)
   ├── /v1/export — 13-sheet audit workbook
   └── /v1/notebooklm/run — MarkItDown → NotebookLM orchestrator (callback to web)
 
-apps/mcp-server (Hono, Fly.io)
+apps/mcp-server (Hono, Google Cloud Run)
   └── Standalone JSON-RPC MCP server for external clients
       (ChatGPT, Claude Desktop). Imports the same @invoice-audit/tools package.
       NOT called during web audit flow.
@@ -155,10 +155,10 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 
 ## Verification Baseline (2026-06-15)
 
-- apps/web: 166 tests (30 files), `pnpm test` (verified 2026-06-15 after Rule #0 OR intake)
-- apps/worker-py: 149 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov)
+- apps/web: 167 tests (30 files), `pnpm test` (verified 2026-06-15)
+- apps/worker-py: 162 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; working tree incl. in-progress Vision tests)
 - apps/mcp-server: 186 tests (16 files), `pnpm test`
-- **Total: 501 tests passing**
+- **Total: 515 tests passing**
 
 ## Rules
 

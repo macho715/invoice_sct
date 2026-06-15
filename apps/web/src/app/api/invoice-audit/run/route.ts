@@ -70,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
     await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
     return err('STORAGE_AUTH_FAILED', 'WORKER_URL must be a valid URL');
   }
-  const allowedHosts = ['127.0.0.1', 'localhost', '.fly.dev', '.run.app', '.internal', '.vercel.app'];
+  const allowedHosts = ['127.0.0.1', 'localhost', '.run.app', '.internal', '.vercel.app'];
   if (!allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith(h))) {
     await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
     return err('STORAGE_AUTH_FAILED', 'WORKER_URL must point to an allowed parser worker host');

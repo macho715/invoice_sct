@@ -202,7 +202,8 @@ step and a callback to `/api/notebooklm/ingest-summary`.
 
 - Cloud Run keeps revisions: `gcloud run services update-traffic <svc> --to-revisions <prev>=100`.
 - Vercel: restore the previous `PARSER_WORKER_URL`; revert the allowlist patch.
-- The Fly worker can be re-enabled (re-add billing) as a fallback if needed.
+- If a deploy regresses, roll back to the previous Cloud Run revision (above).
+  Fly.io is decommissioned — do not fall back to it.
 
 ## 9. Cost notes
 
