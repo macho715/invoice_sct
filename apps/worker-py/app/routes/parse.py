@@ -8,8 +8,9 @@ from app.parsers.xlsx import parse_xlsx_bytes
 from app.parsers.md import parse_md_bytes
 from app.parsers.txt import parse_txt_bytes
 from app.parsers.pdf_text import parse_pdf_text_bytes, extract_shpt_shipment_doc_mapping  # P3A
+from app.parsers.dsv_pdf_hybrid import extract_dsv_from_text, DsvPdfResult  # DSV SHPT line extraction
 from app.validators.numeric_integrity import validate_numeric_integrity
-from app.schemas import NormalizedInvoice, InvoiceHeader, EvidenceCandidate, SourceDataRow
+from app.schemas import NormalizedInvoice, InvoiceHeader, EvidenceCandidate, SourceDataRow, InvoiceLine
 
 router = APIRouter()
 
@@ -19,6 +20,42 @@ def _fetch_blob(blob_url: str) -> bytes:
         r = client.get(blob_url)
         r.raise_for_status()
         return r.content
+
+
+def _dsv_lines_to_invoice_lines(dsv: DsvPdfResult) -> list[InvoiceLine]:
+    """Map DSV hybrid LineItem -> worker InvoiceLine. amount = total (incl. VAT) when
+    present, else the pre-VAT amount; shipment_ref from the document's first shipment.
+    The parser-stage gate_verdict is intentionally NOT carried — Vercel decides verdict.
+    """
+    shipment = dsv.keys.get('shipment_no') or None
+    out: list[InvoiceLine] = []
+    for li in dsv.line_items:
+        amount = li.total_aed if li.total_aed is not None else li.amount_aed
+        if amount is None:
+            continue  # no auditable amount -> not a line (run-route guard handles 0-line)
+        currency = li.currency if li.currency in ('AED', 'USD') else 'AED'
+        out.append(InvoiceLine(
+            line_id=li.line_id,
+            shipment_ref=shipment,
+            description=li.description or li.source,
+            currency=currency,
+            amount=float(amount),
+            qty=li.qty,
+            rate=li.rate,
+            type_b=li.type_b,
+            for_charge_component=(li.container or None),
+            source_ref={
+                'source': li.source,
+                'page': li.page,
+                'doc_type': dsv.doc_type,
+                'evidence_status': li.evidence_status,
+                'vat_aed': li.vat_aed,
+                'amount_aed': li.amount_aed,
+                'total_aed': li.total_aed,
+                'extraction_note': li.extraction_note,
+            },
+        ))
+    return out
 
 @router.post('/parse', response_model=ParseResponse, deprecated=True)
 def parse_deprecated_alias(req: ParseRequest) -> ParseResponse:
@@ -40,17 +77,30 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
         elif req.file_type == 'txt':
             ni = parse_txt_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
         elif req.file_type == 'pdf':
-            # P3A: pdfplumber extraction -> adapt to Normalized (evidence + conf). Full PdfParseResponse available for P3B+ merge/trace.
+            # P3A: pdfplumber extraction -> evidence + page text/tables. P3B/Phase 2.5:
+            # DSV SHPT hybrid parser turns the page text/tables into real invoice_lines
+            # (doc_type classification + charge-line extraction). Final verdict stays in Vercel.
             pdf_res = parse_pdf_text_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
             if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) or 'PDF_TOO_LARGE' in (pdf_res.parser_issues or []):
                 # P3B §5.3 / §4.3: encrypted PDF -> 415 PARSE_PDF_UNSUPPORTED (large -> 422)
                 status = 415 if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) else 422
                 raise HTTPException(status_code=status, detail='PARSE_PDF_UNSUPPORTED')
-            # Basic adaptation for P3A (P3B will do richer merge to lines + pdf_metadata)
+            # DSV SHPT line extraction reuses already-parsed text spans + tables (no 2nd pdfplumber pass).
+            full_text = "\n".join(s.text for s in (pdf_res.text_spans or []) if getattr(s, 'text', None))
+            dsv_tables = [
+                {"page": tc.page, "table_index": i, "rows": tc.rows}
+                for i, tc in enumerate(pdf_res.table_candidates or [])
+            ]
+            dsv = extract_dsv_from_text(full_text, dsv_tables, file_name=req.blob_ref, parser_issues=list(pdf_res.parser_issues or []))
+            line_currency = next((li.currency for li in dsv.line_items if li.currency in ('AED', 'USD')), 'AED')
             ni = NormalizedInvoice(
                 invoice_id=f"inv_{req.file_id}",
-                invoice_header=InvoiceHeader(invoice_no=None, vendor=None, issue_date=None, currency='AED', invoice_total=None),
-                invoice_lines=[],
+                invoice_header=InvoiceHeader(
+                    invoice_no=(dsv.keys.get('invoice_no') or None),
+                    vendor=None, issue_date=(dsv.keys.get('date') or None),
+                    currency=line_currency, invoice_total=None,
+                ),
+                invoice_lines=_dsv_lines_to_invoice_lines(dsv),
                 evidence_candidates=pdf_res.evidence_candidates or [],
                 parser_confidence=pdf_res.parser_confidence,
                 parser_version=pdf_res.parser_version,
