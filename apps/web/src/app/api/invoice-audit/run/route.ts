@@ -359,6 +359,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Track ②: Sync Vision OCR for scanned PDFs (invoice + evidence).
+
   // Replaces fire-and-forget with bounded sync run so OCR lines/evidence
   // are merged BEFORE cf.validate in the same audit pass.
   // Flag-gated (VISION_FALLBACK_ENABLED, default OFF). Only triggers for
