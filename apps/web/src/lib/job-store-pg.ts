@@ -5,6 +5,12 @@ import type {
   SourceFile, AuditTraceEntry, NormalizedInvoice,
   SctValidationResult, ApprovalRecord, FxPolicy, SourceDataRow
 } from './types';
+import {
+  mapLegacyStatus,
+  assertCanTransition,
+  type InvoiceJobStatus,
+} from './invoice/statusMachine';
+import type { ValidationIssue } from './invoice/schema';
 
 const { Pool } = pg;
 
@@ -63,14 +69,14 @@ export function createPgJobStore(): JobStore | null {
   if (!pool) return null;
 
   return {
-    async createJob({ created_by, rule_version = 'rule-0.1.0', parser_version = 'parser-0.1.0', job_id }) {
+    async createJob({ created_by, workflow_type = 'SHIPMENT', rule_version = 'rule-0.1.0', parser_version = 'parser-0.1.0', job_id }) {
       const jid = job_id ?? newId('job');
       const now = nowIso();
       const result = await pool.query(
-        `INSERT INTO jobs (job_id, status, verdict, created_by, created_at, updated_at, rule_version, parser_version)
-         VALUES ($1, 'CREATED', NULL, $2, $3, $4, $5, $6)
+        `INSERT INTO jobs (job_id, status, verdict, workflow_type, created_by, created_at, updated_at, rule_version, parser_version)
+         VALUES ($1, 'CREATED', NULL, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [jid, created_by, now, now, rule_version, parser_version]
+        [jid, workflow_type, created_by, now, now, rule_version, parser_version]
       );
       return mapJobRow(result.rows[0]);
     },
@@ -80,16 +86,29 @@ export function createPgJobStore(): JobStore | null {
       return result.rows[0] ? mapJobRow(result.rows[0]) : undefined;
     },
 
-    async updateJob(jobId: string, patch: Partial<Pick<Job, 'status' | 'verdict'>>) {
+    async updateJob(jobId: string, patch: Partial<Pick<Job, 'status' | 'verdict' | 'workflow_type'>>) {
+      // PR 2: status transition guard. Same matrix as in-memory store.
+      // Map both sides to canonical 9-state, throw on violation.
+      if (patch.status) {
+        const current = await this.getJob(jobId);
+        if (current && patch.status !== current.status) {
+          const fromCanonical = mapLegacyStatus(current.status);
+          const toCanonical = mapLegacyStatus(patch.status);
+          if (fromCanonical && toCanonical) {
+            assertCanTransition(fromCanonical, toCanonical);
+          }
+        }
+      }
       const now = nowIso();
       const result = await pool.query(
         `UPDATE jobs SET
            status = COALESCE($1, status),
            verdict = COALESCE($2, verdict),
-           updated_at = $3
-         WHERE job_id = $4
+           workflow_type = COALESCE($3, workflow_type),
+           updated_at = $4
+         WHERE job_id = $5
          RETURNING *`,
-        [patch.status ?? null, patch.verdict ?? null, now, jobId]
+        [patch.status ?? null, patch.verdict ?? null, patch.workflow_type ?? null, now, jobId]
       );
       return result.rows[0] ? mapJobRow(result.rows[0]) : undefined;
     },
@@ -263,6 +282,103 @@ export function createPgJobStore(): JobStore | null {
       return (typeof row.source_data_json === 'string' ? JSON.parse(row.source_data_json) : row.source_data_json) as SourceDataRow[];
     },
 
+    // PR 2: invoice_audit_logs self-healing persistence.
+    // Rule #0: table absence must not block the audit deliverable; degrade to noop.
+    async setInvoiceAuditLog(input: {
+      invoiceId: string;
+      jobId: string;
+      validatorVersion: string;
+      rateManifestVersion?: string | null;
+      executedRateSnapshotId?: string | null;
+      inputFileHash?: string | null;
+      resultStatus?: string | null;
+      issues?: ValidationIssue[];
+    }) {
+      const insert = () => pool.query(
+        `INSERT INTO invoice_audit_logs
+           (invoice_id, job_id, validator_version, rate_manifest_version,
+            executed_rate_snapshot_id, input_file_hash, result_status, issues_json)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (invoice_id, validator_version, input_file_hash) DO UPDATE SET
+           rate_manifest_version = EXCLUDED.rate_manifest_version,
+           executed_rate_snapshot_id = EXCLUDED.executed_rate_snapshot_id,
+           result_status = EXCLUDED.result_status,
+           issues_json = EXCLUDED.issues_json,
+           validation_finished_at = NOW()`,
+        [
+          input.invoiceId,
+          input.jobId,
+          input.validatorVersion,
+          input.rateManifestVersion ?? null,
+          input.executedRateSnapshotId ?? null,
+          input.inputFileHash ?? null,
+          input.resultStatus ?? null,
+          JSON.stringify(input.issues ?? []),
+        ]
+      );
+      try {
+        await insert();
+      } catch (e) {
+        // Self-heal when migration 0015 has not been applied (42P01).
+        // Create table + index idempotently, then retry once.
+        if ((e as { code?: string }).code !== '42P01') throw e;
+        await pool.query(
+          `CREATE TABLE IF NOT EXISTS invoice_audit_logs (
+             id BIGSERIAL PRIMARY KEY,
+             invoice_id TEXT NOT NULL,
+             job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+             validator_version TEXT NOT NULL,
+             rate_manifest_version TEXT,
+             executed_rate_snapshot_id TEXT,
+             input_file_hash TEXT,
+             validation_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+             validation_finished_at TIMESTAMPTZ,
+             result_status TEXT,
+             issues_json JSONB,
+             UNIQUE (invoice_id, validator_version, input_file_hash)
+           )`
+        );
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_invoice_audit_logs_job_id ON invoice_audit_logs(job_id)');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_invoice_audit_logs_invoice_id ON invoice_audit_logs(invoice_id)');
+        await insert();
+      }
+    },
+
+    async getInvoiceAuditLog(invoiceId: string, validatorVersion: string, inputFileHash?: string | null) {
+      let result;
+      try {
+        result = await pool.query(
+          `SELECT invoice_id, job_id, validator_version, rate_manifest_version,
+                  executed_rate_snapshot_id, input_file_hash,
+                  validation_started_at, validation_finished_at, result_status, issues_json
+           FROM invoice_audit_logs
+           WHERE invoice_id = $1 AND validator_version = $2
+             AND ($3::text IS NULL OR input_file_hash = $3)
+           ORDER BY validation_started_at DESC
+           LIMIT 1`,
+          [invoiceId, validatorVersion, inputFileHash ?? null]
+        );
+      } catch (e) {
+        // Table absent → return null (Rule #0: don't block, callers handle missing).
+        if ((e as { code?: string }).code === '42P01') return null;
+        throw e;
+      }
+      if (!result.rows[0]) return null;
+      const row = result.rows[0];
+      return {
+        invoice_id: row.invoice_id,
+        job_id: row.job_id,
+        validator_version: row.validator_version,
+        rate_manifest_version: row.rate_manifest_version,
+        executed_rate_snapshot_id: row.executed_rate_snapshot_id,
+        input_file_hash: row.input_file_hash,
+        validation_started_at: (row.validation_started_at as Date).toISOString(),
+        validation_finished_at: row.validation_finished_at ? (row.validation_finished_at as Date).toISOString() : null,
+        result_status: row.result_status,
+        issues: typeof row.issues_json === 'string' ? JSON.parse(row.issues_json) : row.issues_json,
+      };
+    },
+
     async setValidationResult(jobId: string, vr: SctValidationResult) {
       await pool.query(
         `INSERT INTO validation_results (job_id, validation_json)
@@ -334,6 +450,7 @@ function mapJobRow(row: Record<string, unknown>): Job {
     job_id: row.job_id as string,
     status: row.status as Job['status'],
     verdict: (row.verdict as Job['verdict']) ?? null,
+    workflow_type: (row.workflow_type as Job['workflow_type']) ?? 'SHIPMENT',
     created_by: row.created_by as string,
     created_at: (row.created_at as Date).toISOString(),
     updated_at: (row.updated_at as Date).toISOString(),

@@ -3,13 +3,20 @@ import { createPgJobStore } from './job-store-pg';
 import type {
   JobStatus, Verdict, SourceFile, AuditTraceStep, AuditTraceEntry,
   NormalizedInvoice, SctValidationResult, ApprovalRecord, FxPolicy,
-  SourceDataRow
+  SourceDataRow, WorkflowType
 } from './types';
+import {
+  mapLegacyStatus,
+  assertCanTransition,
+  InvalidStateTransitionError,
+  type InvoiceJobStatus,
+} from './invoice/statusMachine';
 
 export interface Job {
   job_id: string;
   status: JobStatus;
   verdict: Verdict | null;
+  workflow_type: WorkflowType;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -53,9 +60,9 @@ export interface TraceInput {
 }
 
 export interface JobStore {
-  createJob(input: { created_by: string; rule_version?: string; parser_version?: string; job_id?: string }): Promise<Job>;
+  createJob(input: { created_by: string; workflow_type?: WorkflowType; rule_version?: string; parser_version?: string; job_id?: string }): Promise<Job>;
   getJob(jobId: string): Promise<Job | undefined>;
-  updateJob(jobId: string, patch: Partial<Pick<Job, 'status' | 'verdict'>>): Promise<Job | undefined>;
+  updateJob(jobId: string, patch: Partial<Pick<Job, 'status' | 'verdict' | 'workflow_type'>>): Promise<Job | undefined>;
   addSourceFile(jobId: string, sf: SourceFile): Promise<void>;
   updateSourceFile(jobId: string, fileId: string, patch: Partial<Pick<SourceFile, 'sha256' | 'size_bytes' | 'parser_status'>>): Promise<SourceFile | undefined>;
   listSourceFiles(jobId: string): Promise<SourceFile[]>;
@@ -76,6 +83,30 @@ export interface JobStore {
   createFxPolicy(policy: FxPolicy): Promise<void>;
   getFxPolicy(policyId: string): Promise<FxPolicy | undefined>;
   listFxPolicies(): Promise<FxPolicy[]>;
+
+  // PR 2: invoice audit log
+  setInvoiceAuditLog(input: {
+    invoiceId: string;
+    jobId: string;
+    validatorVersion: string;
+    rateManifestVersion?: string | null;
+    executedRateSnapshotId?: string | null;
+    inputFileHash?: string | null;
+    resultStatus?: string | null;
+    issues?: import('./invoice/schema').ValidationIssue[];
+  }): Promise<void>;
+  getInvoiceAuditLog(invoiceId: string, validatorVersion: string, inputFileHash?: string | null): Promise<{
+    invoice_id: string;
+    job_id: string;
+    validator_version: string;
+    rate_manifest_version: string | null;
+    executed_rate_snapshot_id: string | null;
+    input_file_hash: string | null;
+    validation_started_at: string;
+    validation_finished_at: string | null;
+    result_status: string | null;
+    issues: import('./invoice/schema').ValidationIssue[] | null;
+  } | null>;
 }
 
 type McpResponse<T> = {
@@ -141,16 +172,29 @@ export function createJobStore(): JobStore {
   const validationResults = new Map<string, SctValidationResult>();
   const approvalRecords = new Map<string, ApprovalRecord>();
   const fxPolicies = new Map<string, FxPolicy>();
+  const invoiceAuditLogs = new Map<string, {
+    invoice_id: string;
+    job_id: string;
+    validator_version: string;
+    rate_manifest_version: string | null;
+    executed_rate_snapshot_id: string | null;
+    input_file_hash: string | null;
+    validation_started_at: string;
+    validation_finished_at: string | null;
+    result_status: string | null;
+    issues: import('./invoice/schema').ValidationIssue[];
+  }>();
 
   const nowIso = () => new Date().toISOString();
   const newId = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
   return {
-    async createJob({ created_by, rule_version = 'rule-0.1.0', parser_version = 'parser-0.1.0', job_id }) {
+    async createJob({ created_by, workflow_type = 'SHIPMENT', rule_version = 'rule-0.1.0', parser_version = 'parser-0.1.0', job_id }) {
       const job: Job = {
         job_id: job_id ?? newId('job'),
         status: 'CREATED',
         verdict: null,
+        workflow_type,
         created_by,
         created_at: nowIso(),
         updated_at: nowIso(),
@@ -167,7 +211,17 @@ export function createJobStore(): JobStore {
     async updateJob(jobId, patch) {
       const j = jobs.get(jobId);
       if (!j) return undefined;
+      // PR 2: status transition guard. Map both sides to canonical 9-state,
+      // throw InvalidStateTransitionError (409 INVALID_STATE) on violation.
+      if (patch.status && patch.status !== j.status) {
+        const fromCanonical = mapLegacyStatus(j.status);
+        const toCanonical = mapLegacyStatus(patch.status);
+        if (fromCanonical && toCanonical) {
+          assertCanTransition(fromCanonical, toCanonical);
+        }
+      }
       const next: Job = { ...j, ...patch, updated_at: nowIso() };
+      if (patch.workflow_type) next.workflow_type = patch.workflow_type;
       jobs.set(jobId, next);
       await syncJobToMcp(next);
       return next;
@@ -235,7 +289,28 @@ export function createJobStore(): JobStore {
     async getApprovalRecord(jobId) { return approvalRecords.get(jobId); },
     async createFxPolicy(policy) { fxPolicies.set(policy.fx_policy_id, policy); },
     async getFxPolicy(policyId) { return fxPolicies.get(policyId); },
-    async listFxPolicies() { return Array.from(fxPolicies.values()); }
+    async listFxPolicies() { return Array.from(fxPolicies.values()); },
+
+    // PR 2: in-memory audit log (dev/test). PG version has 42P01 self-heal.
+    async setInvoiceAuditLog(input) {
+      const key = `${input.invoiceId}|${input.validatorVersion}|${input.inputFileHash ?? ''}`;
+      invoiceAuditLogs.set(key, {
+        invoice_id: input.invoiceId,
+        job_id: input.jobId,
+        validator_version: input.validatorVersion,
+        rate_manifest_version: input.rateManifestVersion ?? null,
+        executed_rate_snapshot_id: input.executedRateSnapshotId ?? null,
+        input_file_hash: input.inputFileHash ?? null,
+        validation_started_at: new Date().toISOString(),
+        validation_finished_at: new Date().toISOString(),
+        result_status: input.resultStatus ?? null,
+        issues: input.issues ?? [],
+      });
+    },
+    async getInvoiceAuditLog(invoiceId, validatorVersion, inputFileHash) {
+      const key = `${invoiceId}|${validatorVersion}|${inputFileHash ?? ''}`;
+      return invoiceAuditLogs.get(key) ?? null;
+    }
   };
 }
 
