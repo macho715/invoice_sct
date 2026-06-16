@@ -1,9 +1,12 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { checkAndConvertCurrency } from './fx-check';
 import { dispatch } from './mcp/tools';
+import type { WorkflowType } from './types';
+import { validateInvoice, type ValidationIssue } from './invoice/validateInvoice';
+import type { InvoiceInput } from './invoice/schema';
 
 export interface CfMcpClient {
-  validate(jobId: string, payload: { invoice_lines: unknown[]; evidence_index: unknown[]; rule_version?: string }): Promise<{
+  validate(jobId: string, payload: { invoice_lines: unknown[]; evidence_index: unknown[]; rule_version?: string; workflow_type?: WorkflowType }): Promise<{
     sct_trace_id: string;
     cf_mcp_tool_calls: Array<{ tool: string; latency_ms: number; status: 'OK' | 'ERROR' | 'TIMEOUT' | 'SKIPPED' }>;
     type_b_results: Array<{ line_id: string; type_b: string; confidence: number }>;
@@ -41,6 +44,7 @@ export interface CfMcpClient {
     confidence: number;
     reason_codes: string[];
     warnings: string[];
+    precheck_issues: ValidationIssue[];
     normalized_lines: Array<{ line_id: string; charge_code: string | null; unit: string | null }>;
     duplicate_checks: Array<{ vendor_hash: string; invoice_no_hash: string; verdict: string; reason_code: string | null; duplicate_count: number; amount_hash: string | null; issue_date_hash: string | null; matched_job_id: string | null }>;
     shipment_matches: Array<{ line_id: string; verdict: string; match_count: number; matches: Array<{ shipment_ref: string; confidence: number; matched_via: string }> }>;
@@ -49,6 +53,8 @@ export interface CfMcpClient {
     fx_policy_results: Array<{ from_currency: string; to_currency: string; verdict: string; reason_code: string | null }>;
     dem_det_results: Array<{ line_id: string; charge_code: string; verdict: string; missing_inputs: string[]; reason_code: string | null }>;
     validation_explanations: Array<{ finding_id: string; rule_id: string; reason_code: string; line_id: string | null; severity: string; explanation: string; recommended_action: string }>;
+    domestic_lane_results: Array<{ line_id: string; lane: string | null; distance_km: number | null; rate_band: string; verdict: string; reason_code: string | null; delta_pct: number | null; cg_band: string; short_run_flag: boolean; fixed_cost_suspect: boolean; risk_score: number | null; rbr_trigger: boolean }>;
+    workflow_type: WorkflowType;
   }>;
 }
 
@@ -132,24 +138,69 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
     async validate(jobId, payload) {
       const sct_trace_id = `sct_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
       const toolCalls: Array<{ tool: string; latency_ms: number; status: 'OK' | 'ERROR' | 'TIMEOUT' | 'SKIPPED' }> = [];
+      const workflowType: WorkflowType = payload.workflow_type ?? 'SHIPMENT';
+      const isDomestic = workflowType === 'DOMESTIC';
 
-      // FX normalization (unchanged): convert line amounts to the contract currency.
+      // PR 1: lib/invoice/ pre-check (basic rules). Runs BEFORE MCP tool
+      // orchestration. Additive — does not block downstream tools.
+      // Payloads lacking invoiceHeader/lines fall through to empty issues
+      // (MCP tools still run; Rule #0 always delivers workbook).
+      let precheckIssues: ValidationIssue[] = [];
+      try {
+        const header = (payload as { invoice_header?: Record<string, unknown> }).invoice_header;
+        const lines = (payload.invoice_lines as Array<Record<string, unknown>>) ?? [];
+        const totals = (lines as Array<{ amount?: number }>).reduce(
+          (acc, l) => acc + (typeof l.amount === 'number' ? l.amount : 0),
+          0,
+        );
+        const precheckInput = {
+          invoiceNumber: (header?.invoice_no as string) ?? `job-${jobId}`,
+          vendorId: (header?.vendor as string) ?? 'unknown',
+          vendorName: (header?.vendor as string) ?? 'unknown',
+          issueDate: (header?.issue_date as string) ?? new Date().toISOString().slice(0, 10),
+          currency: (header?.currency as 'AED' | 'USD') ?? 'AED',
+          subtotalMinor: Math.round((totals as number) * 100),
+          taxMinor: 0,
+          totalMinor: Math.round((totals as number) * 100),
+          lines: payload.invoice_lines as unknown[],
+        } as unknown as InvoiceInput;
+        const pre = validateInvoice(precheckInput, {
+          rateManifestVersion: payload.rule_version,
+        });
+        precheckIssues = pre.issues;
+      } catch (e) {
+        // Defensive: pre-check failure must not block MCP flow.
+        precheckIssues = [{
+          code: 'REQUIRED_FIELD_MISSING',
+          severity: 'info',
+          message: `precheck skipped: ${(e as Error).message}`,
+        }];
+      }
+
+      // FX normalization: convert line amounts to the contract currency.
+      // DOMESTIC: skip FX normalization (KRW is native, no cross-currency needed).
       const processedLines: any[] = [];
       let activeFxPolicyId: string | null = null;
-      for (const line of (payload.invoice_lines as any[])) {
-        const lineCurrency = line.currency;
-        const rateCurrency = line.rate_ref_currency || line.contract_currency;
-        if (rateCurrency && lineCurrency !== rateCurrency) {
-          const checkRes = await checkAndConvertCurrency(lineCurrency, rateCurrency, line.amount, line.rate_date);
-          if (!checkRes.allowed) {
-            const err = new Error(checkRes.error_message);
-            (err as any).code = checkRes.error_code;
-            throw err;
+      if (isDomestic) {
+        for (const line of (payload.invoice_lines as any[])) {
+          processedLines.push({ ...line, currency: line.currency ?? 'KRW' });
+        }
+      } else {
+        for (const line of (payload.invoice_lines as any[])) {
+          const lineCurrency = line.currency;
+          const rateCurrency = line.rate_ref_currency || line.contract_currency;
+          if (rateCurrency && lineCurrency !== rateCurrency) {
+            const checkRes = await checkAndConvertCurrency(lineCurrency, rateCurrency, line.amount, line.rate_date);
+            if (!checkRes.allowed) {
+              const err = new Error(checkRes.error_message);
+              (err as any).code = checkRes.error_code;
+              throw err;
+            }
+            activeFxPolicyId = checkRes.fx_policy_id || null;
+            processedLines.push({ ...line, amount: checkRes.converted_amount, rate: line.rate ? line.rate * (checkRes.fx_rate || 1) : line.rate, currency: rateCurrency });
+          } else {
+            processedLines.push(line);
           }
-          activeFxPolicyId = checkRes.fx_policy_id || null;
-          processedLines.push({ ...line, amount: checkRes.converted_amount, rate: line.rate ? line.rate * (checkRes.fx_rate || 1) : line.rate, currency: rateCurrency });
-        } else {
-          processedLines.push(line);
         }
       }
 
@@ -353,18 +404,22 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
         }
       }
 
-      // Step 6: check_hs_uae_compliance — only CUSTOMS lines
+      // Step 6: check_hs_uae_compliance — SHIPMENT only (customs/BOE not applicable for DOMESTIC)
       const hs_uae_results: Array<{ line_id: string; verdict: 'PASS' | 'AMBER' | 'ZERO'; boe_found: boolean; reason_code: string | null }> = [];
-      for (const line of processedLines) {
-        if (chargeCodeOf(line) !== 'CUSTOMS') continue;
-        try {
-          const hs = await callTool<{ verdict: 'PASS'|'AMBER'|'ZERO'; boe_found: boolean; reason_code: string | null }>('check_hs_uae_compliance', { line_id: line.line_id, charge_code: 'CUSTOMS', hs_code: line.hs_code ?? null, evidence_docs: evidenceDocs });
-          toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: hs.latency_ms, status: hs.status });
-          hs_uae_results.push({ line_id: line.line_id, verdict: hs.result.verdict, boe_found: hs.result.boe_found, reason_code: hs.result.reason_code });
-        } catch {
-          toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: 0, status: 'ERROR' });
-          hs_uae_results.push({ line_id: line.line_id, verdict: 'AMBER', boe_found: false, reason_code: 'HS_UAE_TOOL_UNAVAILABLE' });
+      if (!isDomestic) {
+        for (const line of processedLines) {
+          if (chargeCodeOf(line) !== 'CUSTOMS') continue;
+          try {
+            const hs = await callTool<{ verdict: 'PASS'|'AMBER'|'ZERO'; boe_found: boolean; reason_code: string | null }>('check_hs_uae_compliance', { line_id: line.line_id, charge_code: 'CUSTOMS', hs_code: line.hs_code ?? null, evidence_docs: evidenceDocs });
+            toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: hs.latency_ms, status: hs.status });
+            hs_uae_results.push({ line_id: line.line_id, verdict: hs.result.verdict, boe_found: hs.result.boe_found, reason_code: hs.result.reason_code });
+          } catch {
+            toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: 0, status: 'ERROR' });
+            hs_uae_results.push({ line_id: line.line_id, verdict: 'AMBER', boe_found: false, reason_code: 'HS_UAE_TOOL_UNAVAILABLE' });
+          }
         }
+      } else {
+        toolCalls.push({ tool: 'check_hs_uae_compliance', latency_ms: 0, status: 'SKIPPED' });
       }
 
       // Step 7: check_duplicate_invoice — per unique vendor+invoice_no
@@ -403,30 +458,34 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
         }
       }
 
-      // Step 8: match_shipment_reference — per line (skip if no shipment refs on any line)
+      // Step 8: match_shipment_reference — SHIPMENT only (BL/DO/PO not applicable for DOMESTIC)
       const shipment_matches: Array<{ line_id: string; verdict: string; match_count: number; matches: Array<{ shipment_ref: string; confidence: number; matched_via: string }> }> = [];
-      const hasAnyShipmentRef = processedLines.some((l) =>
-        l.shipment_ref || l.job_number || l.bl_number || l.do_number
-      );
-      if (hasAnyShipmentRef) {
-        for (const line of processedLines) {
-          try {
-            const smResult = await callTool<{ verdict: string; matches: Array<{ shipment_ref: string; confidence: number; matched_via: string }> }>('match_shipment_reference', {
-              shipment_ref: line.shipment_ref ?? null,
-              job_number: line.job_number ?? null,
-              bl_number: line.bl_number ?? null,
-              do_number: line.do_number ?? null
-            });
-            toolCalls.push({ tool: 'match_shipment_reference', latency_ms: smResult.latency_ms, status: smResult.status });
-            shipment_matches.push({
-              line_id: line.line_id,
-              verdict: smResult.result.verdict,
-              match_count: (smResult.result.matches ?? []).length,
-              matches: smResult.result.matches ?? []
-            });
-          } catch {
-            toolCalls.push({ tool: 'match_shipment_reference', latency_ms: 0, status: 'ERROR' });
+      if (!isDomestic) {
+        const hasAnyShipmentRef = processedLines.some((l) =>
+          l.shipment_ref || l.job_number || l.bl_number || l.do_number
+        );
+        if (hasAnyShipmentRef) {
+          for (const line of processedLines) {
+            try {
+              const smResult = await callTool<{ verdict: string; matches: Array<{ shipment_ref: string; confidence: number; matched_via: string }> }>('match_shipment_reference', {
+                shipment_ref: line.shipment_ref ?? null,
+                job_number: line.job_number ?? null,
+                bl_number: line.bl_number ?? null,
+                do_number: line.do_number ?? null
+              });
+              toolCalls.push({ tool: 'match_shipment_reference', latency_ms: smResult.latency_ms, status: smResult.status });
+              shipment_matches.push({
+                line_id: line.line_id,
+                verdict: smResult.result.verdict,
+                match_count: (smResult.result.matches ?? []).length,
+                matches: smResult.result.matches ?? []
+              });
+            } catch {
+              toolCalls.push({ tool: 'match_shipment_reference', latency_ms: 0, status: 'ERROR' });
+            }
           }
+        } else {
+          toolCalls.push({ tool: 'match_shipment_reference', latency_ms: 0, status: 'SKIPPED' });
         }
       } else {
         toolCalls.push({ tool: 'match_shipment_reference', latency_ms: 0, status: 'SKIPPED' });
@@ -491,8 +550,9 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
         }
       }
 
-      // Step 11: check_fx_policy — per unique currency pair (after FX normalization, lines share currency)
+      // Step 11: check_fx_policy — SHIPMENT only (DOMESTIC uses KRW natively, no cross-currency FX)
       const fx_policy_results: Array<{ from_currency: string; to_currency: string; verdict: string; reason_code: string | null }> = [];
+      if (!isDomestic) {
       const seenCurrencyPairs = new Set<string>();
       for (const line of (payload.invoice_lines as any[])) {
         const fromCurrency = line.currency ?? 'AED';
@@ -520,34 +580,82 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
           toolCalls.push({ tool: 'check_fx_policy', latency_ms: 0, status: 'ERROR' });
         }
       }
+      } else {
+        toolCalls.push({ tool: 'check_fx_policy', latency_ms: 0, status: 'SKIPPED' });
+      }
 
-      // Step 12: check_dem_det — only for DEMURRAGE/DETENTION/STORAGE lines
+      // Step 12: check_dem_det — SHIPMENT only (DEMURRAGE/DETENTION/STORAGE not applicable for DOMESTIC)
       const dem_det_results: Array<{ line_id: string; charge_code: string; verdict: string; missing_inputs: string[]; reason_code: string | null }> = [];
       const demDetCodes = ['DEMURRAGE', 'DETENTION', 'STORAGE'];
-      for (const line of processedLines) {
-        const cc = chargeCodeOf(line);
-        if (!demDetCodes.includes(cc)) continue;
-        try {
-          const ddResult = await callTool<{ verdict: string; missing_inputs: string[]; reason_code: string | null }>('check_dem_det', {
-            line_id: line.line_id,
-            charge_code: cc,
-            has_dates: !!(line.start_date && line.end_date),
-            has_tariff: !!line.tariff_ref,
-            has_free_time: line.free_time_days != null,
-            has_invoice: true,
-            is_final_settlement: line.is_final_settlement === true
-          });
-          toolCalls.push({ tool: 'check_dem_det', latency_ms: ddResult.latency_ms, status: ddResult.status });
-          dem_det_results.push({
-            line_id: line.line_id,
-            charge_code: cc,
-            verdict: ddResult.result.verdict,
-            missing_inputs: ddResult.result.missing_inputs ?? [],
-            reason_code: ddResult.result.reason_code
-          });
-        } catch {
-          toolCalls.push({ tool: 'check_dem_det', latency_ms: 0, status: 'ERROR' });
+      if (!isDomestic) {
+        for (const line of processedLines) {
+          const cc = chargeCodeOf(line);
+          if (!demDetCodes.includes(cc)) continue;
+          try {
+            const ddResult = await callTool<{ verdict: string; missing_inputs: string[]; reason_code: string | null }>('check_dem_det', {
+              line_id: line.line_id,
+              charge_code: cc,
+              has_dates: !!(line.start_date && line.end_date),
+              has_tariff: !!line.tariff_ref,
+              has_free_time: line.free_time_days != null,
+              has_invoice: true,
+              is_final_settlement: line.is_final_settlement === true
+            });
+            toolCalls.push({ tool: 'check_dem_det', latency_ms: ddResult.latency_ms, status: ddResult.status });
+            dem_det_results.push({
+              line_id: line.line_id,
+              charge_code: cc,
+              verdict: ddResult.result.verdict,
+              missing_inputs: ddResult.result.missing_inputs ?? [],
+              reason_code: ddResult.result.reason_code
+            });
+          } catch {
+            toolCalls.push({ tool: 'check_dem_det', latency_ms: 0, status: 'ERROR' });
+          }
         }
+      } else {
+        toolCalls.push({ tool: 'check_dem_det', latency_ms: 0, status: 'SKIPPED' });
+      }
+
+      // Step 12a: DOMESTIC lane/distance check — per-line, validates lane existence, distance bands,
+      // short-run detection, rate delta vs reference, cost guard banding, and risk score.
+      const domestic_lane_results: Array<{ line_id: string; lane: string | null; distance_km: number | null; rate_band: string; verdict: string; reason_code: string | null; delta_pct: number | null; cg_band: string; short_run_flag: boolean; fixed_cost_suspect: boolean; risk_score: number | null; rbr_trigger: boolean }> = [];
+      if (isDomestic) {
+        const domesticLines = processedLines.map((l) => ({
+          line_id: l.line_id,
+          origin: l.origin ?? l.origin_destination ?? null,
+          destination: l.destination ?? l.place_of_delivery ?? null,
+          vehicle: l.vehicle ?? l.vehicle_type ?? null,
+          unit: l.unit ?? null,
+          distance_km: typeof l.distance_km === 'number' ? l.distance_km : null,
+          invoiced_rate: typeof l.rate === 'number' ? l.rate : (typeof l.applied_rate === 'number' ? l.applied_rate : null),
+          ref_rate: typeof l.ref_rate_usd === 'number' ? l.ref_rate_usd : (typeof l.contracted_rate === 'number' ? l.contracted_rate : null),
+          shipment_ref: l.shipment_ref ?? null,
+        }));
+        try {
+          const dlResult = await callTool<{ line_results: Array<{ line_id: string; lane_key: string | null; distance_km: number | null; rate_band: string; short_run_flag: boolean; fixed_cost_suspect: boolean; delta_pct: number | null; cg_band: string; verdict: string; reason_code: string | null; risk_score: number | null; rbr_trigger: boolean }>; summary: Record<string, number> }>('domestic_lane_check', { lines: domesticLines });
+          toolCalls.push({ tool: 'domestic_lane_check', latency_ms: dlResult.latency_ms, status: dlResult.status });
+          for (const lr of dlResult.result.line_results) {
+            domestic_lane_results.push({
+              line_id: lr.line_id,
+              lane: lr.lane_key,
+              distance_km: lr.distance_km,
+              rate_band: lr.rate_band,
+              verdict: lr.verdict,
+              reason_code: lr.reason_code,
+              delta_pct: lr.delta_pct,
+              cg_band: lr.cg_band,
+              short_run_flag: lr.short_run_flag,
+              fixed_cost_suspect: lr.fixed_cost_suspect,
+              risk_score: lr.risk_score,
+              rbr_trigger: lr.rbr_trigger,
+            });
+          }
+        } catch {
+          toolCalls.push({ tool: 'domestic_lane_check', latency_ms: 0, status: 'ERROR' });
+        }
+      } else {
+        toolCalls.push({ tool: 'domestic_lane_check', latency_ms: 0, status: 'SKIPPED' });
       }
 
       // Step 13: build_validation_explanation — once per finding, aggregate from all previous steps
@@ -581,6 +689,11 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
       for (const dd of dem_det_results) {
         if (dd.reason_code) {
           allFindings.push({ finding_id: `dd_${dd.line_id}`, rule_id: 'check_dem_det', reason_code: dd.reason_code, line_id: dd.line_id, severity: dd.verdict === 'ZERO' ? 'ZERO' : 'AMBER' });
+        }
+      }
+      for (const dl of domestic_lane_results) {
+        if (dl.reason_code) {
+          allFindings.push({ finding_id: `dl_${dl.line_id}`, rule_id: 'domestic_lane_check', reason_code: dl.reason_code, line_id: dl.line_id, severity: dl.verdict === 'ZERO' ? 'ZERO' : (dl.verdict === 'AMBER' ? 'AMBER' : 'PASS') });
         }
       }
 
@@ -636,6 +749,7 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
         confidence: 0.95,
         reason_codes: [],
         warnings: [],
+        precheck_issues: precheckIssues,
         normalized_lines: normalizedLinesOut,
         duplicate_checks,
         shipment_matches,
@@ -643,7 +757,9 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
         tax_vat_results,
         fx_policy_results,
         dem_det_results,
-        validation_explanations
+        validation_explanations,
+        domestic_lane_results,
+        workflow_type: workflowType
       };
     }
   };
