@@ -22,11 +22,11 @@ async function appendLargeFile(
   const { upload } = await import('@vercel/blob/client');
   const blob = await upload(file.name, file, {
     access: 'public',
-    handleUploadUrl: '/api/files/blob-upload',
+    handleUploadUrl: '/api/invoices/upload-url',
     onUploadProgress: e => onProgress(e.percentage),
   });
   const sha256 = await sha256Hex(file);
-  const res = await fetch('/api/files/register', {
+  const res = await fetch('/api/invoices', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-user-id': 'dev-user' },
     body: JSON.stringify({
