@@ -8,7 +8,32 @@ export interface CfMcpClient {
     cf_mcp_tool_calls: Array<{ tool: string; latency_ms: number; status: 'OK' | 'ERROR' | 'TIMEOUT' | 'SKIPPED' }>;
     type_b_results: Array<{ line_id: string; type_b: string; confidence: number }>;
     hs_uae_results: Array<{ line_id: string; verdict: 'PASS' | 'AMBER' | 'ZERO'; boe_found: boolean; reason_code: string | null }>;
-    rate_checks: Array<{ line_id: string; rate_status: string; validity_status: 'VALID'|'EXPIRED'|'PENDING'|null }>;
+    rate_checks: Array<{
+      line_id: string;
+      rate_status: string;
+      validity_status: 'VALID'|'EXPIRED'|'PENDING'|null;
+      rate_type?: 'CONTRACT_NUMERIC'|'TEXT_EXCEPTION'|'MISSING_RATE'|null;
+      ai_rate_status?:
+        | 'AUTO_COMPARE_OK'
+        | 'AUTO_COMPARE_WITH_DUPLICATE_REVIEW'
+        | 'AUTO_COMPARE_REQUIRE_REVIEW_EVIDENCE'
+        | 'EXCEPTION_EVIDENCE_REQUIRED'
+        | 'MISSING_RATE_NO_AUTO_PASS'
+        | null;
+      match_eligible?: 'Y'|'N'|null;
+      contract_row_id?: string|null;
+      unit?: string|null;
+      scope?: string|null;
+      type_b?: string|null;
+      effective_from?: string|null;
+      effective_to?: string|null;
+      variance_pct?: number|null;
+      variance_amount?: number|null;
+      contracted_rate?: number|null;
+      evidence_status?:
+        | 'MATCHED_EXACT'|'MATCHED_AMOUNT'|'MATCHED_APPROVAL'|'PARTIAL'|'MISSING'|'CONFLICT'|'NOT_APPLICABLE'
+        | null;
+    }>;
     evidence_requirements: Array<{ line_id: string; required_evidence: string[] }>;
     costguard_results: Array<{ line_id: string; band: 'PASS'|'WARN'|'HIGH'|'CRITICAL'; verdict: string; delta_pct: number | null; prism_kernel_proof_ref: string | null; fx_policy_id?: string | null }>;
     doc_guardian_results: Array<{ line_id: string | null; code: string; severity: 'AMBER'|'ZERO' }>;
@@ -179,15 +204,111 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
       const chargeCodeOf = (line: any): string => line.charge_code ?? typeBByLine.get(line.line_id) ?? 'GENERAL';
 
       // Step 3: check_rate_card — per-line
-      const rate_checks: Array<{ line_id: string; rate_status: string; validity_status: 'VALID'|'EXPIRED'|'PENDING'|null }> = [];
+      const rate_checks: Array<{
+        line_id: string;
+        rate_status: string;
+        validity_status: 'VALID'|'EXPIRED'|'PENDING'|null;
+        rate_type: 'CONTRACT_NUMERIC'|'TEXT_EXCEPTION'|'MISSING_RATE'|null;
+        ai_rate_status:
+          | 'AUTO_COMPARE_OK'
+          | 'AUTO_COMPARE_WITH_DUPLICATE_REVIEW'
+          | 'AUTO_COMPARE_REQUIRE_REVIEW_EVIDENCE'
+          | 'EXCEPTION_EVIDENCE_REQUIRED'
+          | 'MISSING_RATE_NO_AUTO_PASS'
+          | null;
+        match_eligible: 'Y'|'N'|null;
+        contract_row_id: string|null;
+        unit: string|null;
+        scope: string|null;
+        type_b: string|null;
+        effective_from: string|null;
+        effective_to: string|null;
+        variance_pct: number|null;
+        variance_amount: number|null;
+        contracted_rate: number|null;
+        evidence_status:
+          | 'MATCHED_EXACT'|'MATCHED_AMOUNT'|'MATCHED_APPROVAL'|'PARTIAL'|'MISSING'|'CONFLICT'|'NOT_APPLICABLE'
+          | null;
+      }> = [];
       for (const line of processedLines) {
         try {
-          const rateRes = await callTool<{ verdict: string; reason_code: string | null }>('check_rate_card', { charge_code: chargeCodeOf(line), lane: line.lane ?? null, rate_basis: line.unit ?? null, effective_date: null, applied_rate: line.rate ?? null });
+          const rateRes = await callTool<{
+            verdict: string;
+            reason_code: string | null;
+            rate_type: 'CONTRACT_NUMERIC'|'TEXT_EXCEPTION'|'MISSING_RATE'|null;
+            ai_rate_status:
+              | 'AUTO_COMPARE_OK'
+              | 'AUTO_COMPARE_WITH_DUPLICATE_REVIEW'
+              | 'AUTO_COMPARE_REQUIRE_REVIEW_EVIDENCE'
+              | 'EXCEPTION_EVIDENCE_REQUIRED'
+              | 'MISSING_RATE_NO_AUTO_PASS'
+              | null;
+            match_eligible: 'Y'|'N'|null;
+            contract_row_id: string|null;
+            unit: string|null;
+            scope: string|null;
+            type_b: string|null;
+            effective_from: string|null;
+            effective_to: string|null;
+            variance_pct: number|null;
+            variance_amount: number|null;
+            contracted_rate: number|null;
+            evidence_status:
+              | 'MATCHED_EXACT'|'MATCHED_AMOUNT'|'MATCHED_APPROVAL'|'PARTIAL'|'MISSING'|'CONFLICT'|'NOT_APPLICABLE'
+              | null;
+          }>('check_rate_card', {
+            charge_code: chargeCodeOf(line),
+            lane: line.lane ?? null,
+            rate_basis: line.unit ?? null,
+            effective_date: null,
+            applied_rate: line.rate ?? null,
+            charge_description: line.description ?? null,
+            unit: line.unit ?? null,
+            scope: line.scope ?? null,
+            type_b: typeBByLine.get(line.line_id) ?? null,
+            qty: line.qty ?? null,
+            rate: line.rate ?? null,
+            currency: line.currency ?? null
+          });
           toolCalls.push({ tool: 'check_rate_card', latency_ms: rateRes.latency_ms, status: rateRes.status });
-          rate_checks.push({ line_id: line.line_id, rate_status: rateRes.result.verdict, validity_status: null });
+          rate_checks.push({
+            line_id: line.line_id,
+            rate_status: rateRes.result.verdict,
+            validity_status: null,
+            rate_type: rateRes.result.rate_type,
+            ai_rate_status: rateRes.result.ai_rate_status,
+            match_eligible: rateRes.result.match_eligible,
+            contract_row_id: rateRes.result.contract_row_id,
+            unit: rateRes.result.unit,
+            scope: rateRes.result.scope,
+            type_b: rateRes.result.type_b,
+            effective_from: rateRes.result.effective_from,
+            effective_to: rateRes.result.effective_to,
+            variance_pct: rateRes.result.variance_pct,
+            variance_amount: rateRes.result.variance_amount,
+            contracted_rate: rateRes.result.contracted_rate,
+            evidence_status: rateRes.result.evidence_status
+          });
         } catch {
           toolCalls.push({ tool: 'check_rate_card', latency_ms: 0, status: 'ERROR' });
-          rate_checks.push({ line_id: line.line_id, rate_status: 'UNKNOWN', validity_status: null });
+          rate_checks.push({
+            line_id: line.line_id,
+            rate_status: 'UNKNOWN',
+            validity_status: null,
+            rate_type: null,
+            ai_rate_status: null,
+            match_eligible: null,
+            contract_row_id: null,
+            unit: null,
+            scope: null,
+            type_b: null,
+            effective_from: null,
+            effective_to: null,
+            variance_pct: null,
+            variance_amount: null,
+            contracted_rate: null,
+            evidence_status: null
+          });
         }
       }
 
