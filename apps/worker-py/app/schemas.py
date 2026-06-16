@@ -236,6 +236,9 @@ class LineViewRow(BaseModel):
     delta_pct: Optional[float] = None
     numeric_integrity_status: Optional[str] = None
     difference: Optional[float] = None
+    # rate_match enrichment (rate_match_logic.md) — appended 04_Line_View columns
+    risk: Optional[str] = None
+    action: Optional[str] = None
     formula_text: Optional[str] = None
 
 class SourceDataRow(BaseModel):
@@ -313,6 +316,18 @@ class RateCheckRow(BaseModel):
     rate_status: str
     delta_pct: Optional[float] = None
     severity: str
+    # rate_match enrichment (rate_match_logic.md) — appended 06_Rate_Check columns.
+    # Types mirror packages/tools check_rate_card output (match_eligible is 'Y'/'N'/null).
+    contract_row_id: Optional[str] = None
+    unit: Optional[str] = None
+    scope: Optional[str] = None
+    type_b: Optional[str] = None
+    match_eligible: Optional[str] = None
+    rate_type: Optional[str] = None
+    ai_rate_status: Optional[str] = None
+    variance_amount: Optional[float] = None
+    variance_pct: Optional[float] = None
+    evidence_status: Optional[str] = None
 
 class TaxFxCheckRow(BaseModel):
     model_config = ConfigDict(extra='forbid')

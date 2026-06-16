@@ -92,7 +92,7 @@ def build_xlsx(req: ExportRequest) -> bytes:
         ])
 
     ws_line = wb.create_sheet("04_Line_View")
-    line_cols = ["line_id", "shipment_ref", "description", "for_charge_component", "type_b", "amount", "currency", "rate_source", "rate_status", "validity_status", "evidence_status", "gate_status", "band", "delta_pct", "numeric_integrity_status", "difference", "formula_text"]
+    line_cols = ["line_id", "shipment_ref", "description", "for_charge_component", "type_b", "amount", "currency", "rate_source", "rate_status", "validity_status", "evidence_status", "gate_status", "band", "delta_pct", "numeric_integrity_status", "difference", "risk", "action", "formula_text"]
     ws_line.append(line_cols)
     sorted_lines = sorted(req.line_view_rows, key=lambda x: x.line_id or "")
     for row in sorted_lines:
@@ -113,6 +113,8 @@ def build_xlsx(req: ExportRequest) -> bytes:
             row.delta_pct,
             row.numeric_integrity_status,
             row.difference,
+            row.risk,
+            row.action,
             _literal_text(row.formula_text),
         ])
 
@@ -131,7 +133,7 @@ def build_xlsx(req: ExportRequest) -> bytes:
         ])
 
     ws_rate = wb.create_sheet("06_Rate_Check")
-    rate_cols = ["line_id", "charge_code", "lane", "contract_rate", "invoiced_rate", "rate_basis", "effective_from", "effective_to", "rate_status", "delta_pct", "severity"]
+    rate_cols = ["line_id", "charge_code", "lane", "contract_rate", "invoiced_rate", "rate_basis", "effective_from", "effective_to", "rate_status", "delta_pct", "severity", "contract_row_id", "unit", "scope", "type_b", "match_eligible", "rate_type", "ai_rate_status", "variance_amount", "variance_pct", "evidence_status"]
     ws_rate.append(rate_cols)
     for row in sorted(getattr(req, "rate_check_rows", []), key=lambda x: x.line_id or ""):
         ws_rate.append([
@@ -146,6 +148,16 @@ def build_xlsx(req: ExportRequest) -> bytes:
             row.rate_status,
             row.delta_pct,
             row.severity,
+            row.contract_row_id,
+            row.unit,
+            row.scope,
+            row.type_b,
+            row.match_eligible,
+            row.rate_type,
+            row.ai_rate_status,
+            row.variance_amount,
+            row.variance_pct,
+            row.evidence_status,
         ])
 
     ws_tax = wb.create_sheet("07_Tax_FX_Check")
