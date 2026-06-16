@@ -14,7 +14,7 @@
 
 ### Changed
 
-- **`verifyAndPersistSourceHashes`** skips `gs://` objects (GCS objects can't be byte-streamed from the Vercel runtime; trust stored hash, defer integrity to the GCS confirm step).
+- **`verifyAndPersistSourceHashes`** skips `gs://` objects (GCS objects can't be byte-streamed from the Vercel runtime), trusting the stored client-supplied `sha256` as-is. ⚠ **Known integrity gap (2026-06-16):** `/api/files/confirm` records the client `sha256` without reading or recomputing the GCS object bytes, so a `gs://` upload confirmed with a wrong hash is not byte-verified anywhere and the source-hash guard cannot catch it. Open follow-up: add confirm-time GCS byte verification (or treat `gs://` sources as unverified in the gate) — this is NOT yet a completed integrity handoff.
 - **Source-hash cross-check** — only a POSITIVE parser mismatch (parser echoed a `source_sha256` AND it differs) is ZERO; an absent `source_sha256` stays PASS (byte-level guard already verified).
 - **Worker `ExportRequest`** gained `manifest_entries` (carries `source_hash_status` / expected+actual sha256 into `99_Manifest`).
 

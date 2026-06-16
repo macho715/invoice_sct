@@ -121,9 +121,11 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 
 Upload form (`apps/web/src/components/upload-form.tsx`) calls
 `upload-validation.ts` for client-side checks (MIME / size / extension).
-- `POST /api/invoice-audit/run` — parse + validation pipeline *(server re-runs
-  `upload-validation.ts` checks; structured Zod error envelope on validation
-  failure)*
+- `POST /api/invoice-audit/run` — parse + validation pipeline. ⚠ *Note (2026-06-16):
+  MIME / size / extension checks via `upload-validation.ts` are **client-side only**
+  (`upload-form.tsx`). Neither the run route nor the GCS `create-upload-url` / `confirm`
+  routes re-run them, so direct API or GCS callers can submit unsupported / oversized
+  objects toward parser dispatch. Open follow-up: add server-side upload validation.*
 - `GET /api/audit/status|trace|result?job_id=…` — job state
 - `POST /api/audit/approve` — approval gate action
 - `POST /api/audit/export` — build export artifact *(public — browser-initiated)*
@@ -179,6 +181,8 @@ cp .env.example apps/web/.env.local
 | `VISION_FALLBACK_ENABLED` | (2026-06-16) `gs://` Google Vision OCR fallback (web→worker `/v1/vision/start`). Default off. Fire-and-forget; never changes the audit verdict. For `gs://` PDF evidence only. |
 | `GCS_OCR_BUCKET` | (2026-06-16) GCS bucket used by the `gs://` Vision OCR fallback. |
 | `GCS_UPLOAD_ENABLED` | (2026-06-16) Flag gating the GCS signed upload path (`/api/files/create-upload-url`, `gcs-upload.ts`). Default off. |
+| `GCS_SOURCE_BUCKET` / `GCS_EVIDENCE_BUCKET` | (2026-06-16) Target GCS bucket for signed uploads. **Required** when `GCS_UPLOAD_ENABLED=true` — `/api/files/create-upload-url` returns `STORAGE_AUTH_FAILED` if neither is set. |
+| `GCS_CLIENT_EMAIL` / `GCS_PRIVATE_KEY` | (2026-06-16) Service-account credentials `gcs-upload.ts` uses to sign the upload URL. **Required** when `GCS_UPLOAD_ENABLED=true` — missing → `GCS_CONFIG_MISSING`. Keep `GCS_PRIVATE_KEY` out of logs/issues. |
 
 Never paste secret values into issues, docs, prompts, or logs.
 
