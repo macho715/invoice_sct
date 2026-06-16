@@ -56,6 +56,10 @@ HEADER_ALIASES: dict[str, list[str]] = {
         'charge type', 'category', 'cost category', 'cost type',
         'expense type', 'charge code', 'cost code', 'mode',
     ],
+    'formula_text': [
+        'formula text', 'formula_text', 'formula', 'formula as text',
+        'calculation text', 'calc text', 'formula_text_original',
+    ],
 }
 
 HEADER_FIELD_LABELS: dict[str, list[str]] = {
@@ -260,7 +264,7 @@ def _try_parse_matrix(rows: list, *, ws_title: str, file_id: str, parser_version
         )
     return None
 
-def _parse_xlsx_rows(rows: list, *, ws_title: str, file_id: str, parser_version: str) -> NormalizedInvoice:
+def _parse_xlsx_rows(rows: list, *, ws_title: str, file_id: str, parser_version: str, formula_rows: list | None = None) -> NormalizedInvoice:
     if not rows:
         raise ValueError("empty xlsx")
 
@@ -306,6 +310,11 @@ def _parse_xlsx_rows(rows: list, *, ws_title: str, file_id: str, parser_version:
             rate_basis=_cell_str(row[cmap['rate_basis']]) if 'rate_basis' in cmap else None,
             for_charge_component=_cell_str(row[cmap['charge_component']]) if 'charge_component' in cmap else None
         )
+        if 'formula_text' in cmap:
+            formula_row = formula_rows[r_idx - 1] if formula_rows and r_idx - 1 < len(formula_rows) else row
+            formula_text = _cell_str(formula_row[cmap['formula_text']]) if cmap['formula_text'] < len(formula_row) else None
+            if formula_text:
+                line.source_ref['formula_text'] = formula_text
         lines.append(line)
 
     if not lines:
@@ -355,6 +364,7 @@ def _parse_xlsx_rows(rows: list, *, ws_title: str, file_id: str, parser_version:
 
 def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version: str) -> NormalizedInvoice:
     wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+    formula_wb = load_workbook(io.BytesIO(raw), data_only=False, read_only=True)
     if not wb.worksheets:
         raise ValueError("empty xlsx")
 
@@ -371,8 +381,10 @@ def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version
     first_error: ValueError | None = None
     for ws in worksheets:
         rows = list(ws.iter_rows(values_only=True))
+        formula_ws = formula_wb[ws.title] if ws.title in formula_wb.sheetnames else None
+        formula_rows = list(formula_ws.iter_rows(values_only=True)) if formula_ws is not None else None
         try:
-            return _parse_xlsx_rows(rows, ws_title=ws.title, file_id=file_id, parser_version=parser_version)
+            return _parse_xlsx_rows(rows, ws_title=ws.title, file_id=file_id, parser_version=parser_version, formula_rows=formula_rows)
         except ValueError as exc:
             if first_error is None:
                 first_error = exc

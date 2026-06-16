@@ -227,6 +227,7 @@ class LineViewRow(BaseModel):
     delta_pct: Optional[float] = None
     numeric_integrity_status: Optional[str] = None
     difference: Optional[float] = None
+    formula_text: Optional[str] = None
 
 class SourceDataRow(BaseModel):
     model_config = ConfigDict(extra='forbid')

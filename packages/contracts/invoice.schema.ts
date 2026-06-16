@@ -48,7 +48,13 @@ export const InvoiceLineSchema = z.object({
   gate_status: VerdictSchema.nullish(),
   band: z.enum(['PASS', 'WARN', 'HIGH', 'CRITICAL']).nullish(),
   delta_pct: z.number().nullish(),
-  source_ref: z.object({ sheet: z.string().optional(), row: z.number().optional(), col: z.string().optional(), text_span: z.string().optional() }).nullish()
+  source_ref: z.object({
+    sheet: z.string().optional(),
+    row: z.number().optional(),
+    col: z.string().optional(),
+    text_span: z.string().optional(),
+    formula_text: z.string().optional()
+  }).nullish()
 });
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
 

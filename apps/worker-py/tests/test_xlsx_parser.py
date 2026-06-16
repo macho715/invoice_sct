@@ -135,6 +135,24 @@ def test_parses_line_view_when_decision_sheet_is_first():
     assert ni.invoice_lines[0].currency == 'USD'
     assert ni.invoice_lines[0].source_ref['sheet'] == '04_Line_View'
 
+def test_preserves_formula_text_column_as_source_text():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Invoice'
+    ws.append(['Description', 'Amount', 'Currency', 'Formula_Text'])
+    ws.append(['TRUCKING', 100.0, 'USD', '=ROUNDUP(99.991,2)'])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ni = parse_xlsx_bytes(
+        buf.getvalue(),
+        file_id='formula_pack',
+        file_name='formula.xlsx',
+        parser_version='parser-0.1.0',
+    )
+
+    assert ni.invoice_lines[0].source_ref['formula_text'] == '=ROUNDUP(99.991,2)'
+
 def test_parses_shpiment_v32_line_view_total_usd_contract():
     wb = Workbook()
     ws = wb.active
