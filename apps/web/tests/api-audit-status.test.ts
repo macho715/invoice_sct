@@ -27,5 +27,8 @@ describe('GET /api/audit/status', () => {
     expect(body.job_id).toBe(jobId);
     expect(body.status).toBe('UPLOADED');
     expect(body.last_step).toBe('UPLOAD');
+    expect(body.source_files).toBeDefined();
+    expect(body.source_files).toHaveLength(1);
+    expect(body.source_files[0]).toMatchObject({ original_filename: 'a.xlsx', file_type: 'xlsx', size_bytes: 1 });
   });
 });

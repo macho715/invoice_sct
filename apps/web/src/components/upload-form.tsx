@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { getUploadSelectionError } from '@/lib/upload-validation';
 import type { WorkflowType } from '@/lib/types';
 
+const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
+
 function formatKb(bytes: number) {
   return `${Math.ceil(bytes / 1024).toLocaleString()} KB`;
 }
@@ -13,7 +15,7 @@ async function sha256Hex(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function uploadFile(
+async function uploadLargeFile(
   file: File,
   jobId: string | null,
   jobToken: string | null,
@@ -42,6 +44,30 @@ async function uploadFile(
   });
   const body = await res.json();
   if (!res.ok) throw new Error(`${file.name}: ${body.code} — ${body.message}`);
+  return { jobId: body.job_id as string, jobToken: body.job_token as string };
+}
+
+async function ingestSmallFile(
+  file: File,
+  jobId: string | null,
+  jobToken: string | null,
+  workflowType: WorkflowType,
+  onProgress: (pct: number) => void,
+): Promise<{ jobId: string; jobToken: string }> {
+  onProgress(50);
+  const fd = new FormData();
+  fd.set('file', file);
+  if (jobId) fd.set('job_id', jobId);
+  if (jobToken) fd.set('job_token', jobToken);
+  fd.set('workflow_type', workflowType);
+  const r = await fetch('/api/files/ingest', {
+    method: 'POST',
+    body: fd,
+    headers: { 'x-user-id': 'dev-user' }
+  });
+  const body = await r.json();
+  if (!r.ok) throw new Error(`${file.name}: ${body.code} — ${body.message}`);
+  onProgress(100);
   return { jobId: body.job_id as string, jobToken: body.job_token as string };
 }
 
@@ -92,10 +118,17 @@ export default function UploadForm() {
       let jobToken: string | null = null;
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const uploaded = await uploadFile(file, jobId, jobToken, workflowType, pct =>
-          setProgress(`Uploading ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
-        jobId = uploaded.jobId;
-        jobToken = uploaded.jobToken;
+        if (file.size > LARGE_FILE_THRESHOLD) {
+          const uploaded = await uploadLargeFile(file, jobId, jobToken, workflowType, pct =>
+            setProgress(`Uploading ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
+          jobId = uploaded.jobId;
+          jobToken = uploaded.jobToken;
+        } else {
+          setProgress(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+          const uploaded = await ingestSmallFile(file, jobId, jobToken, workflowType, () => {});
+          jobId = jobId ?? uploaded.jobId;
+          jobToken = jobToken ?? uploaded.jobToken;
+        }
       }
       if (jobId && jobToken) {
         if (autoRun) await runValidation(jobId, jobToken);

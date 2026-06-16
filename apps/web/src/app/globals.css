@@ -158,3 +158,90 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---- layout helpers ---- */
+.stack { display: flex; flex-direction: column; gap: var(--sp-4); }
+.button-row { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 0; }
+.btn-sm { padding: 6px 10px; font-size: var(--fs-xs); min-height: 32px; }
+
+/* ---- eyebrow ---- */
+.eyebrow {
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--primary); margin-bottom: var(--sp-1);
+}
+
+/* ---- workflow selector ---- */
+.workflow-selector { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-4); margin: 0; }
+.fieldset-legend { font-weight: 700; font-size: var(--fs-sm); padding: 0 var(--sp-2); }
+.radio-group { display: flex; gap: var(--sp-3); margin-top: var(--sp-2); }
+.radio-card {
+  flex: 1; display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-3); border: 2px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; transition: border-color 150ms;
+}
+.radio-card.is-active { border-color: var(--primary); background: #eff6ff; }
+.radio-card input[type="radio"] { accent-color: var(--primary); }
+.radio-label { font-weight: 600; font-size: var(--fs-sm); }
+.radio-desc { font-size: var(--fs-xs); color: var(--text-muted); }
+
+/* ---- checkbox row ---- */
+.checkbox-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-sm); cursor: pointer; margin-top: var(--sp-1);
+}
+.checkbox-row input[type="checkbox"] { accent-color: var(--primary); }
+
+/* ---- step list ---- */
+.step-list {
+  display: flex; justify-content: space-between; gap: var(--sp-2);
+  list-style: none; padding: 0; margin: 0;
+}
+.step-list li {
+  flex: 1; text-align: center; font-size: var(--fs-xs); color: var(--text-muted);
+  padding: var(--sp-2); background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.step-list li.is-current { color: var(--primary); font-weight: 600; background: #eff6ff; }
+.step-list li.is-done { color: var(--pass-text); background: var(--pass-bg); }
+
+/* ---- file drop zone ---- */
+.file-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2);
+  padding: var(--sp-8) var(--sp-4); border: 2px dashed var(--border-strong);
+  border-radius: var(--radius); cursor: pointer; transition: border-color 150ms; min-height: 120px;
+}
+.file-drop:hover { border-color: var(--primary); }
+.file-drop .input { display: none; }
+.file-drop-title { font-weight: 600; font-size: var(--fs-lg); }
+.file-drop-copy { font-size: var(--fs-sm); color: var(--text-subtle); text-align: center; }
+
+/* ---- file panel / list ---- */
+.file-panel {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+}
+.file-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: var(--sp-2); font-size: var(--fs-sm);
+}
+.file-list { list-style: none; padding: 0; margin: 0; }
+.file-list li {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) 0; border-bottom: 1px solid var(--border);
+}
+.file-list li:last-child { border-bottom: none; }
+.file-list li > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---- file summary (job page) ---- */
+.file-summary { font-size: var(--fs-sm); margin: var(--sp-3) 0; }
+
+/* ---- embedded (dash) file list ---- */
+.embedded-file-list {
+  list-style: none; padding: 0; margin: var(--sp-2) 0;
+}
+.embedded-file-list li {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) 0; font-size: var(--fs-sm);
+}
+.embedded-file-icon { width: 16px; text-align: center; }

@@ -20,5 +20,7 @@ export async function GET(req: Request): Promise<Response> {
   if (tokenError) return tokenError;
   const trace = await STORE.listTrace(jobId);
   const last_step = trace.length > 0 ? trace[trace.length - 1].step : null;
-  return NextResponse.json({ job_id: job.job_id, status: job.status, verdict: job.verdict, last_step, progress: trace.length, updated_at: job.updated_at });
+  const sourceFiles = await STORE.listSourceFiles(jobId);
+  const fileList = sourceFiles.map(f => ({ original_filename: f.original_filename, file_type: f.file_type, size_bytes: f.size_bytes }));
+  return NextResponse.json({ job_id: job.job_id, status: job.status, verdict: job.verdict, last_step, progress: trace.length, updated_at: job.updated_at, source_files: fileList });
 }
