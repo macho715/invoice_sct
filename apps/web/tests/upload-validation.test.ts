@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { getUploadFileKind, getUploadSelectionError, hasInvoiceFile } from '../src/lib/upload-validation';
+import { getUploadFileKind, getUploadSelectionError, getInvoiceStepError, getEvidenceStepError, isStructuredInvoice, isPdfOnly } from '../src/lib/upload-validation';
 
 const file = (name: string, type = '') => ({ name, type }) as File;
 
 describe('upload validation', () => {
   it('accepts a PDF-only upload (Rule #0 OR semantics)', () => {
-    // PDF alone is now valid — the run route uses it as the invoice source.
     expect(getUploadSelectionError([file('pod.pdf', 'application/pdf')])).toBeNull();
-    // hasInvoiceFile still distinguishes structured invoices from PDF sources.
-    expect(hasInvoiceFile([file('pod.pdf', 'application/pdf')])).toBe(false);
+    expect(isStructuredInvoice(file('pod.pdf', 'application/pdf'))).toBe(false);
+    expect(isPdfOnly(file('pod.pdf', 'application/pdf'))).toBe(true);
   });
 
   it('rejects a selection with no supported file', () => {
@@ -20,6 +19,27 @@ describe('upload validation', () => {
     expect(getUploadSelectionError([file('invoice.xlsx'), file('pod.pdf')])).toBeNull();
     expect(getUploadSelectionError([file('invoice.md')])).toBeNull();
     expect(getUploadSelectionError([file('invoice.txt')])).toBeNull();
+  });
+
+  it('invoice step requires at least one accepted file', () => {
+    expect(getInvoiceStepError([])).toContain('Please select at least one');
+    expect(getInvoiceStepError([file('invoice.xlsx')])).toBeNull();
+    expect(getInvoiceStepError([file('pod.pdf')])).toBeNull();
+    expect(getInvoiceStepError([file('archive.zip', 'application/zip')])).toContain('Only');
+  });
+
+  it('evidence step accepts PDF only, empty is ok', () => {
+    expect(getEvidenceStepError([])).toBeNull();
+    expect(getEvidenceStepError([file('pod.pdf')])).toBeNull();
+    expect(getEvidenceStepError([file('pod.pdf'), file('dn.pdf')])).toBeNull();
+    expect(getEvidenceStepError([file('invoice.xlsx')])).toContain('Only');
+  });
+
+  it('isStructuredInvoice detects xlsx/md/txt but not pdf', () => {
+    expect(isStructuredInvoice(file('inv.xlsx'))).toBe(true);
+    expect(isStructuredInvoice(file('inv.md'))).toBe(true);
+    expect(isStructuredInvoice(file('inv.txt'))).toBe(true);
+    expect(isStructuredInvoice(file('inv.pdf', 'application/pdf'))).toBe(false);
   });
 
   it('detects upload file kind from extension or MIME type', () => {

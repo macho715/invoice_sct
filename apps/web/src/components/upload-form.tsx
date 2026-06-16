@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { getUploadSelectionError } from '@/lib/upload-validation';
+import { getInvoiceStepError, getEvidenceStepError, isStructuredInvoice, isPdfOnly, getUploadFileKind } from '@/lib/upload-validation';
 import type { WorkflowType } from '@/lib/types';
 
 const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
@@ -12,12 +12,9 @@ function formatKb(bytes: number) {
 
 async function sha256Hex(file: File): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  // Bare 64-char hex — matches SourceFileSchema (z.string().length(64)).
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Large files (>4.5MB) can't pass through the Vercel serverless function body
-// limit, so they stream straight to Vercel Blob from the browser, then register.
 async function uploadLargeFile(
   file: File,
   jobId: string | null,
@@ -50,50 +47,72 @@ async function uploadLargeFile(
   return { jobId: body.job_id as string, jobToken: body.job_token as string };
 }
 
+type Step = 1 | 2;
+
+function fileLabel(file: File, kind: 'invoice' | 'evidence'): string {
+  const typeLabel = ({ xlsx: 'XLSX', md: 'MD', txt: 'TXT', pdf: 'PDF', unknown: '?' })[getUploadFileKind(file)];
+  return `${kind === 'invoice' ? 'Invoice' : 'Evidence'} (${typeLabel})`;
+}
+
 export default function UploadForm() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  const invoiceInputRef = useRef<HTMLInputElement | null>(null);
+  const evidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const [step, setStep] = useState<Step>(1);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [workflowType, setWorkflowType] = useState<WorkflowType>('SHIPMENT');
-  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
-  function clearFiles() {
-    setFiles([]);
+  const allFiles = [...invoiceFiles, ...evidenceFiles];
+  const invoiceTotalBytes = invoiceFiles.reduce((sum, f) => sum + f.size, 0);
+  const evidenceTotalBytes = evidenceFiles.reduce((sum, f) => sum + f.size, 0);
+  const isPdfInvoice = invoiceFiles.length === 1 && isPdfOnly(invoiceFiles[0]);
+  const hasStructuredInvoice = invoiceFiles.some(f => isStructuredInvoice(f));
+
+  function clearAll() {
+    setInvoiceFiles([]);
+    setEvidenceFiles([]);
+    setStep(1);
     setErr(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (invoiceInputRef.current) invoiceInputRef.current.value = '';
+    if (evidenceInputRef.current) evidenceInputRef.current.value = '';
   }
 
-  function removeFile(index: number) {
-    setFiles(current => current.filter((_, i) => i !== index));
+  function goToEvidenceStep() {
+    const error = getInvoiceStepError(invoiceFiles);
+    if (error) { setErr(error); return; }
     setErr(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setStep(2);
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    const selectionError = getUploadSelectionError(files);
-    if (selectionError) { setErr(selectionError); return; }
+  function goBackToInvoiceStep() {
+    setErr(null);
+    setStep(1);
+  }
+
+  async function runUpload() {
+    const invoiceError = getInvoiceStepError(invoiceFiles);
+    if (invoiceError) { setErr(invoiceError); setStep(1); return; }
+    const evidenceError = getEvidenceStepError(evidenceFiles);
+    if (evidenceError) { setErr(evidenceError); return; }
 
     setBusy(true); setErr(null);
     try {
-      // First file creates the job; subsequent files append to the same job_id.
-      // Files >4.5MB stream client-direct to Blob (uploadLargeFile); smaller files
-      // go through /api/files/ingest. Either way the same job_id threads through.
       let jobId: string | null = null;
       let jobToken: string | null = null;
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < allFiles.length; i++) {
+        const file = allFiles[i];
         if (file.size > LARGE_FILE_THRESHOLD) {
           const uploaded = await uploadLargeFile(file, jobId, jobToken, workflowType, pct =>
-            setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
+            setProgress(`Uploading ${i + 1}/${allFiles.length}: ${file.name} (${Math.round(pct)}%)`));
           jobId = uploaded.jobId;
           jobToken = uploaded.jobToken;
           continue;
         }
-        setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name}`);
+        setProgress(`Uploading ${i + 1}/${allFiles.length}: ${file.name}`);
         const fd = new FormData();
         fd.set('file', file);
         if (jobId) fd.set('job_id', jobId);
@@ -110,7 +129,7 @@ export default function UploadForm() {
         jobToken = jobToken ?? body.job_token;
       }
       if (jobId && jobToken) {
-        setProgress('검증 실행 중…');
+        setProgress('Running validation…');
         const runRes = await fetch('/api/invoice-audit/run', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -118,7 +137,7 @@ export default function UploadForm() {
         });
         if (!runRes.ok) {
           const runBody = await runRes.json().catch(() => ({ message: `HTTP ${runRes.status}` }));
-          setErr(`검증 실행 실패: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
+          setErr(`Validation failed: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
           return;
         }
         router.push(`/invoice-audit/jobs/${jobId}?job_token=${encodeURIComponent(jobToken)}`);
@@ -137,12 +156,16 @@ export default function UploadForm() {
     : 'Korean domestic delivery audit — KRW, lane/distance rates, short-run detection';
 
   return (
-    <form className="card" onSubmit={onSubmit}>
+    <form className="card" onSubmit={e => { e.preventDefault(); if (step === 1) goToEvidenceStep(); else runUpload(); }}>
       <div className="stack">
         <div>
           <p className="eyebrow">Invoice validation</p>
-          <h2>Upload invoice or evidence</h2>
-          <p className="muted">Excel, text, markdown, or PDF files are accepted. You can upload one invoice, one PDF, or invoice plus evidence together.</p>
+          <h2>Step {step}/2: {step === 1 ? 'Upload Invoice' : 'Upload Evidence'}</h2>
+          <p className="muted">
+            {step === 1
+              ? 'Select your invoice file (.xlsx, .md, .txt) or a PDF. Then add supporting evidence PDFs in the next step.'
+              : 'Add supporting evidence PDFs (delivery notes, BL, BOE, inspection reports). This step is optional — you can run validation without evidence.'}
+          </p>
         </div>
 
         <fieldset className="workflow-selector">
@@ -177,58 +200,137 @@ export default function UploadForm() {
         </fieldset>
 
         <ol className="step-list" aria-label="Validation flow">
-          <li className={files.length > 0 ? 'is-done' : 'is-current'}>Select files</li>
-          <li className={busy ? 'is-current' : ''}>Upload</li>
-          <li>Run {workflowLabel} validation</li>
+          <li className={step >= 1 ? 'is-done' : 'is-current'}>Upload invoice</li>
+          <li className={step === 2 ? 'is-current' : step > 2 ? 'is-done' : ''}>Add evidence</li>
+          <li className={busy ? 'is-current' : ''}>Run {workflowLabel} validation</li>
           <li>Download workbook</li>
         </ol>
-      </div>
-      <label className="file-drop">
-        <span className="file-drop-title">Choose files</span>
-        <span className="file-drop-copy">Up to 50MB per file (large files upload directly). Supported: .xlsx, .md, .txt, .pdf.</span>
-      <input
-          ref={fileInputRef}
-        className="input"
-        type="file"
-        multiple
-        accept=".xlsx,.md,.txt,.pdf,application/pdf"
-        onChange={e => {
-          setFiles(Array.from(e.target.files ?? []));
-          setErr(null);
-        }}
-      />
-      </label>
-      {files.length > 0 && (
-        <div className="file-panel" aria-live="polite">
-          <div className="file-panel-header">
-            <strong>{files.length} file{files.length > 1 ? 's' : ''} selected</strong>
-            <span className="muted">Total {formatKb(totalBytes)}</span>
-          </div>
-          <ul className="file-list">
-            {files.map((f, i) => (
-              <li key={`${f.name}-${f.size}-${i}`}>
-                <div>
-                  <strong>{f.name}</strong>
-                  <span className="muted">{formatKb(f.size)}</span>
+
+        <hr />
+
+        {step === 1 && (
+          <>
+            <div>
+              <h3>Invoice file (required)</h3>
+              <p className="muted">Upload your invoice. Use .xlsx for best results; .md and .txt are also supported. A .pdf can be used as invoice source (limited parsing).</p>
+            </div>
+            <label className="file-drop">
+              <span className="file-drop-title">Choose invoice file</span>
+              <span className="file-drop-copy">Accepted: .xlsx, .md, .txt, .pdf. Max 50MB per file.</span>
+              <input
+                ref={invoiceInputRef}
+                className="input"
+                type="file"
+                multiple
+                accept=".xlsx,.md,.txt,.pdf,application/pdf"
+                onChange={e => {
+                  setInvoiceFiles(Array.from(e.target.files ?? []));
+                  setErr(null);
+                }}
+              />
+            </label>
+            {invoiceFiles.length > 0 && (
+              <div className="file-panel" aria-live="polite">
+                <div className="file-panel-header">
+                  <strong>{invoiceFiles.length} invoice file{invoiceFiles.length > 1 ? 's' : ''}</strong>
+                  <span className="muted">{formatKb(invoiceTotalBytes)}</span>
                 </div>
-                <button className="btn btn-ghost btn-sm" type="button" onClick={() => removeFile(i)} disabled={busy}>
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {progress && <div className="alert alert-info" role="status">{progress}</div>}
-      <div className="button-row">
-        <button className="btn" type="submit" disabled={busy || files.length === 0}>
-          {busy ? 'Working...' : `Upload and validate${files.length > 1 ? ` (${files.length})` : ''}`}
-        </button>
-        <button className="btn btn-secondary" type="button" onClick={clearFiles} disabled={busy || files.length === 0}>
-          Clear
-        </button>
+                <ul className="file-list">
+                  {invoiceFiles.map((f, i) => (
+                    <li key={`inv-${f.name}-${f.size}-${i}`}>
+                      <div>
+                        <span className="file-badge file-badge-invoice">{fileLabel(f, 'invoice')}</span>
+                        <strong>{f.name}</strong>
+                        <span className="muted">{formatKb(f.size)}</span>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => { setInvoiceFiles(prev => prev.filter((_, j) => j !== i)); if (invoiceInputRef.current) invoiceInputRef.current.value = ''; }} disabled={busy}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {isPdfInvoice && !hasStructuredInvoice && (
+                  <div className="alert alert-warn" style={{ marginTop: 8 }}>
+                    PDF used as invoice source — text extraction may be incomplete. For best results, upload a .xlsx invoice.
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="button-row">
+              <button className="btn" type="submit" disabled={busy || invoiceFiles.length === 0}>
+                Next: Add Evidence →
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={clearAll} disabled={busy || (invoiceFiles.length === 0 && evidenceFiles.length === 0)}>
+                Clear
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div>
+              <h3>Evidence PDFs (optional)</h3>
+              <p className="muted">Attach supporting documents: Delivery Notes, BL, BOE, inspection reports, etc. PDF only.</p>
+            </div>
+            <div className="file-summary" style={{ marginBottom: 12 }}>
+              <span className="file-badge file-badge-invoice">Invoice ({invoiceFiles.length})</span>
+              {invoiceFiles.map(f => <code key={f.name} style={{ marginLeft: 8, fontSize: '0.85rem' }}>{f.name}</code>)}
+            </div>
+            <label className="file-drop">
+              <span className="file-drop-title">Choose evidence PDFs</span>
+              <span className="file-drop-copy">Accepted: .pdf only. Max 50MB per file. You can skip this step.</span>
+              <input
+                ref={evidenceInputRef}
+                className="input"
+                type="file"
+                multiple
+                accept=".pdf,application/pdf"
+                onChange={e => {
+                  setEvidenceFiles(Array.from(e.target.files ?? []));
+                  setErr(null);
+                }}
+              />
+            </label>
+            {evidenceFiles.length > 0 && (
+              <div className="file-panel" aria-live="polite">
+                <div className="file-panel-header">
+                  <strong>{evidenceFiles.length} evidence file{evidenceFiles.length > 1 ? 's' : ''}</strong>
+                  <span className="muted">{formatKb(evidenceTotalBytes)}</span>
+                </div>
+                <ul className="file-list">
+                  {evidenceFiles.map((f, i) => (
+                    <li key={`ev-${f.name}-${f.size}-${i}`}>
+                      <div>
+                        <span className="file-badge file-badge-evidence">{fileLabel(f, 'evidence')}</span>
+                        <strong>{f.name}</strong>
+                        <span className="muted">{formatKb(f.size)}</span>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => { setEvidenceFiles(prev => prev.filter((_, j) => j !== i)); if (evidenceInputRef.current) evidenceInputRef.current.value = ''; }} disabled={busy}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {progress && <div className="alert alert-info" role="status">{progress}</div>}
+            <div className="button-row">
+              <button className="btn" type="submit" disabled={busy}>
+                {busy ? 'Working...' : 'Upload and Run Validation'}
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={goBackToInvoiceStep} disabled={busy}>
+                ← Back
+              </button>
+              <button className="btn btn-ghost" type="button" onClick={clearAll} disabled={busy}>
+                Clear All
+              </button>
+            </div>
+          </>
+        )}
+
+        {err && <div className="alert alert-error" role="alert">{err}</div>}
       </div>
-      {err && <div className="alert alert-error" role="alert">{err}</div>}
     </form>
   );
 }

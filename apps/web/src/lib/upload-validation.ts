@@ -1,10 +1,8 @@
 export type UploadFileKind = 'xlsx' | 'md' | 'txt' | 'pdf' | 'unknown';
 
-const INVOICE_FILE_KINDS = new Set<UploadFileKind>(['xlsx', 'md', 'txt']);
-// Rule #0 (CLAUDE.md): Excel invoice OR PDF evidence — either alone is a valid upload
-// that must yield a final Excel. PDF-only uploads are accepted (the run route uses the
-// PDF as the invoice source).
-const ACCEPTED_FILE_KINDS = new Set<UploadFileKind>(['xlsx', 'md', 'txt', 'pdf']);
+const STRUCTURED_INVOICE_KINDS = new Set<UploadFileKind>(['xlsx', 'md', 'txt']);
+const ACCEPTED_INVOICE_KINDS = new Set<UploadFileKind>(['xlsx', 'md', 'txt', 'pdf']);
+const ACCEPTED_EVIDENCE_KINDS = new Set<UploadFileKind>(['pdf']);
 
 export function getUploadFileKind(file: Pick<File, 'name' | 'type'>): UploadFileKind {
   const name = file.name.toLowerCase();
@@ -18,15 +16,31 @@ export function getUploadFileKind(file: Pick<File, 'name' | 'type'>): UploadFile
   return 'unknown';
 }
 
-export function hasInvoiceFile(files: Array<Pick<File, 'name' | 'type'>>): boolean {
-  return files.some(file => INVOICE_FILE_KINDS.has(getUploadFileKind(file)));
+export function isStructuredInvoice(file: Pick<File, 'name' | 'type'>): boolean {
+  return STRUCTURED_INVOICE_KINDS.has(getUploadFileKind(file));
+}
+
+export function isPdfOnly(file: Pick<File, 'name' | 'type'>): boolean {
+  return getUploadFileKind(file) === 'pdf';
+}
+
+export function getInvoiceStepError(files: Array<Pick<File, 'name' | 'type'>>): string | null {
+  if (files.length === 0) return 'Please select at least one invoice file (.xlsx, .md, .txt) or a PDF.';
+  const hasAccepted = files.some(f => ACCEPTED_INVOICE_KINDS.has(getUploadFileKind(f)));
+  if (!hasAccepted) return 'Only .xlsx, .md, .txt, or .pdf files are accepted as invoice source.';
+  return null;
+}
+
+export function getEvidenceStepError(files: Array<Pick<File, 'name' | 'type'>>): string | null {
+  if (files.length === 0) return null;
+  const hasNonPdf = files.some(f => !ACCEPTED_EVIDENCE_KINDS.has(getUploadFileKind(f)));
+  if (hasNonPdf) return 'Only .pdf files are accepted as evidence.';
+  return null;
 }
 
 export function getUploadSelectionError(files: Array<Pick<File, 'name' | 'type'>>): string | null {
   if (files.length === 0) return 'select at least one file';
-  // OR semantics: a single Excel invoice OR a single PDF is enough. Only reject when
-  // none of the selected files are a recognized type.
-  const hasAccepted = files.some(file => ACCEPTED_FILE_KINDS.has(getUploadFileKind(file)));
+  const hasAccepted = files.some(f => ACCEPTED_INVOICE_KINDS.has(getUploadFileKind(f)));
   if (!hasAccepted) {
     return 'Upload at least one supported file: .xlsx, .md, or .txt invoice, or a .pdf.';
   }
