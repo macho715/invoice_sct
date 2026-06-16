@@ -5,6 +5,8 @@
 - unsupported still 422 (e.g. 'image')
 """
 import io
+import sys
+import types
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from app.main import create_app
@@ -59,6 +61,38 @@ def test_dispatch_pdf_low_conf_or_issues_path(monkeypatch):
     res = parse_pdf_text_bytes(raw, file_id="f005", file_name="low.pdf", parser_version="p-0.2")
     assert res.is_text_based is False or res.parser_confidence < 0.6
     assert any(iss in res.parser_issues for iss in ("SCANNED_PAGE_DETECTED",)) or res.parser_confidence < 0.5
+
+def test_fetch_blob_reads_gcs_uri(monkeypatch):
+    from app.routes import parse as parse_route
+
+    class FakeBlob:
+        def download_as_bytes(self):
+            return b"gcs-bytes"
+
+    class FakeBucket:
+        def __init__(self):
+            self.object_name = None
+
+        def blob(self, object_name):
+            self.object_name = object_name
+            return FakeBlob()
+
+    class FakeClient:
+        bucket_name = None
+        bucket_instance = FakeBucket()
+
+        def bucket(self, bucket_name):
+            FakeClient.bucket_name = bucket_name
+            return FakeClient.bucket_instance
+
+    fake_storage = types.SimpleNamespace(Client=lambda: FakeClient())
+    fake_google_cloud = types.SimpleNamespace(storage=fake_storage)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_google_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.storage", fake_storage)
+
+    assert parse_route._fetch_blob("gs://dsv-invoice-source/source/job/file/invoice.pdf") == b"gcs-bytes"
+    assert FakeClient.bucket_name == "dsv-invoice-source"
+    assert FakeClient.bucket_instance.object_name == "source/job/file/invoice.pdf"
 
 def test_dispatch_unsupported_still_422():
     app = create_app()

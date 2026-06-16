@@ -1,6 +1,7 @@
 """POST /parse endpoint. Phase 1: in-memory blob fetch stub (replace with Vercel Blob signed URL)."""
 from __future__ import annotations
 import hashlib
+from urllib.parse import urlparse
 import httpx
 from fastapi import APIRouter, HTTPException
 from app.schemas import ParseRequest, ParseResponse
@@ -16,6 +17,16 @@ router = APIRouter()
 
 def _fetch_blob(blob_url: str) -> bytes:
     """Phase 1 stub. In production, fetch from Vercel Blob signed URL using BLOB_READ_WRITE_TOKEN."""
+    if blob_url.startswith("gs://"):
+        parsed = urlparse(blob_url)
+        bucket_name = parsed.netloc
+        object_name = parsed.path.lstrip("/")
+        if not bucket_name or not object_name:
+            raise ValueError(f"invalid GCS URI: {blob_url}")
+        from google.cloud import storage
+        client = storage.Client()
+        return client.bucket(bucket_name).blob(object_name).download_as_bytes()
+
     with httpx.Client(timeout=10.0) as client:
         r = client.get(blob_url)
         r.raise_for_status()

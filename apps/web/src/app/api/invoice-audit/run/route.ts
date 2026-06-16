@@ -135,6 +135,10 @@ async function verifyAndPersistSourceHashes(jobId: string, files: SourceFile[]):
   return { files: verified };
 }
 
+async function resolveParserBlobUrl(file: SourceFile): Promise<string> {
+  return file.blob_ref.startsWith('gs://') ? file.blob_ref : getSignedDownloadUrl(file.blob_ref);
+}
+
 async function parseBody(req: Request): Promise<{ job_id?: string; job_token?: string } | null> {
   const ct = req.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
@@ -234,7 +238,7 @@ export async function POST(req: Request): Promise<Response> {
   const parser = createParserClient({ baseUrl: workerUrl, token: parserToken });
   let parseRes;
   try {
-    const blobUrl = await getSignedDownloadUrl(invoiceFile.blob_ref);
+    const blobUrl = await resolveParserBlobUrl(invoiceFile);
     const basePayload = {
       blob_ref: invoiceFile.blob_ref, file_id: invoiceFile.file_id, job_id: body.job_id,
       file_type: invoiceFile.file_type as 'xlsx' | 'md' | 'txt' | 'pdf',
@@ -507,7 +511,7 @@ export async function POST(req: Request): Promise<Response> {
   const mergedEvidence = [...((parseRes.normalized as any)?.evidence_candidates ?? []), ...visionMergedEvidence];
   for (const evFile of evidenceFiles) {
     try {
-      const evBlobUrl = await getSignedDownloadUrl(evFile.blob_ref);
+      const evBlobUrl = await resolveParserBlobUrl(evFile);
       const evPayload = {
         blob_ref: evFile.blob_ref, file_id: evFile.file_id, job_id: body.job_id,
         file_type: 'pdf' as const, parser_version: job.parser_version, blob_url: evBlobUrl,

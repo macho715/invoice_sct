@@ -355,6 +355,46 @@ describe('POST /api/invoice-audit/run', () => {
     expect(body.status).toBe('REVIEW_REQUIRED');
   });
 
+  it('passes gs:// PDF-only invoice source directly to the parser worker', async () => {
+    const job = await STORE.createJob({ created_by: 'u1' });
+    await STORE.updateJob(job.job_id, { status: 'UPLOADED' });
+    await STORE.addSourceFile(job.job_id, {
+      file_id: 'pdf_gcs_invoice',
+      job_id: job.job_id,
+      original_filename: 'invoice.pdf',
+      file_type: 'pdf',
+      mime_type: 'application/pdf',
+      size_bytes: 10,
+      sha256: 'e'.repeat(64),
+      blob_ref: `gs://dsv-invoice-source/source/${job.job_id}/pdf_gcs_invoice/invoice.pdf`,
+      parser_status: 'PENDING',
+      uploaded_by: 'u1',
+      uploaded_at: new Date().toISOString(),
+    });
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        parse_result_id: 'pr_gcs_pdf',
+        job_id: job.job_id,
+        file_id: 'pdf_gcs_invoice',
+        normalized: { invoice_id: 'inv', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.3, parser_version: 'p' },
+        parser_issues: ['SCANNED_PAGE_DETECTED'],
+      }),
+    });
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: job.job_id }), headers: { 'content-type': 'application/json' } }));
+
+    expect(r.status).toBe(202);
+    const parseCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/v1/parse'));
+    expect(parseCall).toBeDefined();
+    const payload = JSON.parse((parseCall?.[1] as any).body);
+    expect(payload.blob_ref).toBe(`gs://dsv-invoice-source/source/${job.job_id}/pdf_gcs_invoice/invoice.pdf`);
+    expect(payload.blob_url).toBe(payload.blob_ref);
+  });
+
   it('skips Vision fallback for non-GCS PDF even when flag is enabled', async () => {
     const fd = new FormData();
     fd.set('file', new File(['%PDF-1.4 minimal'], 'local-only.pdf', { type: 'application/pdf' }));
