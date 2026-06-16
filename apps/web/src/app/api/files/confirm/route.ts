@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { STORE } from '@/lib/job-store';
+import { createJobToken } from '@/lib/job-token';
 import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
 import { SourceFileSchema } from '@/lib/types';
 import { withDeprecation } from '../deprecation';
@@ -62,10 +63,8 @@ async function handleConfirm(req: NextRequest) {
 
   try {
     // Ensure job exists; create if missing
-    const existing = await STORE.getJob(job_id);
-    if (!existing) {
-      await STORE.createJob({ created_by: userId, job_id });
-    }
+    let job = await STORE.getJob(job_id);
+    if (!job) job = await STORE.createJob({ created_by: userId, job_id });
 
     await STORE.addSourceFile(job_id, sourceFile);
     await STORE.updateJob(job_id, { status: 'UPLOADED' });
@@ -80,6 +79,7 @@ async function handleConfirm(req: NextRequest) {
       NextResponse.json(
         {
           job_id,
+          job_token: createJobToken(job),
           file_id,
           sha256,
           gcs_uri: resolvedGcsUri,

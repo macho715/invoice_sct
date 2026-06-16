@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { POST } from '../src/app/api/files/confirm/route';
 import { STORE } from '../src/lib/job-store';
+import { verifyJobToken } from '../src/lib/job-token';
 
 const SHA = 'a'.repeat(64);
 
@@ -32,8 +33,12 @@ describe('POST /api/files/confirm (GCS object -> SourceFile)', () => {
     const body = await r.json();
     expect(body.status).toBe('UPLOADED');
     expect(body.gcs_uri).toBe(gcsUri);
+    expect(body.job_token).toEqual(expect.any(String));
 
     const sources = await STORE.listSourceFiles('job_confirm_1');
+    const job = await STORE.getJob('job_confirm_1');
+    expect(job).not.toBeNull();
+    expect(verifyJobToken(job!, body.job_token)).toBe(true);
     expect(sources).toHaveLength(1);
     expect(sources[0].blob_ref).toBe(gcsUri);
     expect(sources[0].file_type).toBe('pdf');
