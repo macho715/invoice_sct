@@ -16,6 +16,13 @@ export interface EvidenceFinding {
   severity: 'AMBER' | 'ZERO';
 }
 
+export interface DuplicateFinding {
+  vendor_hash: string;
+  invoice_no_hash: string;
+  severity: 'AMBER' | 'ZERO';
+  reason_code: string;
+}
+
 const VERDICT_RANK: Record<Verdict, number> = { PASS: 0, AMBER: 1, ZERO: 2, FAILED: 3 };
 
 export function bandToVerdict(band: CostGuardBand): Verdict {
@@ -41,7 +48,7 @@ export function checkDlpExport(violations: Array<{ sheet: string; row: number; c
   return { verdict: 'PASS' as Verdict };
 }
 
-export function buildGateResult(jobId: string, lines: CostGuardLine[], evidenceFindings: EvidenceFinding[] = []) {
+export function buildGateResult(jobId: string, lines: CostGuardLine[], evidenceFindings: EvidenceFinding[] = [], duplicateFindings: DuplicateFinding[] = []) {
   const line_results = lines.map(l => ({
     line_id: l.line_id,
     verdict: bandToVerdict(l.band),
@@ -93,10 +100,24 @@ export function buildGateResult(jobId: string, lines: CostGuardLine[], evidenceF
     }
   }
 
+  for (const dup of duplicateFindings) {
+    action_items.push({
+      action_id: `act_dup_${dup.invoice_no_hash.slice(0, 10)}`,
+      severity: dup.severity,
+      line_id: '',
+      issue_type: dup.reason_code,
+      required_action: dup.severity === 'ZERO' ? 'Duplicate invoice detected — hold payment and Finance approval required' : 'Potential duplicate invoice — review prior invoice records'
+    });
+  }
+
   const evidenceMax: Verdict = evidenceFindings.length > 0
     ? evidenceFindings.reduce<Verdict>((acc, ef) => (VERDICT_RANK[ef.severity] > VERDICT_RANK[acc] ? ef.severity : acc), 'PASS')
     : 'PASS';
-  const finalVerdict: Verdict = VERDICT_RANK[evidenceMax] > VERDICT_RANK[verdict] ? evidenceMax : verdict;
+  const duplicateMax: Verdict = duplicateFindings.length > 0
+    ? duplicateFindings.reduce<Verdict>((acc, dup) => (VERDICT_RANK[dup.severity] > VERDICT_RANK[acc] ? dup.severity : acc), 'PASS')
+    : 'PASS';
+  let finalVerdict: Verdict = VERDICT_RANK[evidenceMax] > VERDICT_RANK[verdict] ? evidenceMax : verdict;
+  finalVerdict = VERDICT_RANK[duplicateMax] > VERDICT_RANK[finalVerdict] ? duplicateMax : finalVerdict;
 
   return { gate_id: `gate_${randomUUID().replace(/-/g, '').slice(0, 10)}`, job_id: jobId, verdict: finalVerdict, line_results, action_items };
 }

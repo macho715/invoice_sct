@@ -20,7 +20,7 @@ interface LargeUploadRequest {
   filename: string;
   mimeType: string;
   fileSize: number;
-  jobId: string;
+  jobId?: string;
 }
 
 function isLargeUploadRequest(value: unknown): value is LargeUploadRequest {
@@ -30,7 +30,7 @@ function isLargeUploadRequest(value: unknown): value is LargeUploadRequest {
     typeof v.filename === 'string' &&
     typeof v.mimeType === 'string' &&
     typeof v.fileSize === 'number' &&
-    typeof v.jobId === 'string'
+    (v.jobId === undefined || typeof v.jobId === 'string')
   );
 }
 
@@ -55,10 +55,21 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return badRequest('invalid_json', 'request body must be valid JSON');
   }
-  if (!isLargeUploadRequest(body)) {
-    return badRequest('invalid_body', 'required fields: filename, mimeType, fileSize, jobId');
+  const eventBody = body as { type?: string; payload?: { clientPayload?: string | null; tokenPayload?: string | null } };
+  const embeddedPayload = eventBody.type === 'blob.generate-client-token'
+    ? eventBody.payload?.clientPayload
+    : eventBody.type === 'blob.upload-completed'
+      ? eventBody.payload?.tokenPayload
+      : null;
+  let uploadRequest: unknown = body;
+  if (embeddedPayload) {
+    try { uploadRequest = JSON.parse(embeddedPayload); } catch { return badRequest('invalid_client_payload', 'clientPayload must be valid JSON'); }
   }
-  const { filename, mimeType, fileSize, jobId } = body;
+  if (!isLargeUploadRequest(uploadRequest)) {
+    return badRequest('invalid_body', 'required fields: filename, mimeType, fileSize; optional: jobId');
+  }
+  const { filename, mimeType, fileSize } = uploadRequest;
+  let jobId = uploadRequest.jobId?.trim() || null;
 
   // 1) Threshold gate: too small => redirect to small-file route
   if (fileSize <= LARGE_FILE_THRESHOLD_BYTES) {
@@ -74,6 +85,22 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const userId = req.headers.get('x-user-id') ?? 'anonymous';
+  const isInitOnly = new URL(req.url).searchParams.get('init') === '1';
+  if (jobId) {
+    const existing = await STORE.getJob(jobId);
+    if (!existing) return badRequest('unknown_job_id', 'jobId does not exist');
+    if (existing.status !== 'UPLOADED' && existing.status !== 'QUEUED' && existing.status !== 'CREATED') {
+      return badRequest('invalid_job_state', `cannot add files to job in status ${existing.status}`);
+    }
+  } else {
+    const job = await STORE.createJob({ created_by: userId });
+    jobId = job.job_id;
+  }
+
+  if (isInitOnly) {
+    await STORE.updateJob(jobId, { status: 'QUEUED' });
+    return NextResponse.json({ job_id: jobId, status: 'QUEUED' }, { status: 201 });
+  }
 
   // 3) Delegate to @vercel/blob/client handleUpload.
   //    The route handles two event types from the Vercel Blob client:
@@ -85,7 +112,7 @@ export async function POST(req: Request): Promise<Response> {
   const uploadOptions: HandleUploadOptions = {
     body: JSON.parse(rawBody) as unknown as HandleUploadOptions['body'],
     request: req,
-    onBeforeGenerateToken: async (pathname) => {
+    onBeforeGenerateToken: async (pathname, clientPayload) => {
       // Server-side path validation: only allow private/ scope per user.
       if (!pathname.startsWith(`private/${userId}/`)) {
         throw new Error(`forbidden pathname: ${pathname}`);
@@ -94,7 +121,7 @@ export async function POST(req: Request): Promise<Response> {
         allowedContentTypes: Array.from(ALLOWED_MIME_TYPES),
         maximumSizeInBytes: 50 * 1024 * 1024,  // 50MB hard cap for large uploads
         addRandomSuffix: true,
-        tokenPayload: JSON.stringify({ jobId, type: 'large', userId, filename })
+        tokenPayload: JSON.stringify({ jobId, type: 'large', userId, filename, mimeType, fileSize, clientPayload })
       };
     },
     onUploadCompleted: async ({ blob, tokenPayload }) => {
@@ -150,6 +177,7 @@ export async function POST(req: Request): Promise<Response> {
       return NextResponse.json(
         {
           url: result.clientToken,
+          job_id: jobId,
           pathname: 'pending-on-client-upload',
           access: 'private' as const
         },

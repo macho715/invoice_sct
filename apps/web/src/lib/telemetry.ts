@@ -2,7 +2,7 @@
 // All functions are no-ops when OTEL_ENABLED != 'true'.
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { redactAttributes } from '@invoice-audit/telemetry';
+import { redactAttributes } from '@invoice-audit/telemetry/redaction';
 
 const ENABLED = process.env.OTEL_ENABLED === 'true';
 

@@ -9,6 +9,9 @@ from app.schemas import (
 from app.exporters.xlsx import build_xlsx
 import openpyxl
 from io import BytesIO
+import base64
+import hashlib
+from app.routes.export import export_xlsx
 
 REQUIRED_SHEETS = [
     "00_Decision", "01_Action_Items", "02_Final_Recon",
@@ -100,12 +103,28 @@ def test_workbook_freeze_panes():
     for ws in wb.worksheets:
         assert ws.freeze_panes == 'A2', f"Sheet {ws.title} missing freeze_panes"
 
-def test_manifest_sheet_contains_sha256():
+def test_manifest_sheet_contains_pre_manifest_sha256():
     req = _make_minimal_export()
     data = build_xlsx(req)
     wb = openpyxl.load_workbook(BytesIO(data), read_only=True)
     ws = wb["99_Manifest"]
     rows = list(ws.iter_rows(values_only=True))
-    keys = [r[0] for r in rows[1:]]
-    assert "workbook_sha256" in keys
-    assert "sheet_count" in keys
+    manifest = {key: value for key, value in rows[1:]}
+
+    assert "pre_manifest_sha256" in manifest
+    assert "workbook_sha256" not in manifest
+    assert "sheet_count" in manifest
+    assert len(manifest["pre_manifest_sha256"]) == 64
+
+
+def test_internal_manifest_hash_is_distinct_from_api_final_bytes_hash():
+    req = _make_minimal_export()
+    response = export_xlsx(req)
+    data = base64.b64decode(response.file_content_base64)
+    wb = openpyxl.load_workbook(BytesIO(data), read_only=True)
+    rows = list(wb["99_Manifest"].iter_rows(values_only=True))
+    internal_manifest = {key: value for key, value in rows[1:]}
+
+    assert response.manifest.sha256 == hashlib.sha256(data).hexdigest()
+    assert "pre_manifest_sha256" in internal_manifest
+    assert internal_manifest["pre_manifest_sha256"] != response.manifest.sha256

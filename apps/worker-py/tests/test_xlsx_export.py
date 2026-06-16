@@ -1,7 +1,7 @@
 import pytest
 import openpyxl
 from io import BytesIO
-from app.schemas import ExportRequest, DecisionRow, ActionItemRow, FinalReconRow, LineViewRow, SourceDataRow, AuditDetailRow, EvidenceIssuesRow
+from app.schemas import ExportRequest, DecisionRow, ActionItemRow, FinalReconRow, LineViewRow, SourceDataRow, AuditDetailRow, EvidenceIssuesRow, ManifestEntry
 from app.exporters.xlsx import build_xlsx
 import hashlib
 
@@ -124,3 +124,32 @@ def test_xlsx_export_empty_request():
     )
     xlsx_bytes = build_xlsx(req)
     assert len(xlsx_bytes) > 0
+
+
+def test_xlsx_export_persists_source_hash_verification_in_required_sheets():
+    req = ExportRequest(
+        job_id="job_hash",
+        generated_at="2026-06-15T00:00:00Z",
+        decision_rows=[DecisionRow(job_id="job_hash", verdict="ZERO", rule_version="r1", parser_version="p1", zero_count=1, amber_count=0)],
+        action_items_rows=[ActionItemRow(action_id="act_hash", severity="ZERO", line_id="", issue_type="SOURCE_HASH_MISMATCH", required_action="re-upload trusted source")],
+        final_recon_rows=[],
+        line_view_rows=[],
+        source_data_rows=[],
+        audit_detail_rows=[AuditDetailRow(line_id="", rule_id="SOURCE_HASH_CHECK", reason_code="SOURCE_HASH_MISMATCH", sct_trace_id="trace_hash", decision_input="expected_sha256:aaa; actual_sha256:bbb")],
+        evidence_issues_rows=[],
+        manifest_entries=[
+            ManifestEntry(key="source_hash_status", value="SOURCE_HASH_MISMATCH"),
+            ManifestEntry(key="source_sha256_expected", value="a" * 64),
+            ManifestEntry(key="source_sha256_actual", value="b" * 64),
+        ],
+    )
+
+    wb = openpyxl.load_workbook(BytesIO(build_xlsx(req)))
+
+    assert wb["00_Decision"].cell(row=2, column=2).value == "ZERO"
+    assert wb["01_Action_Items"].cell(row=2, column=5).value == "SOURCE_HASH_MISMATCH"
+    assert wb["91_Audit_Detail"].cell(row=2, column=2).value == "SOURCE_HASH_CHECK"
+    manifest = {wb["99_Manifest"].cell(row=i, column=1).value: wb["99_Manifest"].cell(row=i, column=2).value for i in range(2, wb["99_Manifest"].max_row + 1)}
+    assert manifest["source_hash_status"] == "SOURCE_HASH_MISMATCH"
+    assert manifest["source_sha256_expected"] == "a" * 64
+    assert manifest["source_sha256_actual"] == "b" * 64

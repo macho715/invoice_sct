@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, ConfigDict
 import hashlib
 
@@ -88,11 +88,84 @@ class PdfParseResponse(BaseModel):
     evidence_candidates: list[EvidenceCandidate]
     parser_issues: list[str]  # e.g. 'SCANNED_PAGE_DETECTED', 'PDF_ENCRYPTED'
 
+
+# --- Google Vision OCR route models ---
+VisionRoute = Literal['text_parser', 'vision_ocr', 'markitdown', 'review_required']
+VisionStartStatus = Literal['VISION_DISABLED', 'STARTED', 'STUB']
+VisionCollectStatus = Literal['VISION_DISABLED', 'RUNNING', 'COLLECTED', 'VISION_OUTPUT_NOT_FOUND']
+
+
+class PreflightRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    gcs_uri: str
+    file_type: Literal['pdf', 'pdf_json']
+    file_role: Literal['invoice_source', 'evidence'] = 'evidence'
+
+
+class PreflightResponse(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    gcs_uri: str
+    is_text_based: bool = False
+    is_scanned: bool = False
+    is_encrypted: bool = False
+    page_count: int = 0
+    text_density: Optional[float] = None
+    parser_issues: list[str] = Field(default_factory=list)
+    recommended_route: VisionRoute = 'review_required'
+    requires_vision: bool = False
+    requires_markitdown: bool = False
+
+
+class VisionStartRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    source_gcs_uri: str
+    output_gcs_prefix: str
+
+
+class VisionStartResponse(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    operation_name: Optional[str] = None
+    output_gcs_prefix: Optional[str] = None
+    status: VisionStartStatus = 'VISION_DISABLED'
+    error_code: Optional[str] = None
+
+
+class VisionCollectRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    operation_name: str
+
+
+class VisionCollectResponse(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    operation_name: str
+    ocr_json_gcs_uri: Optional[str] = None
+    ocr_json_gcs_uris: list[str] = Field(default_factory=list)
+    page_count: int = 0
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: VisionCollectStatus = 'VISION_DISABLED'
+    error_code: Optional[str] = None
+    evidence_candidate_count: int = 0
+    dsv_parse_result: Optional[dict[str, Any]] = None
+    issues: list[str] = Field(default_factory=list)
+
 class ParseResponse(BaseModel):
     model_config = ConfigDict(extra='forbid')
     parse_result_id: str
     job_id: str
     file_id: str
+    source_sha256: str
     normalized: NormalizedInvoice
     # Phase 3 reviewer fix + domestic fullset port: complete pdf_source_data population from actual spans
     source_data: list[SourceDataRow] = Field(default_factory=list)
@@ -208,8 +281,8 @@ class DuplicateCheckRow(BaseModel):
     model_config = ConfigDict(extra='forbid')
     invoice_no_hash: str
     vendor_hash: str
-    amount: Optional[float] = None
-    issue_date: Optional[str] = None
+    amount_hash: Optional[str] = None
+    issue_date_hash: Optional[str] = None
     match_type: str
     severity: str
     matched_job_id: Optional[str] = None
@@ -252,6 +325,11 @@ class ShipmentMatchRow(BaseModel):
     matched_fields: Optional[str] = None
     severity: str
 
+class ManifestEntry(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    key: str
+    value: str
+
 class ExportRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     job_id: str
@@ -267,6 +345,7 @@ class ExportRequest(BaseModel):
     source_data_rows: list[SourceDataRow]
     audit_detail_rows: list[AuditDetailRow]
     evidence_issues_rows: list[EvidenceIssuesRow]
+    manifest_entries: list[ManifestEntry] = Field(default_factory=list)
     generated_at: Optional[str] = None
 
 class SheetManifest(BaseModel):

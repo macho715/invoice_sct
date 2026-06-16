@@ -75,7 +75,7 @@ export const GateResultSchema = z.object({
 export type GateResult = z.infer<typeof GateResultSchema>;
 
 export const AuditTraceStepSchema = z.enum([
-  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM'
+  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM','VISION_FALLBACK'
 ]);
 export type AuditTraceStep = z.infer<typeof AuditTraceStepSchema>;
 
@@ -197,7 +197,14 @@ export const SourceDataRowSchema = z.object({
   original_text: z.string().nullable(),
   normalized_value: z.string().nullable(),
   confidence: z.number().nullable(),
-  routing_pattern: z.string().nullable()
+  routing_pattern: z.string().nullable(),
+  pdf_page: z.number().nullable().optional(),
+  text_span_hash: z.string().nullable().optional(),
+  doc_type: z.string().nullable().optional(),
+  shipment_id: z.string().nullable().optional(),
+  gate_score: z.number().nullable().optional(),
+  gate_status: z.string().nullable().optional(),
+  is_portal_fee: z.boolean().nullable().optional()
 });
 export type SourceDataRow = z.infer<typeof SourceDataRowSchema>;
 
@@ -238,8 +245,8 @@ export type HeaderCheckRow = z.infer<typeof HeaderCheckRowSchema>;
 export const DuplicateCheckRowSchema = z.object({
   invoice_no_hash: z.string(),
   vendor_hash: z.string(),
-  amount: z.number().nullable(),
-  issue_date: z.string().nullable(),
+  amount_hash: z.string().nullable(),
+  issue_date_hash: z.string().nullable(),
   match_type: z.string(),
   severity: z.string(),
   matched_job_id: z.string().nullable()
@@ -287,6 +294,12 @@ export const ShipmentMatchRowSchema = z.object({
 });
 export type ShipmentMatchRow = z.infer<typeof ShipmentMatchRowSchema>;
 
+export const ManifestEntrySchema = z.object({
+  key: z.string(),
+  value: z.string()
+});
+export type ManifestEntry = z.infer<typeof ManifestEntrySchema>;
+
 export const ExportRequestSchema = z.object({
   job_id: z.string(),
   decision_rows: z.array(DecisionRowSchema),
@@ -301,6 +314,7 @@ export const ExportRequestSchema = z.object({
   source_data_rows: z.array(SourceDataRowSchema),
   audit_detail_rows: z.array(AuditDetailRowSchema),
   evidence_issues_rows: z.array(EvidenceIssuesRowSchema),
+  manifest_entries: z.array(ManifestEntrySchema).default([]),
   generated_at: z.string().optional()
 });
 export type ExportRequest = z.infer<typeof ExportRequestSchema>;

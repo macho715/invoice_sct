@@ -9,85 +9,23 @@ from __future__ import annotations
 import hashlib
 import logging
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
-from typing import Literal, Optional
 
+from app.schemas import (
+    PreflightRequest,
+    PreflightResponse,
+    VisionCollectRequest,
+    VisionCollectResponse,
+    VisionStartRequest,
+    VisionStartResponse,
+)
 from app.services.vision_client import VisionClient
+from app.services.vision_normalizer import normalize_vision_output
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 vision_client = VisionClient()
-
-# ---------------------------------------------------------------------------
-# Request schemas (inline pending formal addition to app.schemas)
-# ---------------------------------------------------------------------------
-
-class PreflightRequest(BaseModel):
-    model_config = {"extra": "forbid"}
-    job_id: str
-    file_id: str
-    gcs_uri: str
-    file_type: Literal['pdf', 'pdf_json']
-    file_role: Literal['invoice_source', 'evidence'] = 'evidence'
-
-
-class PreflightResponse(BaseModel):
-    model_config = {"extra": "forbid"}
-    job_id: str
-    file_id: str
-    gcs_uri: str
-    is_text_based: bool = False
-    is_scanned: bool = False
-    is_encrypted: bool = False
-    page_count: int = 0
-    text_density: Optional[float] = None
-    parser_issues: list[str] = Field(default_factory=list)
-    recommended_route: Literal['text_parser', 'vision_ocr', 'markitdown', 'review_required'] = 'review_required'
-    requires_vision: bool = False
-    requires_markitdown: bool = False
-
-
-class VisionStartRequest(BaseModel):
-    model_config = {"extra": "forbid"}
-    job_id: str
-    file_id: str
-    source_gcs_uri: str
-    output_gcs_prefix: str
-
-
-class VisionStartResponse(BaseModel):
-    model_config = {"extra": "forbid"}
-    job_id: str
-    file_id: str
-    operation_name: Optional[str] = None
-    status: Literal['VISION_DISABLED', 'STARTED', 'STUB'] = 'VISION_DISABLED'
-    error_code: Optional[str] = None
-
-
-class VisionCollectRequest(BaseModel):
-    model_config = {"extra": "forbid"}
-    job_id: str
-    file_id: str
-    operation_name: str
-
-
-class VisionCollectResponse(BaseModel):
-    model_config = {"extra": "forbid"}
-    job_id: str
-    file_id: str
-    operation_name: str
-    ocr_json_gcs_uri: Optional[str] = None
-    page_count: int = 0
-    confidence: float = 0.0
-    status: Literal['VISION_DISABLED', 'RUNNING', 'COLLECTED', 'VISION_OUTPUT_NOT_FOUND'] = 'VISION_DISABLED'
-    error_code: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# Utils
-# ---------------------------------------------------------------------------
 
 def _build_route_key(job_id: str, file_id: str) -> str:
     h = hashlib.sha1(f"{job_id}|{file_id}|vision".encode()).hexdigest()[:12]
@@ -159,6 +97,7 @@ def vision_start(req: VisionStartRequest) -> VisionStartResponse:
         job_id=req.job_id,
         file_id=req.file_id,
         operation_name=result.get('operation_name'),
+        output_gcs_prefix=result.get('output_gcs_prefix'),
         status='STARTED',
     )
 
@@ -222,12 +161,23 @@ def vision_collect(req: VisionCollectRequest) -> VisionCollectResponse:
             error_code=result.get('error_code'),
         )
 
+    normalized = normalize_vision_output(
+        {"responses": result.get("responses", [])},
+        file_id=req.file_id,
+        file_name=req.file_id,
+    )
+    dsv_result = normalized.dsv_parse_result
+
     return VisionCollectResponse(
         job_id=req.job_id,
         file_id=req.file_id,
         operation_name=req.operation_name,
         ocr_json_gcs_uri=result.get('ocr_json_gcs_uri'),
+        ocr_json_gcs_uris=result.get('ocr_json_gcs_uris', []),
         page_count=result.get('page_count', 0),
         confidence=result.get('confidence', 0.0),
         status='COLLECTED',
+        evidence_candidate_count=len(normalized.evidence_candidates),
+        dsv_parse_result=dsv_result,
+        issues=normalized.issues,
     )

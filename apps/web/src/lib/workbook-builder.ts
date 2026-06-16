@@ -1,5 +1,5 @@
 import { STORE } from './job-store';
-import type { ExportRequest } from './types';
+import type { AuditDetailRow, ExportRequest } from './types';
 
 export async function buildExportRequest(jobId: string, generatedAt?: string): Promise<ExportRequest> {
   const job = await STORE.getJob(jobId);
@@ -15,6 +15,16 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
   const normalized = await STORE.getNormalizedInvoice(jobId);
   const validation = await STORE.getValidationResult(jobId);
   const approval = await STORE.getApprovalRecord(jobId);
+  const parseSourceData = await STORE.getParseSourceData(jobId);
+
+  // Source-hash verification trace recorded by the run route
+  // (attributedTo 'run-route:source-hash-check'). Its output_ref carries the
+  // SOURCE_HASH_MATCH / HASH_UNVERIFIED / SOURCE_HASH_MISMATCH status that the
+  // manifest and audit-detail rows below surface. Absent on legacy jobs where
+  // the check never ran → HASH_UNVERIFIED (honest "could not verify").
+  const auditTraces = await STORE.listTrace(jobId);
+  const sourceHashTrace = auditTraces.find(t => t.attributedTo === 'run-route:source-hash-check');
+  const sourceHashStatus = sourceHashTrace?.output_ref ?? 'HASH_UNVERIFIED';
 
   const lines = normalized?.invoice_lines ?? [];
   const actionItems = result.action_items ?? [];
@@ -167,19 +177,27 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
   });
 
   // 5. Source Data Rows
-  const source_data_rows = (normalized?.evidence_candidates ?? []).map(candidate => {
+  const evidenceSourceRows = (normalized?.evidence_candidates ?? []).map(candidate => {
     return {
       file_id: candidate.source_file_id,
       source_ref: candidate.matched_reference ?? null,
       original_text: candidate.text_span ?? null,
       normalized_value: candidate.matched_reference ?? null,
       confidence: candidate.confidence,
-      routing_pattern: 'ONTOLOGY_SEARCH'
+      routing_pattern: 'ONTOLOGY_SEARCH',
+      pdf_page: null,
+      text_span_hash: null,
+      doc_type: null,
+      shipment_id: null,
+      gate_score: null,
+      gate_status: null,
+      is_portal_fee: null
     };
   });
+  const source_data_rows = [...evidenceSourceRows, ...parseSourceData];
 
   // 6. Audit Detail Rows
-  const audit_detail_rows = lines.map(line => {
+  const audit_detail_rows: AuditDetailRow[] = lines.map(line => {
     const matchedCostGuard = validation?.costguard_results?.find(c => c.line_id === line.line_id);
     const tc = validation?.cf_mcp_tool_calls?.find(t => t.tool === 'check_cost_guard');
     const matchedGate = result.line_results?.find(lr => lr.line_id === line.line_id);
@@ -197,6 +215,23 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
       fx_policy_id: null
     };
   });
+
+  for (const item of actionItems) {
+    if (item.issue_type === 'SOURCE_HASH_MISMATCH' || item.issue_type === 'HASH_UNVERIFIED') {
+      audit_detail_rows.push({
+        line_id: item.line_id ?? '',
+        rule_id: 'SOURCE_HASH_CHECK',
+        reason_code: item.issue_type,
+        sct_trace_id: sourceHashTrace?.trace_id ?? 'trace_source_hash_missing',
+        cf_mcp_tool: null,
+        cf_mcp_latency_ms: null,
+        confidence: item.issue_type === 'SOURCE_HASH_MISMATCH' ? 1.0 : 0.0,
+        decision_input: `expected_sha256:${sourceHashTrace?.source_hash ?? 'unknown'}; actual_sha256:${sourceHashTrace?.calculation_hash ?? 'unknown'}`,
+        fx_override: null,
+        fx_policy_id: null
+      });
+    }
+  }
 
   // 7. Evidence Issues Rows
   const evidence_issues_rows = (validation?.evidence_requirements ?? []).map(req => {
@@ -233,15 +268,35 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
     header_check_rows.push(...headerFields);
   }
 
+  type DuplicateValidationResult = {
+    invoice_no_hash: string;
+    vendor_hash: string;
+    verdict: string;
+    reason_code: string | null;
+    duplicate_count: number;
+    amount_hash?: string | null;
+    issue_date_hash?: string | null;
+    matched_job_id?: string | null;
+  };
+  const duplicateResults = ((validation as { duplicate_checks?: DuplicateValidationResult[] } | undefined)?.duplicate_checks ?? [])
+    .filter(d => d.reason_code && d.duplicate_count > 0);
   const duplicate_check_rows: Array<{
     invoice_no_hash: string;
     vendor_hash: string;
-    amount: number | null;
-    issue_date: string | null;
+    amount_hash: string | null;
+    issue_date_hash: string | null;
     match_type: string;
     severity: string;
     matched_job_id: string | null;
-  }> = [];
+  }> = duplicateResults.map(d => ({
+    invoice_no_hash: d.invoice_no_hash,
+    vendor_hash: d.vendor_hash,
+    amount_hash: d.amount_hash ?? null,
+    issue_date_hash: d.issue_date_hash ?? null,
+    match_type: d.reason_code ?? 'DUPLICATE_INVOICE',
+    severity: d.verdict === 'ZERO' ? 'ZERO' : 'AMBER',
+    matched_job_id: d.matched_job_id ?? null
+  }));
 
   const rate_check_rows = lines.map(line => {
     const matchedRate = validation?.rate_checks?.find(r => r.line_id === line.line_id);
@@ -289,6 +344,12 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
     };
   });
 
+  const manifest_entries = [
+    { key: 'source_hash_status', value: sourceHashStatus },
+    { key: 'source_sha256_expected', value: sourceHashTrace?.source_hash ?? '' },
+    { key: 'source_sha256_actual', value: sourceHashTrace?.calculation_hash ?? '' }
+  ];
+
   return {
     job_id: jobId,
     decision_rows,
@@ -303,6 +364,7 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
     source_data_rows,
     audit_detail_rows,
     evidence_issues_rows,
+    manifest_entries,
     generated_at: generatedAt
   };
 }

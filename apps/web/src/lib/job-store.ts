@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { createPgJobStore } from './job-store-pg';
 import type {
   JobStatus, Verdict, SourceFile, AuditTraceStep, AuditTraceEntry,
-  NormalizedInvoice, SctValidationResult, ApprovalRecord, FxPolicy
+  NormalizedInvoice, SctValidationResult, ApprovalRecord, FxPolicy,
+  SourceDataRow
 } from './types';
 
 export interface Job {
@@ -56,6 +57,7 @@ export interface JobStore {
   getJob(jobId: string): Promise<Job | undefined>;
   updateJob(jobId: string, patch: Partial<Pick<Job, 'status' | 'verdict'>>): Promise<Job | undefined>;
   addSourceFile(jobId: string, sf: SourceFile): Promise<void>;
+  updateSourceFile(jobId: string, fileId: string, patch: Partial<Pick<SourceFile, 'sha256' | 'size_bytes' | 'parser_status'>>): Promise<SourceFile | undefined>;
   listSourceFiles(jobId: string): Promise<SourceFile[]>;
   appendTrace(jobId: string, t: TraceInput): Promise<AuditTraceEntry>;
   listTrace(jobId: string): Promise<AuditTraceEntry[]>;
@@ -65,6 +67,8 @@ export interface JobStore {
   // Phase 2 Methods
   setNormalizedInvoice(jobId: string, ni: NormalizedInvoice): Promise<void>;
   getNormalizedInvoice(jobId: string): Promise<NormalizedInvoice | undefined>;
+  setParseSourceData(jobId: string, rows: SourceDataRow[]): Promise<void>;
+  getParseSourceData(jobId: string): Promise<SourceDataRow[]>;
   setValidationResult(jobId: string, vr: SctValidationResult): Promise<void>;
   getValidationResult(jobId: string): Promise<SctValidationResult | undefined>;
   setApprovalRecord(jobId: string, record: ApprovalRecord): Promise<void>;
@@ -133,6 +137,7 @@ export function createJobStore(): JobStore {
   const traces = new Map<string, AuditTraceEntry[]>();
   const results = new Map<string, GateResultLite>();
   const normalizedInvoices = new Map<string, NormalizedInvoice>();
+  const parseSourceData = new Map<string, SourceDataRow[]>();
   const validationResults = new Map<string, SctValidationResult>();
   const approvalRecords = new Map<string, ApprovalRecord>();
   const fxPolicies = new Map<string, FxPolicy>();
@@ -173,6 +178,16 @@ export function createJobStore(): JobStore {
       files.set(jobId, arr);
       await callJobStoreTool('save_job_store_data', { entityType: 'source_files', jobId, data: { files: arr } });
     },
+    async updateSourceFile(jobId, fileId, patch) {
+      const arr = files.get(jobId) ?? [];
+      const idx = arr.findIndex(f => f.file_id === fileId);
+      if (idx === -1) return undefined;
+      const next = { ...arr[idx], ...patch };
+      arr[idx] = next;
+      files.set(jobId, arr);
+      await callJobStoreTool('save_job_store_data', { entityType: 'source_files', jobId, data: { files: arr } });
+      return next;
+    },
     async listSourceFiles(jobId) {
       const local = files.get(jobId);
       if (local && local.length > 0) return local;
@@ -212,6 +227,8 @@ export function createJobStore(): JobStore {
     // Phase 2 Implementations
     async setNormalizedInvoice(jobId, ni) { normalizedInvoices.set(jobId, ni); },
     async getNormalizedInvoice(jobId) { return normalizedInvoices.get(jobId); },
+    async setParseSourceData(jobId, rows) { parseSourceData.set(jobId, rows); },
+    async getParseSourceData(jobId) { return parseSourceData.get(jobId) ?? []; },
     async setValidationResult(jobId, vr) { validationResults.set(jobId, vr); },
     async getValidationResult(jobId) { return validationResults.get(jobId); },
     async setApprovalRecord(jobId, record) { approvalRecords.set(jobId, record); },
@@ -231,7 +248,7 @@ const isVercelRuntime = () => process.env.VERCEL === '1';
 
 const getStore = (): JobStore => {
   const existing = globalThis.__invoice_audit_store;
-  if (existing && typeof (existing as any).setNormalizedInvoice === 'function') {
+  if (existing && typeof (existing as any).setNormalizedInvoice === 'function' && typeof (existing as any).getParseSourceData === 'function') {
     return existing;
   }
 

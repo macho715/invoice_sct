@@ -178,4 +178,4 @@ def test_collect_result_downloads_output_json_and_averages_confidence():
     assert result["ocr_json_gcs_uris"] == ["gs://ocr-bucket/out/job/file/output-1-to-1.json"]
     assert result["page_count"] == 1
     assert result["confidence"] == pytest.approx(0.8)
-
+    assert len(result["responses"]) == 1

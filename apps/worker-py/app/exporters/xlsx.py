@@ -109,14 +109,14 @@ def build_xlsx(req: ExportRequest) -> bytes:
         ])
 
     ws_dup = wb.create_sheet("05_Duplicate_Check")
-    dup_cols = ["invoice_no_hash", "vendor_hash", "amount", "issue_date", "match_type", "severity", "matched_job_id"]
+    dup_cols = ["invoice_no_hash", "vendor_hash", "amount_hash", "issue_date_hash", "match_type", "severity", "matched_job_id"]
     ws_dup.append(dup_cols)
     for row in sorted(getattr(req, "duplicate_check_rows", []), key=lambda x: x.invoice_no_hash or ""):
         ws_dup.append([
             row.invoice_no_hash,
             row.vendor_hash,
-            row.amount,
-            row.issue_date,
+            row.amount_hash,
+            row.issue_date_hash,
             row.match_type,
             row.severity,
             row.matched_job_id,
@@ -231,12 +231,13 @@ def build_xlsx(req: ExportRequest) -> bytes:
     ws_manifest = wb.create_sheet("99_Manifest")
     ws_manifest.append(["key", "value"])
     manifest_rows = [
-        ("workbook_sha256", "PENDING"),
+        ("pre_manifest_sha256", "PENDING"),
         ("sheet_count", 13),
         ("generated_at", generated_at),
         ("parser_version", parser_ver),
         ("rule_version", rule_ver),
     ]
+    manifest_rows.extend((entry.key, entry.value) for entry in getattr(req, "manifest_entries", []))
     manifest_data_start_row = 2
     for k, v in manifest_rows:
         ws_manifest.append([k, v])

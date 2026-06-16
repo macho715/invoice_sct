@@ -77,3 +77,17 @@ describe('gate-bridge', () => {
     expect(r.action_items.some(a => a.issue_type === 'EVIDENCE_MISSING_HEADER_DOC')).toBe(true);
   });
 });
+
+it('duplicate: ZERO duplicate finding upgrades job verdict and creates action item', () => {
+  const lines: CostGuardLine[] = [
+    { line_id: 'l1', band: 'PASS', delta_pct: 0, reason_codes: [] }
+  ];
+  const r = buildGateResult('job_1', lines, [], [{
+    vendor_hash: 'v'.repeat(64),
+    invoice_no_hash: 'i'.repeat(64),
+    severity: 'ZERO',
+    reason_code: 'DUPLICATE_INVOICE'
+  }]);
+  expect(r.verdict).toBe('ZERO');
+  expect(r.action_items.some(a => a.issue_type === 'DUPLICATE_INVOICE' && a.severity === 'ZERO')).toBe(true);
+});

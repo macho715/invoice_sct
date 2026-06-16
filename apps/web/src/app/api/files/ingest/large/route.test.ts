@@ -33,22 +33,43 @@ describe('POST /api/files/ingest/large (P0-2)', () => {
     expect(handleUploadMock).not.toHaveBeenCalled();
   });
 
+  it('creates a job for first-large init requests', async () => {
+    const req = new Request('http://test/api/files/ingest/large?init=1', {
+      method: 'POST',
+      body: JSON.stringify({ filename: 'big-invoice.pdf', mimeType: 'application/pdf', fileSize: 5_000_000 }),
+      headers: { 'content-type': 'application/json', 'x-user-id': 'u1' }
+    });
+    const r = await POST(req);
+    expect(r.status).toBe(201);
+    const body = await r.json();
+    expect(body.job_id).toMatch(/^job_/);
+    expect(body.status).toBe('QUEUED');
+    expect(handleUploadMock).not.toHaveBeenCalled();
+  });
+
   it('returns 200 with signed URL when fileSize > 4.5MB and valid mime', async () => {
     handleUploadMock.mockResolvedValueOnce({
       type: 'blob.generate-client-token',
       clientToken: 'vercel_blob_client_st_mocktokenpayload'
     });
 
+    const init = await POST(new Request('http://test/api/files/ingest/large?init=1', {
+      method: 'POST',
+      body: JSON.stringify({ filename: 'big-invoice.pdf', mimeType: 'application/pdf', fileSize: 5_000_000 }),
+      headers: { 'content-type': 'application/json', 'x-user-id': 'u1' }
+    }));
+    const initBody = await init.json();
     const req = makeRequest({
       filename: 'big-invoice.pdf',
       mimeType: 'application/pdf',
       fileSize: 5_000_000,  // 5MB, over threshold
-      jobId: 'job_xyz'
+      jobId: initBody.job_id
     });
     const r = await POST(req);
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(body.url).toBe('vercel_blob_client_st_mocktokenpayload');
+    expect(body.job_id).toBe(initBody.job_id);
     expect(body.pathname).toBeDefined();
     expect(body.access).toBe('private');
     expect(handleUploadMock).toHaveBeenCalledOnce();

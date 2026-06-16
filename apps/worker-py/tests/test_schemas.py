@@ -24,6 +24,7 @@ def test_parse_response_serializes_to_json():
         parser_confidence=0.9,
         parser_version='parser-0.1.0'
     )
-    pr = ParseResponse(parse_result_id='pr1', job_id='j1', file_id='f1', normalized=ni)
+    pr = ParseResponse(parse_result_id='pr1', job_id='j1', file_id='f1', source_sha256='a'*64, normalized=ni)
     j = pr.model_dump_json()
     assert '"parser_version":"parser-0.1.0"' in j
+    assert '"source_sha256":"' in j

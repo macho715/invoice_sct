@@ -146,6 +146,7 @@ class VisionClient:
                 "ocr_json_gcs_uris": output_uris,
                 "page_count": len(responses),
                 "confidence": confidence,
+                "responses": responses,
             }
         except ValueError as e:
             return {"status": "VISION_DISABLED", "error_code": str(e)}

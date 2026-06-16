@@ -30,7 +30,7 @@ def export_xlsx(req: ExportRequest) -> ExportResponse:
         SheetManifest(sheet_name="90_Source_Data", row_count=len(req.source_data_rows)),
         SheetManifest(sheet_name="91_Audit_Detail", row_count=len(req.audit_detail_rows)),
         SheetManifest(sheet_name="92_Evidence_Issues", row_count=len(req.evidence_issues_rows)),
-        SheetManifest(sheet_name="99_Manifest", row_count=5)
+        SheetManifest(sheet_name="99_Manifest", row_count=5 + len(req.manifest_entries))
     ]
     
     manifest = WorkbookManifest(

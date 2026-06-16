@@ -83,4 +83,78 @@ describe('parser-client', () => {
       await expect(c.runNotebookLm({ job_id: 'j1', blob_url: 'http://signed/inv' })).rejects.toThrow(/boom/);
     });
   });
+
+  describe('startVisionOcr', () => {
+    it('POSTs to /v1/vision/start with bearer token and returns STARTED', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          job_id: 'j1',
+          file_id: 'pdf1',
+          operation_name: 'operations/op1',
+          output_gcs_prefix: 'gs://dsv-invoice-ocr/jobs/j1/pdf1/',
+          status: 'STARTED',
+        }),
+      });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000/', token: 'tok' });
+
+      const r = await c.startVisionOcr({
+        job_id: 'j1',
+        file_id: 'pdf1',
+        source_gcs_uri: 'gs://dsv-invoice-source/source/j1/pdf1/input.pdf',
+        output_gcs_prefix: 'gs://dsv-invoice-ocr/jobs/j1/pdf1/',
+      });
+
+      expect(r.status).toBe('STARTED');
+      expect(r.operation_name).toBe('operations/op1');
+      const [url, opts] = fetchMock.mock.calls[0];
+      expect(String(url)).toBe('http://localhost:8000/v1/vision/start');
+      expect((opts as any).headers.authorization).toBe('Bearer tok');
+      expect(JSON.parse((opts as any).body)).toEqual({
+        job_id: 'j1',
+        file_id: 'pdf1',
+        source_gcs_uri: 'gs://dsv-invoice-source/source/j1/pdf1/input.pdf',
+        output_gcs_prefix: 'gs://dsv-invoice-ocr/jobs/j1/pdf1/',
+      });
+    });
+
+    it('returns VISION_DISABLED on non-2xx without throwing', async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'down' });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+
+      const r = await c.startVisionOcr({
+        job_id: 'j1',
+        file_id: 'pdf1',
+        source_gcs_uri: 'gs://source/input.pdf',
+        output_gcs_prefix: 'gs://ocr/out/',
+      });
+
+      expect(r).toEqual({ job_id: 'j1', file_id: 'pdf1', status: 'VISION_DISABLED', error_code: 'HTTP_503' });
+    });
+
+    it('returns VISION_DISABLED on timeout or unexpected fetch failure', async () => {
+      fetchMock.mockRejectedValueOnce(Object.assign(new Error('timed out'), { name: 'TimeoutError' }));
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+
+      const timedOut = await c.startVisionOcr({
+        job_id: 'j1',
+        file_id: 'pdf1',
+        source_gcs_uri: 'gs://source/input.pdf',
+        output_gcs_prefix: 'gs://ocr/out/',
+      });
+
+      expect(timedOut.error_code).toBe('TRIGGER_TIMEOUT');
+
+      fetchMock.mockRejectedValueOnce(Object.assign(new Error('boom'), { name: 'TypeError' }));
+      const failed = await c.startVisionOcr({
+        job_id: 'j1',
+        file_id: 'pdf1',
+        source_gcs_uri: 'gs://source/input.pdf',
+        output_gcs_prefix: 'gs://ocr/out/',
+      });
+
+      expect(failed.error_code).toBe('TRIGGER_FAILED');
+    });
+  });
 });
