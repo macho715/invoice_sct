@@ -364,7 +364,7 @@ export async function POST(req: Request): Promise<Response> {
   // are merged BEFORE cf.validate in the same audit pass.
   // Flag-gated (VISION_FALLBACK_ENABLED, default OFF). Only triggers for
   // PDFs flagged SCANNED_PAGE_DETECTED with gs:// input (GCS upload path).
-  const visionEnabled = process.env.VISION_FALLBACK_ENABLED === 'true';
+  const visionEnabled = process.env.VISION_FALLBACK_ENABLED === 'true' || process.env.VISION_FALLBACK_ENABLED === '1';
   const gcsOcrBucket = process.env.GCS_OCR_BUCKET || 'dsv-invoice-ocr';
   const scannerActionItems: Array<{ action_id: string; severity: Verdict; line_id: string | null; issue_type: string; required_action: string }> = [];
   const parsedIssues: string[] = Array.isArray((parseRes as any).parser_issues) ? (parseRes as any).parser_issues : [];
