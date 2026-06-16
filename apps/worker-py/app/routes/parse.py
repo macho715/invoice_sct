@@ -7,7 +7,7 @@ from app.schemas import ParseRequest, ParseResponse
 from app.parsers.xlsx import parse_xlsx_bytes
 from app.parsers.md import parse_md_bytes
 from app.parsers.txt import parse_txt_bytes
-from app.parsers.pdf_text import parse_pdf_text_bytes, extract_shpt_shipment_doc_mapping  # P3A
+from app.parsers.pdf_text import parse_pdf_text_bytes, extract_shpt_shipment_doc_mapping, extract_generic_invoice_lines  # P3A
 from app.parsers.dsv_pdf_hybrid import extract_dsv_from_text, DsvPdfResult  # DSV SHPT line extraction
 from app.validators.numeric_integrity import validate_numeric_integrity
 from app.schemas import NormalizedInvoice, InvoiceHeader, EvidenceCandidate, SourceDataRow, InvoiceLine
@@ -97,6 +97,18 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
             dsv = extract_dsv_from_text(full_text, dsv_tables, file_name=req.blob_ref, parser_issues=list(pdf_res.parser_issues or []))
             line_currency = next((li.currency for li in dsv.line_items if li.currency in ('AED', 'USD')), 'AED')
             invoice_lines = _dsv_lines_to_invoice_lines(dsv)
+
+            # Generic fallback: when DSV extraction produces 0 lines, try table/text-based extraction
+            generic_used = False
+            if not invoice_lines:
+                generic_lines, generic_conf = extract_generic_invoice_lines(
+                    pdf_res.text_spans or [],
+                    pdf_res.table_candidates or [],
+                    currency_hint=line_currency,
+                )
+                if generic_lines:
+                    invoice_lines = generic_lines
+                    generic_used = True
 
             # Domestic: enrich invoice lines with DSV waybill lane data (origin/destination/vehicle)
             if is_domestic:
