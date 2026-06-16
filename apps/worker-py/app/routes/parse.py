@@ -72,6 +72,7 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
     is_domestic = getattr(req, 'workflow_type', 'SHIPMENT') == 'DOMESTIC'
 
     source_data: list[SourceDataRow] = []
+    parser_issues: list[str] = []
     try:
         if req.file_type == 'xlsx':
             ni = parse_xlsx_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
@@ -84,6 +85,7 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
             # DSV SHPT hybrid parser turns the page text/tables into real invoice_lines
             # (doc_type classification + charge-line extraction). Final verdict stays in Vercel.
             pdf_res = parse_pdf_text_bytes(raw, file_id=req.file_id, file_name=req.blob_ref, parser_version=req.parser_version)
+            parser_issues = list(pdf_res.parser_issues or [])
             if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) or 'PDF_TOO_LARGE' in (pdf_res.parser_issues or []):
                 # P3B §5.3 / §4.3: encrypted PDF -> 415 PARSE_PDF_UNSUPPORTED (large -> 422)
                 status = 415 if 'PDF_ENCRYPTED' in (pdf_res.parser_issues or []) else 422
@@ -227,7 +229,7 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
     validate_numeric_integrity(ni.invoice_lines)
 
     parse_result_id = 'pr_' + hashlib.sha1(f"{req.job_id}|{req.file_id}|{req.parser_version}".encode()).hexdigest()[:12]
-    return ParseResponse(parse_result_id=parse_result_id, job_id=req.job_id, file_id=req.file_id, source_sha256=source_sha256, normalized=ni, source_data=source_data)
+    return ParseResponse(parse_result_id=parse_result_id, job_id=req.job_id, file_id=req.file_id, source_sha256=source_sha256, normalized=ni, source_data=source_data, parser_issues=parser_issues)
 
 @router.post('/parse/pdf-json', response_model=ParseResponse)
 def parse_pdf_json(req: ParseRequest) -> ParseResponse:

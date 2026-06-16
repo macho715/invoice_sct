@@ -109,7 +109,7 @@ export const GateResultSchema = z.object({
 export type GateResult = z.infer<typeof GateResultSchema>;
 
 export const AuditTraceStepSchema = z.enum([
-  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM','VISION_FALLBACK'
+  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM','VISION_FALLBACK','VISION_RUN'
 ]);
 export type AuditTraceStep = z.infer<typeof AuditTraceStepSchema>;
 

@@ -37,8 +37,8 @@ function calledNotebookLm(): boolean {
   return fetchMock.mock.calls.some((c) => String(c[0]).includes('/v1/notebooklm/run'));
 }
 
-function calledVisionStart(): boolean {
-  return fetchMock.mock.calls.some((c) => String(c[0]).includes('/v1/vision/start'));
+function calledVisionRun(): boolean {
+  return fetchMock.mock.calls.some((c) => String(c[0]).includes('/v1/vision/run'));
 }
 
 const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824';
@@ -256,8 +256,7 @@ describe('POST /api/invoice-audit/run', () => {
     expect(r.status).toBe(202);
     await waitFor(() => calledNotebookLm(), 150); // give any stray background task a chance
     expect(calledNotebookLm()).toBe(false);
-    expect(calledVisionStart()).toBe(false);
-  });
+    expect(calledVisionRun()).toBe(false);  });
 
   it('does NOT trigger Vision fallback when VISION_FALLBACK_ENABLED is unset', async () => {
     const { jobId } = await setupJob();
@@ -295,21 +294,20 @@ describe('POST /api/invoice-audit/run', () => {
     const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: jobId }), headers: { 'content-type': 'application/json' } }));
 
     expect(r.status).toBe(202);
-    await waitFor(() => calledVisionStart(), 150);
-    expect(calledVisionStart()).toBe(false);
+    expect(calledVisionRun()).toBe(false);
   });
 
-  it('triggers Vision fallback for GCS PDF without changing the verdict', async () => {
+  it('triggers Vision run for scanned GCS PDF, merges OCR lines into validation', async () => {
     const { jobId } = await setupJob();
     await STORE.addSourceFile(jobId, {
       file_id: 'pdf_gcs_1',
       job_id: jobId,
-      original_filename: 'evidence.pdf',
+      original_filename: 'invoice.pdf',
       file_type: 'pdf',
       mime_type: 'application/pdf',
       size_bytes: 10,
       sha256: 'c'.repeat(64),
-      blob_ref: `gs://dsv-invoice-source/source/${jobId}/pdf_gcs_1/evidence.pdf`,
+      blob_ref: `gs://dsv-invoice-source/source/${jobId}/pdf_gcs_1/invoice.pdf`,
       parser_status: 'PENDING',
       uploaded_by: 'u1',
       uploaded_at: new Date().toISOString(),
@@ -322,21 +320,19 @@ describe('POST /api/invoice-audit/run', () => {
     process.env.PARSER_WORKER_TOKEN = 't';
     fetchMock.mockImplementation(async (url: string) => {
       const u = String(url);
-      if (u.includes('/v1/vision/start')) {
-        return { ok: true, status: 200, json: async () => ({ job_id: jobId, file_id: 'pdf_gcs_1', status: 'STARTED', operation_name: 'operations/vision-op' }) };
+      if (u.includes('/v1/vision/run')) {
+        return { ok: true, status: 200, json: async () => ({ job_id: jobId, file_id: 'pdf_gcs_1', status: 'VISION_RUN_COLLECTED', invoice_lines: [{ line_id: 'ocr1', description: 'OCR Freight', currency: 'AED', amount: 1500, source_ref: {} }], evidence_candidates: [], source_data: [], page_count: 1, confidence: 0.85, issues: [] }) };
       }
       if (u.includes('/v1/parse')) {
-        if ((fetchMock.mock.calls.filter((c) => String(c[0]).includes('/v1/parse')).length) === 1) return PARSE_OK(jobId);
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            parse_result_id: 'ev1',
+        if ((fetchMock.mock.calls.filter((c) => String(c[0]).includes('/v1/parse')).length) === 1) {
+          return { ok: true, status: 200, json: async () => ({
+            parse_result_id: 'pr1',
             job_id: jobId,
             file_id: 'pdf_gcs_1',
-            normalized: { invoice_id: 'ev', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.9, parser_version: 'p' },
-          }),
-        };
+            normalized: { invoice_id: 'inv', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.3, parser_version: 'p' },
+            parser_issues: ['SCANNED_PAGE_DETECTED'],
+          })};
+        }
       }
       return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: {} }) };
     });
@@ -344,16 +340,16 @@ describe('POST /api/invoice-audit/run', () => {
     const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: jobId }), headers: { 'content-type': 'application/json' } }));
 
     expect(r.status).toBe(202);
-    const triggered = await waitFor(() => calledVisionStart());
-    expect(triggered).toBe(true);
-    const visionCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/v1/vision/start'));
+    expect(calledVisionRun()).toBe(true);
+    const visionCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/v1/vision/run'));
     expect(visionCall).toBeDefined();
     const payload = JSON.parse((visionCall?.[1] as any).body);
     expect(payload).toEqual({
       job_id: jobId,
       file_id: 'pdf_gcs_1',
-      source_gcs_uri: `gs://dsv-invoice-source/source/${jobId}/pdf_gcs_1/evidence.pdf`,
+      source_gcs_uri: `gs://dsv-invoice-source/source/${jobId}/pdf_gcs_1/invoice.pdf`,
       output_gcs_prefix: `gs://dsv-invoice-ocr/jobs/${jobId}/pdf_gcs_1/`,
+      timeout_seconds: 180,
     });
     const body = await r.json();
     expect(body.status).toBe('REVIEW_REQUIRED');
@@ -385,11 +381,10 @@ describe('POST /api/invoice-audit/run', () => {
     const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: uploaded.job_id }), headers: { 'content-type': 'application/json' } }));
 
     expect(r.status).toBe(202);
-    await waitFor(() => calledVisionStart(), 150);
-    expect(calledVisionStart()).toBe(false);
+    expect(calledVisionRun()).toBe(false);
   });
 
-  it('Vision fallback trigger failure is isolated — route still returns its verdict', async () => {
+  it('Vision run failure is isolated — route still returns verdict', async () => {
     const { jobId } = await setupJob();
     await STORE.addSourceFile(jobId, {
       file_id: 'pdf_gcs_1',
@@ -411,7 +406,7 @@ describe('POST /api/invoice-audit/run', () => {
     process.env.PARSER_WORKER_TOKEN = 't';
     fetchMock.mockImplementation(async (url: string) => {
       const u = String(url);
-      if (u.includes('/v1/vision/start')) throw Object.assign(new Error('worker down'), { name: 'TypeError' });
+      if (u.includes('/v1/vision/run')) throw Object.assign(new Error('worker down'), { name: 'TypeError' });
       if (u.includes('/v1/parse')) {
         if ((fetchMock.mock.calls.filter((c) => String(c[0]).includes('/v1/parse')).length) === 1) return PARSE_OK(jobId);
         return {
@@ -421,7 +416,8 @@ describe('POST /api/invoice-audit/run', () => {
             parse_result_id: 'ev1',
             job_id: jobId,
             file_id: 'pdf_gcs_1',
-            normalized: { invoice_id: 'ev', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.9, parser_version: 'p' },
+            normalized: { invoice_id: 'ev', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.3, parser_version: 'p' },
+            parser_issues: ['SCANNED_PAGE_DETECTED'],
           }),
         };
       }
@@ -433,6 +429,39 @@ describe('POST /api/invoice-audit/run', () => {
     expect(r.status).toBe(202);
     const body = await r.json();
     expect(body.status).toBe('REVIEW_REQUIRED');
+  });
+
+  it('surfaces a scanned invoice PDF as SCANNED_PDF_NEEDS_OCR AMBER (Vision off, not silent)', async () => {
+    // Regression for the scanned-PDF surfacing + verdict consistency: a scanned PDF must
+    // never be silently dropped. With Vision disabled, a scanned invoice (0 lines +
+    // SCANNED_PAGE_DETECTED) must produce an explicit SCANNED_PDF_NEEDS_OCR action item
+    // AND an AMBER verdict — deterministic (zero-lines guard path, no MCP needed).
+    const fd = new FormData();
+    fd.set('file', new File(['%PDF-1.4 scanned'], 'scanned-invoice.pdf', { type: 'application/pdf' }));
+    const ingest = await INGEST_POST(new Request('http://test/api/files/ingest', { method: 'POST', body: fd, headers: { 'x-user-id': 'u1' } }));
+    const uploaded = await ingest.json();
+    delete process.env.VISION_FALLBACK_ENABLED;  // Vision OFF
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/v1/parse')) {
+        return { ok: true, status: 200, json: async () => ({
+          parse_result_id: 'pr_scan', job_id: uploaded.job_id, file_id: uploaded.file_ids[0],
+          normalized: { invoice_id: 'inv', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.0, parser_version: 'p' },
+          parser_issues: ['SCANNED_PAGE_DETECTED'],
+        })};
+      }
+      return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: {} }) };
+    });
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: uploaded.job_id }), headers: { 'content-type': 'application/json' } }));
+
+    expect(r.status).toBe(202);
+    expect(calledVisionRun()).toBe(false);  // Vision off → no OCR call
+    const body = await r.json();
+    expect(body.verdict).toBe('AMBER');
+    expect((body.action_items ?? []).some((a: any) => a.issue_type === 'SCANNED_PDF_NEEDS_OCR')).toBe(true);
   });
 
   it('triggers /v1/notebooklm/run when NOTEBOOKLM_ENABLED=true, without changing the verdict', async () => {

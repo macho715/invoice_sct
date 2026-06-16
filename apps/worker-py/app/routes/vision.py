@@ -1,25 +1,31 @@
-"""Vision preflight + async OCR routes.
+"""Vision preflight + async OCR + sync OCR run routes.
 
 Endpoints:
   POST /v1/preflight       — Decide whether a PDF needs Vision OCR.
   POST /v1/vision/start    — Kick off async document text detection.
   POST /v1/vision/collect  — Poll and collect OCR results.
+  POST /v1/vision/run      — Sync OCR orchestration (start→poll→collect→normalize).
 """
 from __future__ import annotations
 import hashlib
 import logging
+import time
 from fastapi import APIRouter
 
 from app.schemas import (
+    InvoiceLine,
     PreflightRequest,
     PreflightResponse,
+    SourceDataRow,
     VisionCollectRequest,
     VisionCollectResponse,
+    VisionRunRequest,
+    VisionRunResponse,
     VisionStartRequest,
     VisionStartResponse,
 )
 from app.services.vision_client import VisionClient
-from app.services.vision_normalizer import normalize_vision_output
+from app.services.vision_normalizer import normalize_vision_output, vision_result_to_invoice_lines
 
 logger = logging.getLogger(__name__)
 
@@ -180,4 +186,148 @@ def vision_collect(req: VisionCollectRequest) -> VisionCollectResponse:
         evidence_candidate_count=len(normalized.evidence_candidates),
         dsv_parse_result=dsv_result,
         issues=normalized.issues,
+    )
+
+
+# ---------------------------------------------------------------------------
+# /v1/vision/run — sync OCR orchestration (Track ② plan)
+# ---------------------------------------------------------------------------
+
+@router.post('/v1/vision/run', response_model=VisionRunResponse)
+def vision_run(req: VisionRunRequest) -> VisionRunResponse:
+    """Sync OCR pipeline: start async → bounded poll → collect → normalize.
+
+    Returns normalized invoice_lines + evidence (no raw OCR text).
+    Timeout/failure produces VISION_TIMEOUT or VISION_RUN_FAILED.
+    VISION_DISABLED when library/flag not available.
+    """
+    if not vision_client.available:
+        return VisionRunResponse(
+            job_id=req.job_id,
+            file_id=req.file_id,
+            status='VISION_DISABLED',
+            error_code=vision_client.unavailable_reason,
+        )
+
+    # Validate gs:// input
+    if not req.source_gcs_uri.startswith('gs://'):
+        return VisionRunResponse(
+            job_id=req.job_id,
+            file_id=req.file_id,
+            status='VISION_RUN_FAILED',
+            issues=['VISION_NON_GCS_INPUT'],
+            error_code='GCS_URI_REQUIRED',
+        )
+
+    deadline = time.monotonic() + req.timeout_seconds
+
+    # 1. Start
+    start = vision_client.start_async_text_detection(
+        source_gcs_uri=req.source_gcs_uri,
+        output_gcs_prefix=req.output_gcs_prefix,
+    )
+    if start.get('status') != 'STARTED':
+        return VisionRunResponse(
+            job_id=req.job_id,
+            file_id=req.file_id,
+            status='VISION_RUN_FAILED',
+            issues=['VISION_START_FAILED'],
+            error_code=start.get('error_code'),
+        )
+    operation_name = start.get('operation_name')
+
+    # 2. Poll with bounded timeout
+    while time.monotonic() < deadline:
+        op_status = vision_client.get_operation_status(operation_name)
+        if op_status.get('status') == 'DONE':
+            break
+        if op_status.get('status') == 'VISION_DISABLED':
+            return VisionRunResponse(
+                job_id=req.job_id,
+                file_id=req.file_id,
+                status='VISION_RUN_FAILED',
+                issues=['VISION_POLL_FAILED'],
+                error_code=op_status.get('error_code'),
+            )
+        time.sleep(5)
+    else:
+        return VisionRunResponse(
+            job_id=req.job_id,
+            file_id=req.file_id,
+            status='VISION_TIMEOUT',
+            issues=[f'OCR did not complete within {req.timeout_seconds}s'],
+        )
+
+    # 3. Collect
+    output_gcs_prefix = op_status.get('output_gcs_prefix')
+    if not output_gcs_prefix:
+        return VisionRunResponse(
+            job_id=req.job_id,
+            file_id=req.file_id,
+            status='VISION_RUN_FAILED',
+            issues=['VISION_OUTPUT_PREFIX_NOT_FOUND'],
+        )
+    collect = vision_client.collect_result(output_gcs_prefix=output_gcs_prefix)
+    if collect.get('status') != 'COLLECTED':
+        return VisionRunResponse(
+            job_id=req.job_id,
+            file_id=req.file_id,
+            status='VISION_RUN_FAILED',
+            issues=['VISION_COLLECT_FAILED'],
+            error_code=collect.get('error_code'),
+        )
+
+    # 4. Normalize → invoice_lines + evidence (no raw OCR text)
+    normalized = normalize_vision_output(
+        {"responses": collect.get("responses", [])},
+        file_id=req.file_id,
+        file_name=req.file_id,
+    )
+    invoice_lines = vision_result_to_invoice_lines(normalized, req.file_id)
+    evidence_candidates = [
+        {
+            'source_file_id': req.file_id,
+            'source_engine': 'google_vision',
+            'matched_reference': ev.get('matched_reference'),
+            'doc_kind': ev.get('doc_kind'),
+            'confidence': ev.get('confidence', normalized.confidence),
+            'text_span_hash': ev.get('text_span_hash'),
+            'text_span': (ev.get('text_span') or '')[:200],
+        }
+        for ev in normalized.evidence_candidates
+    ]
+
+    # Source data from OCR
+    source_data: list[SourceDataRow] = []
+    if invoice_lines:
+        h = hashlib.sha256(str(invoice_lines[0].description).encode()).hexdigest()[:16]
+        source_data.append(SourceDataRow(
+            file_id=req.file_id,
+            source_ref=req.source_gcs_uri,
+            original_text=normalized.full_text[:500],
+            normalized_value=f"vision_ocr_{len(invoice_lines)}_lines",
+            confidence=normalized.confidence,
+            routing_pattern='VISION_OCR_RUN',
+            pdf_page=0,
+            text_span_hash=f"sha256:{h}",
+        ))
+
+    issues = normalized.issues or []
+    if not invoice_lines:
+        issues.append('VISION_NO_LINES_EXTRACTED')
+    if normalized.confidence < 0.5:
+        issues.append('VISION_LOW_CONFIDENCE')
+
+    return VisionRunResponse(
+        job_id=req.job_id,
+        file_id=req.file_id,
+        status='VISION_RUN_COLLECTED',
+        invoice_lines=invoice_lines,
+        evidence_candidates=evidence_candidates,
+        source_data=source_data,
+        source_gcs_uri=req.source_gcs_uri,
+        ocr_json_gcs_uris=collect.get('ocr_json_gcs_uris', []),
+        page_count=collect.get('page_count', 0),
+        confidence=normalized.confidence,
+        issues=issues,
     )

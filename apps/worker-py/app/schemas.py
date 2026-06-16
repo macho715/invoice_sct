@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 import hashlib
 
@@ -99,6 +99,7 @@ class PdfParseResponse(BaseModel):
 VisionRoute = Literal['text_parser', 'vision_ocr', 'markitdown', 'review_required']
 VisionStartStatus = Literal['VISION_DISABLED', 'STARTED', 'STUB']
 VisionCollectStatus = Literal['VISION_DISABLED', 'RUNNING', 'COLLECTED', 'VISION_OUTPUT_NOT_FOUND']
+VisionRunStatus = Literal['VISION_DISABLED', 'VISION_RUN_COLLECTED', 'VISION_RUN_FAILED', 'VISION_TIMEOUT']
 
 
 class PreflightRequest(BaseModel):
@@ -166,6 +167,33 @@ class VisionCollectResponse(BaseModel):
     dsv_parse_result: Optional[dict[str, Any]] = None
     issues: list[str] = Field(default_factory=list)
 
+
+class VisionRunRequest(BaseModel):
+    """Sync OCR orchestration: start → poll → collect → normalize in one call."""
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    source_gcs_uri: str
+    output_gcs_prefix: str
+    timeout_seconds: int = Field(default=180, ge=10, le=600)
+
+
+class VisionRunResponse(BaseModel):
+    """Sync OCR result: normalized invoice_lines + evidence (no raw OCR text)."""
+    model_config = ConfigDict(extra='forbid')
+    job_id: str
+    file_id: str
+    status: VisionRunStatus = 'VISION_DISABLED'
+    invoice_lines: list[InvoiceLine] = Field(default_factory=list)
+    evidence_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    source_data: list[SourceDataRow] = Field(default_factory=list)
+    source_gcs_uri: Optional[str] = None
+    ocr_json_gcs_uris: list[str] = Field(default_factory=list)
+    page_count: int = 0
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    issues: list[str] = Field(default_factory=list)
+    error_code: Optional[str] = None
+
 class ParseResponse(BaseModel):
     model_config = ConfigDict(extra='forbid')
     parse_result_id: str
@@ -173,8 +201,8 @@ class ParseResponse(BaseModel):
     file_id: str
     source_sha256: str
     normalized: NormalizedInvoice
-    # Phase 3 reviewer fix + domestic fullset port: complete pdf_source_data population from actual spans
     source_data: list[SourceDataRow] = Field(default_factory=list)
+    parser_issues: list[str] = Field(default_factory=list)
 
 class DecisionRow(BaseModel):
     model_config = ConfigDict(extra='forbid')
