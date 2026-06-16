@@ -9,6 +9,8 @@ const PUBLIC_UI_API_ROUTES = [
   '/api/files/ingest',
   '/api/files/blob-upload',
   '/api/files/register',
+  '/api/files/create-upload-url',
+  '/api/files/confirm',
   '/api/invoices',
   '/api/invoices/upload-url',
   '/api/audit/status',

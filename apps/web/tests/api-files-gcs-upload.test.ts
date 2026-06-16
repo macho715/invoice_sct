@@ -51,6 +51,21 @@ describe('POST /api/files/create-upload-url (GCS)', () => {
     expect(body.file_role).toBe('EVIDENCE');
   });
 
+  it('reuses a caller-supplied job_id so multi-file uploads share one job', async () => {
+    const response = await POST(makeRequest({
+      filename: 'HVDC-ADOPT-SCT-0122_BOE.pdf',
+      mime_type: 'application/pdf',
+      size_bytes: 12345,
+      file_role: 'EVIDENCE',
+      job_id: 'job_existing_abc',
+    }));
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.job_id).toBe('job_existing_abc');
+    expect(body.gcs_uri).toMatch(/^gs:\/\/dsv-invoice-source\/source\/job_existing_abc\/file_[^/]+\/HVDC-ADOPT-SCT-0122_BOE\.pdf$/);
+  });
+
   it('keeps the dev ingest fallback when GCS upload is disabled', async () => {
     process.env.GCS_UPLOAD_ENABLED = 'false';
     process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000';
