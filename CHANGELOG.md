@@ -1,5 +1,108 @@
 # Changelog
 
+## DOMESTIC workflow — full pipeline (UI, parser, MCP tool, gate, rate cards) - 2026-06-16
+
+> **Scope:** Build the complete DOMESTIC invoice audit pipeline — upload-form toggle,
+> worker DSV waybill lane extraction, 15th MCP tool `domestic_lane_check`, gate-bridge
+> Korean action items, rate_cards DB with 139 ApprovedLaneMap lanes, and end-to-end
+> field plumbing from parser through validation. All local (uncommitted).
+
+### Added
+
+- **15th MCP tool: `domestic_lane_check`** — `packages/tools/src/domestic_lane_check.ts`
+  (NEW). Lane key construction (origin||destination||vehicle||unit), distance-band
+  classification (SHORT_RUN ≤50km / STANDARD / LONG_HAUL >300km), short-run detection
+  (≤10km flag, ≤2km fixed_cost_suspect), delta% vs reference rate, cost-guard banding
+  (PASS ≤2% / WARN ≤5% / HIGH ≤10% / CRITICAL >10%), risk-based review score.
+  Registered as `domestic_lane_check` in `packages/tools/src/index.ts` (TOOLS map, 15 tools).
+- **DSV waybill parser (v1.4 → worker port)** — `apps/worker-py/app/parsers/dsv_waybill.py`
+  expanded from 115→590 lines: 5-layer lane extraction cascade (routing_section_clean →
+  consignment_table → consignment_pattern → table/text → direct_label), pdfplumber
+  CONSIGNMENT INFORMATION table extraction (`extract_consignment_from_pdfplumber`),
+  20-pattern invalid origin/destination filter, 3-tier UAE location keyword validation
+  (high/medium/low), structured `waybill_fields` evidence candidate, weighted confidence
+  scoring with flags (TRIP_NO_MISSING, LANE_INCOMPLETE, LOW_CONFIDENCE).
+- **rate_cards migration 0016** — `migrations/0016_rate_cards.sql` (NEW). Table with
+  `lane` (domestic composite key), `contracted_rate`, `lane_id`, `median_distance_km`,
+  `samples`, `workflow_type` constraint (SHIPMENT charge_code OR DOMESTIC lane).
+- **Domestic rate seed** — `scripts/seed_domestic_rates.py` (NEW). Imports 139 lanes
+  from ApprovedLaneMap_ENHANCED.json (36 origins, 15 destinations, 13 vehicle types,
+  rate range 100-3,200 USD, distance 1.0-444.8 km). SQL output default; `--db` for
+  direct Postgres insert.
+
+### Changed
+
+- **Gate bridge domestic verdict + Korean actions** — `apps/web/src/lib/gate-bridge.ts`:
+  `buildGateResult` accepts `domesticLaneResults[]` parameter, produces Korean action
+  items (단거리 운행, 초단거리 의심, Lane 누락, 운임 차이), `domesticMax` factored into
+  final verdict. Domestic top-level verdict language already exists (ZERO→보류+국내물류팀,
+  AMBER→국내물류 원가검토).
+- **cf-mcp-client domestic pipeline** — `apps/web/src/lib/cf-mcp-client.ts`:
+  Step 12a inline domestic logic replaced with `callTool('domestic_lane_check')` call.
+  Step 3 `check_rate_card` passes domestic lane key (origin||destination||vehicle||unit)
+  + `workflow_type='DOMESTIC'` for lane-based DB lookup. Domestic lane findings feed
+  into `validation_explanations`.
+- **check_rate_card domestic lookup** — `packages/tools/src/check_rate_card.ts`:
+  `workflow_type` optional input; when `DOMESTIC` + `lane` present, queries
+  `WHERE lane = $1 AND workflow_type = 'DOMESTIC'` instead of charge_code.
+- **Worker workflow_type propagation** — `apps/worker-py/app/schemas.py`:
+  `ParseRequest.workflow_type` ('SHIPMENT'|'DOMESTIC', default SHIPMENT).
+  `apps/worker-py/app/routes/parse.py`: `is_domestic` flag → domestic PDF path
+  extracts DSV waybill lane from `waybill_fields` evidence → enriches `invoice_lines`
+  with `origin`/`destination`/`vehicle`. `apps/web/src/lib/parser-client.ts`:
+  `ParseRequestPayload.workflow_type` added; `run/route.ts` passes `job.workflow_type`
+  to both parse and evidence-parse calls.
+- **xlsx parser domestic header aliases** — `apps/worker-py/app/parsers/xlsx.py`:
+  `HEADER_ALIASES` extended with `origin` (Place of Loading, From, Pickup…),
+  `destination` (Place of Delivery, To, Dropoff…), `vehicle` (Vehicle Type, Truck Type…),
+  `distance_km` (Distance KM, Mileage…). `InvoiceLine` construction maps these columns.
+- **Python InvoiceLine domestic fields** — `apps/worker-py/app/schemas.py`:
+  `InvoiceLine` gains `origin`, `destination`, `vehicle`, `distance_km` (all Optional).
+- **pdf_text.py structured waybill evidence** — `apps/worker-py/app/parsers/pdf_text.py`:
+  DSV waybill parsing now emits a single structured `EvidenceCandidate` with `waybill_fields`
+  dict (origin, destination, vehicle, waybill_no, trip_no, confidence, flags) in addition
+  to the individual field candidates.
+- **TypeScript contracts** — `packages/contracts/invoice.schema.ts`:
+  `InvoiceLineSchema` gains `origin`, `destination`, `vehicle`, `distance_km` (all optional).
+- **Run route domestic lane results** — `apps/web/src/app/api/invoice-audit/run/route.ts`:
+  `sct.domestic_lane_results` mapped and passed to `buildGateResult`.
+- **MCP tools count**: 14 → **15** (domestic_lane_check added).
+
+### Verified
+
+- apps/web **200** · apps/worker-py **204** · apps/mcp-server **187** = **591** tests PASS.
+- Web typecheck: 0 errors. MCP typecheck: 0 errors.
+- Domestic lane check tool tested with 15 real invoice lines from
+  `SCNT HVDC DRAFT INVOICE FOR DOMESTIC DELIVERY MAY 2026.xlsx` — lane keys correctly
+  constructed, all AMBER (expected: no ref_rate/distance_km in test data).
+
+### Files Changed (uncommitted)
+
+```
+M  apps/web/src/lib/cf-mcp-client.ts
+M  apps/web/src/lib/gate-bridge.ts
+M  apps/web/src/lib/parser-client.ts
+M  apps/web/src/app/api/invoice-audit/run/route.ts
+M  apps/worker-py/app/parsers/dsv_waybill.py    (115 → 590 lines)
+M  apps/worker-py/app/parsers/pdf_text.py
+M  apps/worker-py/app/parsers/xlsx.py
+M  apps/worker-py/app/routes/parse.py
+M  apps/worker-py/app/schemas.py
+M  packages/contracts/invoice.schema.ts
+M  packages/tools/src/check_rate_card.ts
+M  packages/tools/src/index.ts                  (14 → 15 tools)
+A  packages/tools/src/domestic_lane_check.ts     (NEW)
+A  migrations/0016_rate_cards.sql                (NEW)
+A  scripts/seed_domestic_rates.py                (NEW)
+```
+
+### Deploy prerequisites
+
+```sql
+psql $DATABASE_URL < migrations/0016_rate_cards.sql
+python scripts/seed_domestic_rates.py --db $DATABASE_URL
+```
+
 ## DSV SHPT hybrid PDF parser (PDF → real invoice_lines) + root-doc sync - 2026-06-16
 
 > **Scope:** Document and reflect the **DSV SHPT hybrid PDF parser** (ported earlier same day via PR #35/#36, commits `8c00cb6`/`545c42a`) that makes native-text PDF uploads yield **real `invoice_lines`** instead of always falling back to AMBER, plus the root-doc sync that brings README / SYSTEM_ARCHITECTURE / LAYOUT up to date. Doc syncs shipped via PR #38, #39, and this PR to `macho715/invoice_sct:main`.

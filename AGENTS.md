@@ -36,7 +36,7 @@ Upload (Excel invoice OR PDF, or both)
 - `apps/web`: Next.js 15 / React 19 app, upload UI, API routes, audit orchestration, approval, final gate, workbook handoff.
 - `apps/worker-py`: FastAPI parser/export worker for xlsx/md/txt/pdf/pdf_json, DSV waybill extraction, NotebookLM helper orchestration.
 - `apps/mcp-server`: Hono TypeScript JSON-RPC MCP server for external clients.
-- `packages/tools`: 14 validation tools; treat as the audit tool SSOT.
+- `packages/tools`: 15 validation tools; treat as the audit tool SSOT.
 - `packages/contracts`: shared Zod schemas and API contracts.
 - `packages/database`: Neon/Postgres pool singleton.
 - `packages/shared`: hash and redaction helpers.
@@ -46,6 +46,7 @@ Upload (Excel invoice OR PDF, or both)
 ## Architecture Boundaries
 - Web app owns final audit orchestration, `Gate Bridge`, approval, and user-facing result/export flow.
 - Parser worker may parse, normalize, OCR-orchestrate, and format exports, but must not become the final business verdict authority.
+- **DOMESTIC workflow** (2026-06-16): upload-form `workflow_type` (`SHIPMENT`|`DOMESTIC`) gates the entire pipeline — domestic skips HS/UAE, shipment_match, fx_policy, dem_det; uses `domestic_lane_check` (15th tool) for lane/distance/short-run validation; `check_rate_card` queries `rate_cards` by composite lane key; gate-bridge produces Korean action items. Domestic invoices carry `origin`/`destination`/`vehicle`/`distance_km` fields from xlsx headers or DSV waybill extraction.
 - MCP tools own rate/evidence/cost/HS/duplicate/contract/shipment/tax/FX/DEM-DET validation functions.
 - NotebookLM/NoteLM is extraction evidence only. It must never produce the final audit verdict.
 - MarkItDown MCP is a markdown/evidence conversion layer only. It must never decide PASS/AMBER/ZERO.

@@ -102,7 +102,12 @@ export const InvoiceLineSchema = z.object({
     col: z.string().optional(),
     text_span: z.string().optional(),
     formula_text: z.string().optional()
-  }).nullish()
+  }).nullish(),
+  // Domestic lane fields — populated from xlsx parser header aliases or DSV waybill extraction
+  origin: z.string().nullish(),
+  destination: z.string().nullish(),
+  vehicle: z.string().nullish(),
+  distance_km: z.number().nullish(),
 });
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
 

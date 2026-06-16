@@ -34,6 +34,11 @@ class InvoiceLine(BaseModel):
     for_charge_component: Optional[str] = None
     type_b: Optional[str] = None
     source_ref: dict = Field(default_factory=dict)
+    # Domestic lane fields — populated by xlsx parser (header aliases) or DSV waybill extraction
+    origin: Optional[str] = None
+    destination: Optional[str] = None
+    vehicle: Optional[str] = None
+    distance_km: Optional[float] = None
 
 class EvidenceCandidate(BaseModel):
     model_config = ConfigDict(extra='ignore')
@@ -61,6 +66,7 @@ class ParseRequest(BaseModel):
     file_type: Literal['xlsx','md','txt','pdf','pdf_json']
     parser_version: str
     blob_url: str
+    workflow_type: Literal['SHIPMENT','DOMESTIC'] = 'SHIPMENT'
 
 # --- P3A PDF text parser models (plan §4.2) ---
 class PdfTextSpan(BaseModel):

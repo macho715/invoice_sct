@@ -69,6 +69,8 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f'BLOB_FETCH_FAILED: {e!s}')
 
+    is_domestic = getattr(req, 'workflow_type', 'SHIPMENT') == 'DOMESTIC'
+
     source_data: list[SourceDataRow] = []
     try:
         if req.file_type == 'xlsx':
@@ -94,6 +96,28 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
             ]
             dsv = extract_dsv_from_text(full_text, dsv_tables, file_name=req.blob_ref, parser_issues=list(pdf_res.parser_issues or []))
             line_currency = next((li.currency for li in dsv.line_items if li.currency in ('AED', 'USD')), 'AED')
+            invoice_lines = _dsv_lines_to_invoice_lines(dsv)
+
+            # Domestic: enrich invoice lines with DSV waybill lane data (origin/destination/vehicle)
+            if is_domestic:
+                dsv_lane_origin: str | None = None
+                dsv_lane_dest: str | None = None
+                dsv_lane_vehicle: str | None = None
+                for ev in (pdf_res.evidence_candidates or []):
+                    if getattr(ev, 'doc_kind', None) == 'DSV_WAYBILL' and hasattr(ev, 'waybill_fields') and ev.waybill_fields:
+                        wf = ev.waybill_fields
+                        dsv_lane_origin = wf.get('origin') or dsv_lane_origin
+                        dsv_lane_dest = wf.get('destination') or dsv_lane_dest
+                        dsv_lane_vehicle = wf.get('vehicle') or dsv_lane_vehicle
+                        break  # first structured waybill has what we need
+                for il in invoice_lines:
+                    if dsv_lane_origin:
+                        il.origin = dsv_lane_origin
+                    if dsv_lane_dest:
+                        il.destination = dsv_lane_dest
+                    if dsv_lane_vehicle:
+                        il.vehicle = dsv_lane_vehicle
+
             ni = NormalizedInvoice(
                 invoice_id=f"inv_{req.file_id}",
                 invoice_header=InvoiceHeader(
@@ -101,7 +125,7 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
                     vendor=None, issue_date=(dsv.keys.get('date') or None),
                     currency=line_currency, invoice_total=None,
                 ),
-                invoice_lines=_dsv_lines_to_invoice_lines(dsv),
+                invoice_lines=invoice_lines,
                 evidence_candidates=pdf_res.evidence_candidates or [],
                 parser_confidence=pdf_res.parser_confidence,
                 parser_version=pdf_res.parser_version,
@@ -147,6 +171,27 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
                 shipment_id=shpt_map.get("shipment_id"),
                 is_portal_fee=shpt_map.get("is_portal_fee"),
             ))
+        # Domestic: promote DSV waybill lane data to source_data for domestic_lane_check
+        if is_domestic:
+            for ev in (pdf_res.evidence_candidates or []):
+                if getattr(ev, 'doc_kind', None) == 'DSV_WAYBILL' and hasattr(ev, 'waybill_fields') and ev.waybill_fields:
+                    wf = ev.waybill_fields
+                    lane_info = {
+                        "origin": wf.get("loading_address") or wf.get("origin_norm"),
+                        "destination": wf.get("destination") or wf.get("destination_norm"),
+                        "waybill_no": wf.get("waybill_no"),
+                        "trip_no": wf.get("trip_no"),
+                        "vehicle": wf.get("req_truck_type"),
+                    }
+                    source_data.append(SourceDataRow(
+                        file_id=req.file_id,
+                        source_ref="dsv_waybill_lane",
+                        original_text=str(lane_info)[:500],
+                        normalized_value=lane_info.get("origin") or lane_info.get("waybill_no"),
+                        confidence=ev.confidence,
+                        routing_pattern="DOMESTIC_DSV_LANE",
+                        doc_type="DSV_WAYBILL",
+                    ))
         # Forward issues for orchestrator error code mapping (P3B/P3C §5.3, §4.3)
         # Attach to the response object so TS run can inspect (parseRes.parser_issues)
         # (keeps ParseResponse shape for now; P3B+ can evolve to richer payload)

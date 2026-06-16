@@ -234,7 +234,8 @@ export async function POST(req: Request): Promise<Response> {
       blob_ref: invoiceFile.blob_ref, file_id: invoiceFile.file_id, job_id: body.job_id,
       file_type: invoiceFile.file_type as 'xlsx' | 'md' | 'txt' | 'pdf',
       parser_version: job.parser_version,
-      blob_url: blobUrl
+      blob_url: blobUrl,
+      workflow_type: job.workflow_type
     };
     parseRes = await parser.parse(basePayload as any);
   } catch (e) {
@@ -431,7 +432,8 @@ export async function POST(req: Request): Promise<Response> {
       const evBlobUrl = await getSignedDownloadUrl(evFile.blob_ref);
       const evPayload = {
         blob_ref: evFile.blob_ref, file_id: evFile.file_id, job_id: body.job_id,
-        file_type: 'pdf' as const, parser_version: job.parser_version, blob_url: evBlobUrl
+        file_type: 'pdf' as const, parser_version: job.parser_version, blob_url: evBlobUrl,
+        workflow_type: job.workflow_type
       };
       const evParse = await parser.parsePdfText(evPayload);
       const evCandidates = (evParse.normalized as any)?.evidence_candidates ?? [];
@@ -457,7 +459,8 @@ export async function POST(req: Request): Promise<Response> {
     sct = await cf.validate(body.job_id, {
       invoice_lines: (parseRes.normalized as { invoice_lines: unknown[] }).invoice_lines,
       evidence_index: mergedEvidence,
-      rule_version: job.rule_version
+      rule_version: job.rule_version,
+      workflow_type: job.workflow_type
     });
   } catch (e: any) {
     // Mirror the parse catch: persist FAILED so the job does not get stuck in
@@ -497,7 +500,14 @@ export async function POST(req: Request): Promise<Response> {
       severity: d.verdict === 'ZERO' ? 'ZERO' as const : 'AMBER' as const,
       reason_code: d.reason_code ?? 'DUPLICATE_INVOICE'
     }));
-  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), evidenceFindings, duplicateFindings);
+  const domesticLaneResults = (sct.domestic_lane_results ?? []).map(dl => ({
+    line_id: dl.line_id, lane: dl.lane, distance_km: dl.distance_km, rate_band: dl.rate_band,
+    verdict: dl.verdict, reason_code: dl.reason_code, delta_pct: dl.delta_pct ?? null,
+    cg_band: dl.cg_band ?? 'UNKNOWN', short_run_flag: dl.short_run_flag ?? false,
+    fixed_cost_suspect: dl.fixed_cost_suspect ?? false, risk_score: dl.risk_score ?? null,
+    rbr_trigger: dl.rbr_trigger ?? false
+  }));
+  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), evidenceFindings, duplicateFindings, job.workflow_type, domesticLaneResults);
   const invoiceTotal = normalized?.invoice_header?.invoice_total ?? null;
   const lineAuditTotal = (normalized?.invoice_lines as any[] | undefined)?.reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0) ?? 0;
   const typeBTotal: number | null = sct.type_b_results.length > 0
@@ -506,7 +516,7 @@ export async function POST(req: Request): Promise<Response> {
         return sum + (hasTypeB ? (Number(l.amount) || 0) : 0);
       }, 0) ?? 0
     : null;
-  const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal);
+  const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal, job.workflow_type);
   let finalVerdict = maxVerdict(gate.verdict as Verdict, sourceHashVerdict);
   const actionItems = [...sourceHashActionItems, ...(gate.action_items || [])];
   if (!recon.ok && recon.verdict !== 'PASS') {
@@ -521,6 +531,6 @@ export async function POST(req: Request): Promise<Response> {
   }
   await STORE.setResult(body.job_id, { ...gate, verdict: finalVerdict, action_items: actionItems });
   await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: finalVerdict });
-  await STORE.appendTrace(body.job_id, { step: 'DECISION', input_ref: sct.sct_trace_id, output_ref: gate.gate_id, attributedTo: 'gate-bridge' });
+  await STORE.appendTrace(body.job_id, { step: 'DECISION', input_ref: sct.sct_trace_id, output_ref: gate.gate_id, attributedTo: `gate-bridge:${job.workflow_type}` });
   return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: finalVerdict, action_items: actionItems }, { status: 202 });
 }
