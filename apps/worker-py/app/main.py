@@ -1,6 +1,9 @@
 """FastAPI application entry point."""
+from os import getenv
+from secrets import compare_digest
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.middleware.audit_log import AuditLogMiddleware
 from app.routes.health import router as health_router
@@ -13,6 +16,17 @@ from app.telemetry import init_telemetry
 
 def create_app() -> FastAPI:
     app = FastAPI(title='Invoice Audit Parser', version='0.1.0')
+
+    @app.middleware("http")
+    async def parser_token_auth(request, call_next):
+        token = getenv("PARSER_WORKER_TOKEN")
+        protected = request.url.path.startswith("/v1/") or request.url.path == "/parse" or request.url.path.startswith("/parse/")
+        if token and protected and request.method != "OPTIONS":
+            expected = f"Bearer {token}"
+            actual = request.headers.get("authorization", "")
+            if not compare_digest(actual, expected):
+                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
 
     # CORS — registered first so it wraps all subsequent middleware (incl. audit log).
     app.add_middleware(
