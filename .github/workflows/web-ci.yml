@@ -46,6 +46,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify architecture contracts
+        run: pnpm verify:architecture-contracts
+
   checks:
     name: "Checks (${{ matrix.app }})"
     needs: [root-install]

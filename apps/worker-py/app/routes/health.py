@@ -55,8 +55,22 @@ async def _check_db() -> Dict[str, Any]:
 
     Imports ``app.db`` lazily so that the test environment (which may not
     have psycopg2 installed) can still import this module.
+
+    When DATABASE_URL is unset/empty the worker runs DB-optional — returns
+    a graceful skip instead of a hard failure, matching the fail-soft
+    contract in ``app/db.py``.
     """
+    import os
     from app.db import get_pool  # lazy import
+
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        return {
+            "ok": True,
+            "latency_ms": 0,
+            "skipped": True,
+            "reason": "DATABASE_URL unset; audit logging disabled (optional)",
+        }
 
     started = time.perf_counter()
     pool = get_pool()
@@ -64,7 +78,7 @@ async def _check_db() -> Dict[str, Any]:
         return {
             "ok": False,
             "latency_ms": 0,
-            "error": "db pool not available (DATABASE_URL unset or pool init failed)",
+            "error": "db pool init failed (DATABASE_URL is set but pool could not be created)",
         }
 
     def _do_select() -> None:

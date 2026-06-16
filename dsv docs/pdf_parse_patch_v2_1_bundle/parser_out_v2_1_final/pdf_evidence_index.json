@@ -1,0 +1,1785 @@
+{
+  "manifest": {
+    "parser_version": "2.1.0",
+    "created_at": "2026-06-15T13:02:13+00:00",
+    "record_count": 16,
+    "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다.",
+    "project_source": {
+      "project_source_scan_status": "PASS",
+      "project_root": "/mnt/data/_dsv_pkg_patch/DSV_SHIPMENT_FULL_PACKAGE_v3_2_PRO_INTERNAL",
+      "required_count": 5,
+      "missing": [],
+      "file_count": 41,
+      "contract_source_status": "PRESENT_MASKED",
+      "contract_source_path": "private/contract_rate.json",
+      "scanned_at": "2026-06-15T13:00:40+00:00",
+      "contract_source_sha256": "10e173a5eee27017",
+      "contract_source_size_bytes": 806869
+    }
+  },
+  "records": [
+    {
+      "file": "HVDC-ADOPT-HE-0425,0426,0427,0428_BOE.pdf",
+      "size_bytes": 297638,
+      "sha256": "306f2c6210dae811",
+      "processed_at": "2026-06-15T13:00:40+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 5,
+      "text_length": 4677,
+      "text_source": "native",
+      "doc_type": "BOE_CUSTOMS",
+      "doc_type_confidence": 95,
+      "doc_type_matched": [
+        "CUSTOMS DECLARATION",
+        "PRE CLEAR BILL",
+        "PRE-CLEAR BILL",
+        "DEBIT NOTE",
+        "GATE PASS"
+      ],
+      "doc_type_rule_note": "UAE Customs declaration/debit/gate pass",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-HE-0425",
+          "HVDC-ADOPT-HE-0426",
+          "HVDC-ADOPT-HE-0427",
+          "HVDC-ADOPT-HE-0428"
+        ],
+        "shipment_no": "HVDC-ADOPT-HE-0425",
+        "containers": [
+          "TRHU7327714",
+          "MSMU7483648",
+          "MSDU6283783",
+          "TLLU8958408"
+        ],
+        "bl_nos": [
+          "[BL:814f3c864e]"
+        ],
+        "bl_no": "[BL:814f3c864e]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [
+          "[DO:43a1c46ca9]"
+        ],
+        "do_no": "[DO:43a1c46ca9]",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [],
+        "date": "",
+        "amounts_aed": [],
+        "line_amounts_aed": [
+          101180.0,
+          90.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 4,
+        "containers": 4,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 1,
+        "invoice_nos": 0,
+        "line_items": 2
+      },
+      "table_count": 41,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 2,
+          "source": "text:customs_debit",
+          "description": "Pre-Clear Debit",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 101180.0,
+          "vat_aed": null,
+          "total_aed": 101180.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Customs",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Customs debit note; date="
+        },
+        {
+          "line_id": "L002",
+          "page": 3,
+          "source": "text:customs_debit",
+          "description": "Pre-Clear Debit",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 90.0,
+          "vat_aed": null,
+          "total_aed": 90.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Customs",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Customs debit note; date="
+        }
+      ],
+      "type_b": "Customs",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "AMBER",
+      "issues": [
+        {
+          "severity": "AMBER",
+          "code": "CUSTOMS_FINAL_REVIEW_REQUIRED",
+          "detail": "HS/UAE Customs final decision blocked from auto-PASS"
+        }
+      ],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 21
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0123, 0124_BOE.pdf",
+      "size_bytes": 309471,
+      "sha256": "68990468723e6e94",
+      "processed_at": "2026-06-15T13:00:42+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 5,
+      "text_length": 5599,
+      "text_source": "native",
+      "doc_type": "BOE_CUSTOMS",
+      "doc_type_confidence": 95,
+      "doc_type_matched": [
+        "CUSTOMS DECLARATION",
+        "PRE CLEAR BILL",
+        "PRE-CLEAR BILL",
+        "DEBIT NOTE",
+        "GATE PASS"
+      ],
+      "doc_type_rule_note": "UAE Customs declaration/debit/gate pass",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0123",
+          "HVDC-ADOPT-SCT-0124"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0123",
+        "containers": [
+          "HMMU6089377"
+        ],
+        "bl_nos": [
+          "[BL:3e30161351]"
+        ],
+        "bl_no": "[BL:3e30161351]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [
+          "[DO:97a577ffe8]"
+        ],
+        "do_no": "[DO:97a577ffe8]",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [],
+        "date": "",
+        "amounts_aed": [],
+        "line_amounts_aed": [
+          30459.0,
+          90.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 2,
+        "containers": 1,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 1,
+        "invoice_nos": 0,
+        "line_items": 2
+      },
+      "table_count": 41,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 2,
+          "source": "text:customs_debit",
+          "description": "Pre-Clear Debit",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 30459.0,
+          "vat_aed": null,
+          "total_aed": 30459.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Customs",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Customs debit note; date="
+        },
+        {
+          "line_id": "L002",
+          "page": 3,
+          "source": "text:customs_debit",
+          "description": "Pre-Clear Debit",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 90.0,
+          "vat_aed": null,
+          "total_aed": 90.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Customs",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Customs debit note; date="
+        }
+      ],
+      "type_b": "Customs",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "AMBER",
+      "issues": [
+        {
+          "severity": "AMBER",
+          "code": "CUSTOMS_FINAL_REVIEW_REQUIRED",
+          "detail": "HS/UAE Customs final decision blocked from auto-PASS"
+        }
+      ],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 30
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0123, 0124_CarrierInvoice.pdf",
+      "size_bytes": 78491,
+      "sha256": "4a78ae6324fcbee8",
+      "processed_at": "2026-06-15T13:00:43+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 1686,
+      "text_source": "native",
+      "doc_type": "CARRIER_RHS",
+      "doc_type_confidence": 95,
+      "doc_type_matched": [
+        "RAIS HASSAN SAADI",
+        "TAX INVOICE"
+      ],
+      "doc_type_rule_note": "RHS/HMM carrier invoice",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0123",
+          "HVDC-ADOPT-SCT-0124"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0123",
+        "containers": [
+          "HMMU6089377"
+        ],
+        "bl_nos": [
+          "[BL:3e30161351]"
+        ],
+        "bl_no": "[BL:3e30161351]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [
+          "[INV:3298a198f2]"
+        ],
+        "invoice_no": "[INV:3298a198f2]",
+        "dates": [
+          "12/09/2025",
+          "12/10/2025"
+        ],
+        "date": "12/09/2025",
+        "amounts_aed": [
+          130.0,
+          35.0
+        ],
+        "line_amounts_aed": [
+          136.5,
+          29.38,
+          36.75
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 2,
+        "containers": 1,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 1,
+        "line_items": 3
+      },
+      "table_count": 3,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 1,
+          "source": "text:carrier_row",
+          "description": "Container Inspection Fee",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 130.0,
+          "vat_aed": 6.5,
+          "total_aed": 136.5,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Carrier invoice text row"
+        },
+        {
+          "line_id": "L002",
+          "page": 1,
+          "source": "text:carrier_row",
+          "description": "Equipment Repositioning Surcharge",
+          "container": "",
+          "currency": "USD",
+          "amount_aed": 29.38,
+          "vat_aed": 0.0,
+          "total_aed": 29.38,
+          "rate": null,
+          "qty": null,
+          "type_b": "OTHERS",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Carrier invoice text row"
+        },
+        {
+          "line_id": "L003",
+          "page": 1,
+          "source": "text:carrier_row",
+          "description": "Admin Charges",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 35.0,
+          "vat_aed": 1.75,
+          "total_aed": 36.75,
+          "rate": null,
+          "qty": null,
+          "type_b": "OTHERS",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Carrier invoice text row"
+        }
+      ],
+      "type_b": "Inspection",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 2,
+        "IBAN": 1,
+        "EMAIL": 0,
+        "PHONE": 7
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0123, 0124_DN.pdf",
+      "size_bytes": 43556,
+      "sha256": "7a5e8265280ebb81",
+      "processed_at": "2026-06-15T13:00:44+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 2600,
+      "text_source": "native",
+      "doc_type": "DELIVERY_NOTE",
+      "doc_type_confidence": 90,
+      "doc_type_matched": [
+        "NOT NEGOTIABLE DELIVERY NOTE",
+        "DELIVERY NOTE WAYBILL",
+        "CONSIGNMENT NOTE",
+        "ROAD FREIGHT"
+      ],
+      "doc_type_rule_note": "DSV road freight delivery note",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0123",
+          "HVDC-ADOPT-SCT-0124"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0123",
+        "containers": [
+          "HMMU6089377"
+        ],
+        "bl_nos": [
+          "[BL:3d130fcf70]"
+        ],
+        "bl_no": "[BL:3d130fcf70]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [
+          "[DO:6b826ce087]"
+        ],
+        "do_no": "[DO:6b826ce087]",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [
+          "06/10/2025",
+          "10/1/2025",
+          "20/09/2025",
+          "22/09/2025"
+        ],
+        "date": "06/10/2025",
+        "amounts_aed": [],
+        "line_amounts_aed": []
+      },
+      "key_counts": {
+        "shipment_nos": 2,
+        "containers": 1,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 1,
+        "invoice_nos": 0,
+        "line_items": 0
+      },
+      "table_count": 3,
+      "line_items": [],
+      "type_b": "INLAND",
+      "evidence_status": "NOT_APPLICABLE",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 1
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0123, 0124_DO.pdf",
+      "size_bytes": 81606,
+      "sha256": "6aaeb75ba4a18ef6",
+      "processed_at": "2026-06-15T13:01:02+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 1656,
+      "text_source": "native",
+      "doc_type": "DELIVERY_ORDER",
+      "doc_type_confidence": 92,
+      "doc_type_matched": [
+        "DELIVERY ORDER"
+      ],
+      "doc_type_rule_note": "Delivery order or air delivery notification",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0123",
+          "HVDC-ADOPT-SCT-0124"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0123",
+        "containers": [
+          "HMMU6089377"
+        ],
+        "bl_nos": [
+          "[BL:3e30161351]",
+          "[BL:af230ad402]"
+        ],
+        "bl_no": "[BL:3e30161351]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [
+          "[DO:6b826ce087]"
+        ],
+        "do_no": "[DO:6b826ce087]",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [
+          "12-Sep-2025",
+          "02-OCT-2025"
+        ],
+        "date": "12-Sep-2025",
+        "amounts_aed": [],
+        "line_amounts_aed": []
+      },
+      "key_counts": {
+        "shipment_nos": 2,
+        "containers": 1,
+        "bl_nos": 2,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 1,
+        "invoice_nos": 0,
+        "line_items": 0
+      },
+      "table_count": 3,
+      "line_items": [],
+      "type_b": "DO",
+      "evidence_status": "NOT_APPLICABLE",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 3
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0123, 0124_PortCNTInsp.pdf",
+      "size_bytes": 13334,
+      "sha256": "c2c97946c4890e5b",
+      "processed_at": "2026-06-15T13:01:03+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 990,
+      "text_source": "native",
+      "doc_type": "PORT_ALLIED",
+      "doc_type_confidence": 98,
+      "doc_type_matched": [
+        "ALLIED ONDOCK"
+      ],
+      "doc_type_rule_note": "Allied/TWCS container inspection",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0123",
+          "HVDC-ADOPT-SCT-0124"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0123",
+        "containers": [
+          "HMMU6089377"
+        ],
+        "bl_nos": [
+          "[BL:3e30161351]"
+        ],
+        "bl_no": "[BL:3e30161351]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [
+          "[INV:5136df30f0]"
+        ],
+        "invoice_no": "[INV:5136df30f0]",
+        "dates": [
+          "23/09/2025"
+        ],
+        "date": "23/09/2025",
+        "amounts_aed": [
+          25.0,
+          1.25,
+          26.25
+        ],
+        "line_amounts_aed": [
+          26.25
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 2,
+        "containers": 1,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 1,
+        "line_items": 1
+      },
+      "table_count": 1,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 1,
+          "source": "table:inspection",
+          "description": "Being Admin & Inspection Charges",
+          "container": "HMMU6089377",
+          "currency": "AED",
+          "amount_aed": 25.0,
+          "vat_aed": 1.25,
+          "total_aed": 26.25,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Allied/TWCS table row"
+        }
+      ],
+      "type_b": "Inspection",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 1,
+        "IBAN": 1,
+        "EMAIL": 1,
+        "PHONE": 7
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0126_CarrierInvoice.pdf",
+      "size_bytes": 118351,
+      "sha256": "c959776967fe35b0",
+      "processed_at": "2026-06-15T13:01:03+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 2605,
+      "text_source": "native",
+      "doc_type": "CARRIER_CMA",
+      "doc_type_confidence": 95,
+      "doc_type_matched": [
+        "CMA CGM SHIPPING AGENCY",
+        "TAX INVOICE",
+        "INVOICE"
+      ],
+      "doc_type_rule_note": "CMA CGM carrier invoice",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0126"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0126",
+        "containers": [
+          "CMAU2623154",
+          "TCNU4356762",
+          "TGHU8788690"
+        ],
+        "bl_nos": [
+          "[BL:ad1795693c]"
+        ],
+        "bl_no": "[BL:ad1795693c]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [
+          "[INV:bf1cbae09d]"
+        ],
+        "invoice_no": "[INV:bf1cbae09d]",
+        "dates": [
+          "22-AUG-2025",
+          "27 AUG 2025",
+          "08-AUG-2025",
+          "06-OCT-2025"
+        ],
+        "date": "22-AUG-2025",
+        "amounts_aed": [
+          535.0
+        ],
+        "line_amounts_aed": [
+          535.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 3,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 1,
+        "line_items": 1
+      },
+      "table_count": 2,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 1,
+          "source": "table:cma",
+          "description": "Container Return Service Charge",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 535.0,
+          "vat_aed": null,
+          "total_aed": 535.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "OTHERS",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CMA carrier table row"
+        }
+      ],
+      "type_b": "OTHERS",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 1,
+        "EMAIL": 0,
+        "PHONE": 11
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0126_DO.pdf",
+      "size_bytes": 65434,
+      "sha256": "c2091644d750626d",
+      "processed_at": "2026-06-15T13:01:04+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 3,
+      "text_length": 3767,
+      "text_source": "native",
+      "doc_type": "DELIVERY_ORDER",
+      "doc_type_confidence": 92,
+      "doc_type_matched": [
+        "DELIVERY ORDER",
+        "D O NO",
+        "D.O.NO"
+      ],
+      "doc_type_rule_note": "Delivery order or air delivery notification",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0126"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0126",
+        "containers": [
+          "CMAU2623154",
+          "TGHU8788690",
+          "TCNU4356762"
+        ],
+        "bl_nos": [
+          "[BL:ad1795693c]"
+        ],
+        "bl_no": "[BL:ad1795693c]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [
+          "[DO:ab561d6a83]"
+        ],
+        "do_no": "[DO:ab561d6a83]",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [
+          "26-Aug-2025",
+          "27-Aug-2025",
+          "09/09/2025",
+          "27 Aug 25",
+          "9 SEPT 25"
+        ],
+        "date": "26-Aug-2025",
+        "amounts_aed": [],
+        "line_amounts_aed": []
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 3,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 1,
+        "invoice_nos": 0,
+        "line_items": 0
+      },
+      "table_count": 11,
+      "line_items": [],
+      "type_b": "DO",
+      "evidence_status": "NOT_APPLICABLE",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 2,
+        "PHONE": 5
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0126_PortCNTInspection.pdf",
+      "size_bytes": 55340,
+      "sha256": "8c34b5374fde42c1",
+      "processed_at": "2026-06-15T13:01:30+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 3,
+      "text_length": 2574,
+      "text_source": "native",
+      "doc_type": "PORT_ALLIED",
+      "doc_type_confidence": 98,
+      "doc_type_matched": [
+        "ALLIED ONDOCK"
+      ],
+      "doc_type_rule_note": "Allied/TWCS container inspection",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0126"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0126",
+        "containers": [
+          "TGHU8788690",
+          "CMAU2623154",
+          "TCNU4356762"
+        ],
+        "bl_nos": [
+          "[BL:6558bacfd2]",
+          "[BL:ad1795693c]"
+        ],
+        "bl_no": "[BL:6558bacfd2]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [
+          "[INV:67f20e354a]",
+          "[INV:34c4901c1f]",
+          "[INV:c52dbf4b23]"
+        ],
+        "invoice_no": "[INV:67f20e354a]",
+        "dates": [
+          "09/09/2025",
+          "08/09/2025"
+        ],
+        "date": "09/09/2025",
+        "amounts_aed": [
+          25.0,
+          1.25,
+          26.25
+        ],
+        "line_amounts_aed": [
+          26.25,
+          26.25
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 3,
+        "bl_nos": 2,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 3,
+        "line_items": 2
+      },
+      "table_count": 2,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 1,
+          "source": "table:inspection",
+          "description": "Being Admin & Inspection Charges",
+          "container": "TGHU8788690",
+          "currency": "AED",
+          "amount_aed": 25.0,
+          "vat_aed": 1.25,
+          "total_aed": 26.25,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Allied/TWCS table row"
+        },
+        {
+          "line_id": "L002",
+          "page": 2,
+          "source": "table:inspection",
+          "description": "Being Admin & Inspection Charges",
+          "container": "CMAU2623154",
+          "currency": "AED",
+          "amount_aed": 25.0,
+          "vat_aed": 1.25,
+          "total_aed": 26.25,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Allied/TWCS table row"
+        }
+      ],
+      "type_b": "Inspection",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 3,
+        "IBAN": 3,
+        "EMAIL": 2,
+        "PHONE": 18
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0127_CarrierInvoice.pdf",
+      "size_bytes": 69787,
+      "sha256": "581c5ee0b041dc89",
+      "processed_at": "2026-06-15T13:01:31+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 2,
+      "text_length": 2777,
+      "text_source": "native",
+      "doc_type": "CARRIER_EVG",
+      "doc_type_confidence": 95,
+      "doc_type_matched": [
+        "EVERGREEN SHIPPING AGENCY",
+        "TAX INVOICE",
+        "INVOICE"
+      ],
+      "doc_type_rule_note": "Evergreen carrier invoice",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0127"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0127",
+        "containers": [
+          "EGHU3884150"
+        ],
+        "bl_nos": [
+          "[BL:c87c325f7e]"
+        ],
+        "bl_no": "[BL:c87c325f7e]",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [
+          "[INV:82c7d692f8]"
+        ],
+        "invoice_no": "[INV:82c7d692f8]",
+        "dates": [
+          "2025-09-09",
+          "2025-09-11"
+        ],
+        "date": "2025-09-09",
+        "amounts_aed": [],
+        "line_amounts_aed": [
+          36.73,
+          175.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 1,
+        "bl_nos": 1,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 1,
+        "line_items": 2
+      },
+      "table_count": 2,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 1,
+          "source": "text:evg",
+          "description": "ISPS/D",
+          "container": "",
+          "currency": "USD",
+          "amount_aed": 36.73,
+          "vat_aed": null,
+          "total_aed": 36.73,
+          "rate": null,
+          "qty": null,
+          "type_b": "OTHERS",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Evergreen fixed-width line"
+        },
+        {
+          "line_id": "L002",
+          "page": 1,
+          "source": "text:evg",
+          "description": "Container Maintenance Charge",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 175.0,
+          "vat_aed": null,
+          "total_aed": 175.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "OTHERS",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Evergreen fixed-width line"
+        }
+      ],
+      "type_b": "OTHERS",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 4,
+        "IBAN": 4,
+        "EMAIL": 2,
+        "PHONE": 20
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0127_PortCNTInsp.pdf",
+      "size_bytes": 98660,
+      "sha256": "cff0a744105d2d1e",
+      "processed_at": "2026-06-15T13:01:33+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 2,
+      "text_length": 3583,
+      "text_source": "native",
+      "doc_type": "PORT_CSP",
+      "doc_type_confidence": 98,
+      "doc_type_matched": [
+        "CSP ABU DHABI TERMINAL",
+        "PACKAGE INVOICE",
+        "INMNR"
+      ],
+      "doc_type_rule_note": "CSP MNR package/detail invoice",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0127"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0127",
+        "containers": [
+          "OOCU7430811",
+          "FSCU8897861",
+          "FBLU4927365",
+          "FBLU4922527",
+          "FBLU4921752",
+          "FBLU4915826",
+          "FBLU4913417",
+          "FBLU4910531",
+          "FBLU4910300",
+          "EGHU3884150",
+          "FBLU4917135"
+        ],
+        "bl_nos": [],
+        "bl_no": "",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [
+          "[INV:a331872df7]"
+        ],
+        "invoice_no": "[INV:a331872df7]",
+        "dates": [
+          "17-SEP-2025",
+          "02-OCT-2025",
+          "16-SEP-2025"
+        ],
+        "date": "17-SEP-2025",
+        "amounts_aed": [
+          530.0
+        ],
+        "line_amounts_aed": [
+          100.0,
+          30.0,
+          100.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0,
+          30.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 11,
+        "bl_nos": 0,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 1,
+        "line_items": 13
+      },
+      "table_count": 2,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "NORMAL NORMAL WASH",
+          "container": "OOCU7430811",
+          "currency": "AED",
+          "amount_aed": 100.0,
+          "vat_aed": null,
+          "total_aed": 100.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L002",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "OOCU7430811",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L003",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "NORMAL NORMAL WASH",
+          "container": "FSCU8897861",
+          "currency": "AED",
+          "amount_aed": 100.0,
+          "vat_aed": null,
+          "total_aed": 100.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L004",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FSCU8897861",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L005",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4927365",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L006",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4922527",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L007",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4921752",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L008",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4915826",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L009",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4913417",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L010",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4910531",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L011",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4910300",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L012",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "EGHU3884150",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        },
+        {
+          "line_id": "L013",
+          "page": 2,
+          "source": "table:csp_detail",
+          "description": "INSPECT CONTAINER INSPECTION",
+          "container": "FBLU4917135",
+          "currency": "AED",
+          "amount_aed": 30.0,
+          "vat_aed": null,
+          "total_aed": 30.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Inspection",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "CSP equipment detail row"
+        }
+      ],
+      "type_b": "Inspection",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 2,
+        "IBAN": 1,
+        "EMAIL": 3,
+        "PHONE": 19
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0131_DN.pdf",
+      "size_bytes": 306319,
+      "sha256": "81f7dd9032b7a35b",
+      "processed_at": "2026-06-15T13:01:36+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 0,
+      "text_source": "native",
+      "doc_type": "UNKNOWN",
+      "doc_type_confidence": 0,
+      "doc_type_matched": [],
+      "doc_type_rule_note": "No header fingerprint matched",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0131"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0131",
+        "containers": [],
+        "bl_nos": [],
+        "bl_no": "",
+        "mawb_nos": [],
+        "hawb_nos": [],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [],
+        "date": "",
+        "amounts_aed": [],
+        "line_amounts_aed": []
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 0,
+        "bl_nos": 0,
+        "mawb_nos": 0,
+        "hawb_nos": 0,
+        "do_nos": 0,
+        "invoice_nos": 0,
+        "line_items": 0
+      },
+      "table_count": 0,
+      "line_items": [],
+      "type_b": "OTHERS",
+      "evidence_status": "MISSING",
+      "verdict": "AMBER",
+      "issues": [
+        {
+          "severity": "AMBER",
+          "code": "UNKNOWN_DOCTYPE",
+          "detail": "Header fingerprint not matched"
+        },
+        {
+          "severity": "AMBER",
+          "code": "LOW_TEXT_LENGTH",
+          "detail": "Native text layer weak or absent"
+        }
+      ],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 0
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0131_DO.pdf",
+      "size_bytes": 49438,
+      "sha256": "67e8af4146c3dd1d",
+      "processed_at": "2026-06-15T13:01:54+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 2,
+      "text_length": 637,
+      "text_source": "native",
+      "doc_type": "DELIVERY_ORDER",
+      "doc_type_confidence": 92,
+      "doc_type_matched": [
+        "DELIVERY NOTIFICATION"
+      ],
+      "doc_type_rule_note": "Delivery order or air delivery notification",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0131"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0131",
+        "containers": [],
+        "bl_nos": [],
+        "bl_no": "",
+        "mawb_nos": [
+          "[MAWB:4c07c9c4ff]"
+        ],
+        "hawb_nos": [
+          "[HAWB:931f5a2143]"
+        ],
+        "do_nos": [
+          "[DO:0caf287b20]"
+        ],
+        "do_no": "[DO:0caf287b20]",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [
+          "07/09/2025"
+        ],
+        "date": "07/09/2025",
+        "amounts_aed": [],
+        "line_amounts_aed": []
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 0,
+        "bl_nos": 0,
+        "mawb_nos": 1,
+        "hawb_nos": 1,
+        "do_nos": 1,
+        "invoice_nos": 0,
+        "line_items": 0
+      },
+      "table_count": 0,
+      "line_items": [],
+      "type_b": "DO",
+      "evidence_status": "NOT_APPLICABLE",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 2
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0134_AirportFees.pdf",
+      "size_bytes": 64447,
+      "sha256": "069bed906992a829",
+      "processed_at": "2026-06-15T13:01:55+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 657,
+      "text_source": "native",
+      "doc_type": "AIRPORT_FEES",
+      "doc_type_confidence": 96,
+      "doc_type_matched": [
+        "CHARGES SUMMARY",
+        "MAQTA CHARGES",
+        "ETIHAD TERMINAL CHARGES",
+        "DPC CHARGES"
+      ],
+      "doc_type_rule_note": "ATLP/Maqta airport fee summary",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0134"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0134",
+        "containers": [],
+        "bl_nos": [],
+        "bl_no": "",
+        "mawb_nos": [
+          "[MAWB:8828c02b7c]"
+        ],
+        "hawb_nos": [
+          "[HAWB:f390097cce]"
+        ],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [
+          "26/09/2025"
+        ],
+        "date": "26/09/2025",
+        "amounts_aed": [
+          62.0
+        ],
+        "line_amounts_aed": [
+          27.0,
+          35.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 0,
+        "bl_nos": 0,
+        "mawb_nos": 1,
+        "hawb_nos": 1,
+        "do_nos": 0,
+        "invoice_nos": 0,
+        "line_items": 2
+      },
+      "table_count": 0,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 1,
+          "source": "text:airport_fee",
+          "description": "Appointment Charges",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 27.0,
+          "vat_aed": 0.0,
+          "total_aed": 27.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "INLAND",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "ATLP/Maqta fee line"
+        },
+        {
+          "line_id": "L002",
+          "page": 1,
+          "source": "text:airport_fee",
+          "description": "DPC Charges",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 35.0,
+          "vat_aed": 0.0,
+          "total_aed": 35.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "OTHERS",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "ATLP/Maqta fee line"
+        }
+      ],
+      "type_b": "INLAND",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 0
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0134_Appointment.pdf",
+      "size_bytes": 57982,
+      "sha256": "b5a7ddea4b8c0418",
+      "processed_at": "2026-06-15T13:01:55+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 1,
+      "text_length": 679,
+      "text_source": "native",
+      "doc_type": "AIRPORT_APPOINTMENT",
+      "doc_type_confidence": 96,
+      "doc_type_matched": [
+        "IMPORT APPOINTMENT SUMMARY"
+      ],
+      "doc_type_rule_note": "ATLP import appointment summary",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0134"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0134",
+        "containers": [],
+        "bl_nos": [],
+        "bl_no": "",
+        "mawb_nos": [
+          "[MAWB:8828c02b7c]"
+        ],
+        "hawb_nos": [
+          "[HAWB:f390097cce]"
+        ],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [
+          "26/09/2025",
+          "29/09/2025"
+        ],
+        "date": "26/09/2025",
+        "amounts_aed": [],
+        "line_amounts_aed": []
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 0,
+        "bl_nos": 0,
+        "mawb_nos": 1,
+        "hawb_nos": 1,
+        "do_nos": 0,
+        "invoice_nos": 0,
+        "line_items": 0
+      },
+      "table_count": 1,
+      "line_items": [],
+      "type_b": "INLAND",
+      "evidence_status": "NOT_APPLICABLE",
+      "verdict": "PASS",
+      "issues": [],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 2
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    },
+    {
+      "file": "HVDC-ADOPT-SCT-0134_BOE.pdf",
+      "size_bytes": 249160,
+      "sha256": "6d370a9cdb91c445",
+      "processed_at": "2026-06-15T13:01:55+00:00",
+      "parser_version": "2.1.0",
+      "page_count": 4,
+      "text_length": 4221,
+      "text_source": "native",
+      "doc_type": "BOE_CUSTOMS",
+      "doc_type_confidence": 95,
+      "doc_type_matched": [
+        "CUSTOMS DECLARATION",
+        "PRE CLEAR BILL",
+        "PRE-CLEAR BILL",
+        "DEBIT NOTE",
+        "GATE PASS"
+      ],
+      "doc_type_rule_note": "UAE Customs declaration/debit/gate pass",
+      "keys": {
+        "shipment_nos": [
+          "HVDC-ADOPT-SCT-0134"
+        ],
+        "shipment_no": "HVDC-ADOPT-SCT-0134",
+        "containers": [],
+        "bl_nos": [],
+        "bl_no": "",
+        "mawb_nos": [
+          "[MAWB:8828c02b7c]"
+        ],
+        "hawb_nos": [
+          "[HAWB:f390097cce]"
+        ],
+        "do_nos": [],
+        "do_no": "",
+        "invoice_nos": [],
+        "invoice_no": "",
+        "dates": [],
+        "date": "",
+        "amounts_aed": [],
+        "line_amounts_aed": [
+          8098.0,
+          90.0
+        ]
+      },
+      "key_counts": {
+        "shipment_nos": 1,
+        "containers": 0,
+        "bl_nos": 0,
+        "mawb_nos": 1,
+        "hawb_nos": 1,
+        "do_nos": 0,
+        "invoice_nos": 0,
+        "line_items": 2
+      },
+      "table_count": 34,
+      "line_items": [
+        {
+          "line_id": "L001",
+          "page": 2,
+          "source": "text:customs_debit",
+          "description": "Pre-Clear Debit",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 8098.0,
+          "vat_aed": null,
+          "total_aed": 8098.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Customs",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Customs debit note; date="
+        },
+        {
+          "line_id": "L002",
+          "page": 3,
+          "source": "text:customs_debit",
+          "description": "Pre-Clear Debit",
+          "container": "",
+          "currency": "AED",
+          "amount_aed": 90.0,
+          "vat_aed": null,
+          "total_aed": 90.0,
+          "rate": null,
+          "qty": null,
+          "type_b": "Customs",
+          "evidence_status": "MATCHED_AMOUNT",
+          "extraction_note": "Customs debit note; date="
+        }
+      ],
+      "type_b": "Customs",
+      "evidence_status": "MATCHED_AMOUNT",
+      "verdict": "AMBER",
+      "issues": [
+        {
+          "severity": "AMBER",
+          "code": "CUSTOMS_FINAL_REVIEW_REQUIRED",
+          "detail": "HS/UAE Customs final decision blocked from auto-PASS"
+        }
+      ],
+      "dlp_hit_count": {
+        "TRN": 0,
+        "IBAN": 0,
+        "EMAIL": 0,
+        "PHONE": 21
+      },
+      "render_qa": {
+        "page": 1,
+        "rendered": false,
+        "skipped": true
+      },
+      "roundup_note": "결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다."
+    }
+  ]
+}

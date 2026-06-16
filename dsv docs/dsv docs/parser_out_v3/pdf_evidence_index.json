@@ -1,0 +1,1566 @@
+[
+  {
+    "file": "HVDC-ADOPT-HE-0425,0426,0427,0428_BOE.pdf",
+    "size_bytes": 297638,
+    "sha256": "306f2c6210dae811",
+    "processed_at": "2026-06-15T16:39:23",
+    "page_count": 5,
+    "text_length": 4677,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "TRHU7327714",
+        "MSMU7483648",
+        "MSDU6283783",
+        "TLLU8958408"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0437,-0441-1_BOE.pdf",
+    "size_bytes": 295964,
+    "sha256": "5a8905cd45ad48fd",
+    "processed_at": "2026-06-15T16:39:23",
+    "page_count": 5,
+    "text_length": 4740,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "RFSU3047816"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 40,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0438--0454_BOE.pdf",
+    "size_bytes": 302865,
+    "sha256": "2824adfa126c8f1f",
+    "processed_at": "2026-06-15T16:39:24",
+    "page_count": 5,
+    "text_length": 5403,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "MSMU9021844",
+        "TRHU5554283",
+        "MSNU7901818",
+        "MSMU9017490",
+        "TCLU9525507"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 42,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0450, 0459, 0460_BOE.pdf",
+    "size_bytes": 296309,
+    "sha256": "51181abec8dd7e82",
+    "processed_at": "2026-06-15T16:39:24",
+    "page_count": 5,
+    "text_length": 4847,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "MSMU6440488",
+        "TIIU4001437",
+        "SEKU6707340",
+        "FFAU3913834",
+        "TGBU7172645",
+        "SEGU6237220",
+        "MSNU5457216",
+        "MSMU7534452",
+        "FCIU9317803"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0464, 0465, 0470_BOE.pdf",
+    "size_bytes": 298113,
+    "sha256": "dff2d09b3217978b",
+    "processed_at": "2026-06-15T16:39:25",
+    "page_count": 5,
+    "text_length": 4784,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "MSDU7157917",
+        "TCNU1923780",
+        "TGBU5976562",
+        "CAIU7022390",
+        "MEDU3681282",
+        "TLLU7570207",
+        "MSBU6719777"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0466,0467,0468_BOE.pdf",
+    "size_bytes": 298495,
+    "sha256": "4baeccf75aef0219",
+    "processed_at": "2026-06-15T16:39:25",
+    "page_count": 5,
+    "text_length": 4560,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "MSNU3108365"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 40,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0471_BOE.pdf",
+    "size_bytes": 224030,
+    "sha256": "8fa3729d7eac1c56",
+    "processed_at": "2026-06-15T16:39:26",
+    "page_count": 5,
+    "text_length": 4767,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "CRXU8662038",
+        "FLNU6016323",
+        "GMCU3161800",
+        "FLNU6811978"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0472_BOE.pdf",
+    "size_bytes": 221830,
+    "sha256": "e461af974de32dac",
+    "processed_at": "2026-06-15T16:39:27",
+    "page_count": 5,
+    "text_length": 4970,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "RLTU2048687",
+        "FLNU5022770",
+        "BTLU2591117",
+        "FLNU5018208",
+        "BTLU2590609",
+        "EXFU0716633"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0473_BOE.pdf",
+    "size_bytes": 296718,
+    "sha256": "164f864529c3521a",
+    "processed_at": "2026-06-15T16:39:29",
+    "page_count": 5,
+    "text_length": 5007,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "BTLU2591971",
+        "SLZU2827596",
+        "FLNU5000359",
+        "SLZU2828397",
+        "FLNU5018086",
+        "FLNU6812070",
+        "SLZU2575684"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0475_BOE.pdf",
+    "size_bytes": 297543,
+    "sha256": "2aababa6f7182749",
+    "processed_at": "2026-06-15T16:39:30",
+    "page_count": 5,
+    "text_length": 4796,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "SLZU2682893",
+        "FLNU6803294",
+        "SLZU2606384",
+        "FLNU6808892"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0487_BOE.pdf",
+    "size_bytes": 249379,
+    "sha256": "218f04cdd19d4c37",
+    "processed_at": "2026-06-15T16:39:31",
+    "page_count": 4,
+    "text_length": 4201,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0488_BOE.pdf",
+    "size_bytes": 303799,
+    "sha256": "b43723c01e3ca3c2",
+    "processed_at": "2026-06-15T16:39:32",
+    "page_count": 5,
+    "text_length": 5548,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0495, 0496_BOE1.pdf",
+    "size_bytes": 219437,
+    "sha256": "7e9d61c90b0899fa",
+    "processed_at": "2026-06-15T16:39:33",
+    "page_count": 3,
+    "text_length": 3687,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 32,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0495, 0496_BOE2.pdf",
+    "size_bytes": 219329,
+    "sha256": "dcbf24d310dfb5f9",
+    "processed_at": "2026-06-15T16:39:34",
+    "page_count": 3,
+    "text_length": 3683,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 32,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0497_BOE (Part1).pdf",
+    "size_bytes": 188298,
+    "sha256": "2b369618c9a08ddb",
+    "processed_at": "2026-06-15T16:39:35",
+    "page_count": 4,
+    "text_length": 4244,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0497_BOE (Part2).pdf",
+    "size_bytes": 189507,
+    "sha256": "2cb5714a4cf0f525",
+    "processed_at": "2026-06-15T16:39:36",
+    "page_count": 4,
+    "text_length": 4273,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0498_BOE.pdf",
+    "size_bytes": 249798,
+    "sha256": "8e43225951d1f51e",
+    "processed_at": "2026-06-15T16:39:37",
+    "page_count": 4,
+    "text_length": 4207,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0499(lot1)_SupportingDocs.pdf",
+    "size_bytes": 1354572,
+    "sha256": "d194c3c417a817fa",
+    "processed_at": "2026-06-15T16:39:38",
+    "page_count": 5,
+    "text_length": 678,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "date": "03/09/2025",
+      "amounts_aed": [
+        2906200.0
+      ]
+    },
+    "table_count": 2,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 992,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0499(Lot2)_SupportingDocuments.pdf",
+    "size_bytes": 1614756,
+    "sha256": "d4322b7c68289330",
+    "processed_at": "2026-06-15T16:39:39",
+    "page_count": 7,
+    "text_length": 0,
+    "image_only": true,
+    "doc_type": "UNKNOWN",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 0,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 992,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0499(lot3)_SupportingDocs.pdf",
+    "size_bytes": 1449190,
+    "sha256": "e4688073a4c13552",
+    "processed_at": "2026-06-15T16:39:39",
+    "page_count": 4,
+    "text_length": 3996,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "date": "19/09/2025",
+      "amounts_aed": [
+        726550.0,
+        726550.0,
+        73.0,
+        72655.0,
+        3632.75
+      ]
+    },
+    "table_count": 3,
+    "type_b": "Inspection",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 992,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0500_BOE.pdf",
+    "size_bytes": 302489,
+    "sha256": "9824fa7d45ecb34f",
+    "processed_at": "2026-06-15T16:39:41",
+    "page_count": 5,
+    "text_length": 5375,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0501_BOE.pdf",
+    "size_bytes": 250342,
+    "sha256": "7f7a4260db688e73",
+    "processed_at": "2026-06-15T16:39:42",
+    "page_count": 4,
+    "text_length": 4215,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-HE-0502_BOE.pdf",
+    "size_bytes": 249258,
+    "sha256": "8ac927e16d5964ee",
+    "processed_at": "2026-06-15T16:39:43",
+    "page_count": 4,
+    "text_length": 4224,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0038-CNTRepair.pdf",
+    "size_bytes": 13277,
+    "sha256": "ab27e9d91c6ec818",
+    "processed_at": "2026-06-15T16:39:45",
+    "page_count": 1,
+    "text_length": 945,
+    "image_only": false,
+    "doc_type": "PORT_ALLIED",
+    "keys": {
+      "containers": [
+        "KOCU4717043"
+      ],
+      "invoice_no": "IN00050441",
+      "date": "21/02/2025",
+      "amounts_aed": [
+        180.0,
+        9.0,
+        189.0,
+        180.0,
+        9.0,
+        189.0
+      ]
+    },
+    "table_count": 1,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0122_BOE.pdf",
+    "size_bytes": 276946,
+    "sha256": "338f436915c5a57d",
+    "processed_at": "2026-06-15T16:39:45",
+    "page_count": 5,
+    "text_length": 4240,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "FCIU5873065"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 40,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0122_CarrierInvoice.pdf",
+    "size_bytes": 227210,
+    "sha256": "79e461cea106d7b9",
+    "processed_at": "2026-06-15T16:39:46",
+    "page_count": 1,
+    "text_length": 3033,
+    "image_only": false,
+    "doc_type": "CARRIER_RHS",
+    "keys": {
+      "containers": [
+        "FCIU5873065"
+      ],
+      "invoice_no": "Invoice",
+      "amounts_aed": [
+        150.0,
+        30.0,
+        180.0
+      ]
+    },
+    "table_count": 1,
+    "type_b": "Inspection",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0122_DN.pdf",
+    "size_bytes": 43494,
+    "sha256": "508a5dd85a95ab5c",
+    "processed_at": "2026-06-15T16:39:46",
+    "page_count": 1,
+    "text_length": 2649,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "containers": [
+        "FCIU5873065",
+        "BAMF0017824"
+      ],
+      "date": "10/09/2025",
+      "amounts_aed": []
+    },
+    "table_count": 3,
+    "type_b": "INLAND",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0122_DO.pdf",
+    "size_bytes": 446172,
+    "sha256": "b3988112551c75b6",
+    "processed_at": "2026-06-15T16:39:47",
+    "page_count": 4,
+    "text_length": 4866,
+    "image_only": false,
+    "doc_type": "DELIVERY_ORDER",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0122",
+      "containers": [
+        "FCIU5873065"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 8,
+    "type_b": "DO",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0122_PortCNTInsp.pdf",
+    "size_bytes": 80418,
+    "sha256": "c937d7070c55aa33",
+    "processed_at": "2026-06-15T16:39:47",
+    "page_count": 1,
+    "text_length": 667,
+    "image_only": false,
+    "doc_type": "PORT_TWCS",
+    "keys": {
+      "containers": [
+        "FCIU5873065"
+      ],
+      "amounts_aed": [
+        84.0
+      ]
+    },
+    "table_count": 0,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0123, 0124_BOE.pdf",
+    "size_bytes": 309471,
+    "sha256": "68990468723e6e94",
+    "processed_at": "2026-06-15T16:39:48",
+    "page_count": 5,
+    "text_length": 5599,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "HMMU6089377"
+      ],
+      "bl_no": "SELA26992900",
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0123, 0124_CarrierInvoice.pdf",
+    "size_bytes": 78491,
+    "sha256": "4a78ae6324fcbee8",
+    "processed_at": "2026-06-15T16:39:49",
+    "page_count": 1,
+    "text_length": 1686,
+    "image_only": false,
+    "doc_type": "CARRIER_RHS",
+    "keys": {
+      "containers": [
+        "HMMU6089377"
+      ],
+      "bl_no": "SELA26992900",
+      "invoice_no": "Date",
+      "date": "12/09/2025",
+      "amounts_aed": [
+        130.0,
+        35.0,
+        1015020848706.0
+      ]
+    },
+    "table_count": 3,
+    "type_b": "Inspection",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0123, 0124_DN.pdf",
+    "size_bytes": 43556,
+    "sha256": "7a5e8265280ebb81",
+    "processed_at": "2026-06-15T16:39:49",
+    "page_count": 1,
+    "text_length": 2600,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "containers": [
+        "HMMU6089377",
+        "BAMF0017918"
+      ],
+      "do_no": "22501743",
+      "date": "06/10/2025",
+      "amounts_aed": []
+    },
+    "table_count": 3,
+    "type_b": "INLAND",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0123, 0124_DO.pdf",
+    "size_bytes": 81606,
+    "sha256": "6aaeb75ba4a18ef6",
+    "processed_at": "2026-06-15T16:39:50",
+    "page_count": 1,
+    "text_length": 1656,
+    "image_only": false,
+    "doc_type": "DELIVERY_ORDER",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0123",
+      "containers": [
+        "HMMU6089377"
+      ],
+      "bl_no": "SELA26992900",
+      "do_no": "22501743",
+      "date": "02-OCT-2025",
+      "amounts_aed": []
+    },
+    "table_count": 3,
+    "type_b": "DO",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0123, 0124_PortCNTInsp.pdf",
+    "size_bytes": 13334,
+    "sha256": "c2c97946c4890e5b",
+    "processed_at": "2026-06-15T16:39:50",
+    "page_count": 1,
+    "text_length": 990,
+    "image_only": false,
+    "doc_type": "PORT_ALLIED",
+    "keys": {
+      "containers": [
+        "HMMU6089377"
+      ],
+      "bl_no": "SELA26992900",
+      "invoice_no": "IN00063806",
+      "date": "23/09/2025",
+      "amounts_aed": [
+        25.0,
+        1.25,
+        26.25,
+        25.0,
+        1.25,
+        26.25
+      ]
+    },
+    "table_count": 1,
+    "type_b": "Inspection",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0123, 0124_PortCNTWashing.pdf",
+    "size_bytes": 13309,
+    "sha256": "e67f3c4820504606",
+    "processed_at": "2026-06-15T16:39:51",
+    "page_count": 1,
+    "text_length": 959,
+    "image_only": false,
+    "doc_type": "PORT_ALLIED",
+    "keys": {
+      "containers": [
+        "HMMU6089377"
+      ],
+      "bl_no": "SELA26992900",
+      "invoice_no": "IN00063807",
+      "date": "23/09/2025",
+      "amounts_aed": [
+        80.0,
+        4.0,
+        84.0,
+        80.0,
+        4.0,
+        84.0
+      ]
+    },
+    "table_count": 1,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0126_BOE.pdf",
+    "size_bytes": 297700,
+    "sha256": "2ab95a7351fdb727",
+    "processed_at": "2026-06-15T16:39:51",
+    "page_count": 5,
+    "text_length": 4818,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0126",
+      "containers": [
+        "CMAU2623154",
+        "TGHU8788690",
+        "TCNU4356762"
+      ],
+      "amounts_aed": []
+    },
+    "table_count": 41,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0126_CarrierInvoice.pdf",
+    "size_bytes": 118351,
+    "sha256": "c959776967fe35b0",
+    "processed_at": "2026-06-15T16:39:52",
+    "page_count": 1,
+    "text_length": 2605,
+    "image_only": false,
+    "doc_type": "CARRIER_RHS",
+    "keys": {
+      "containers": [
+        "AECI0056950",
+        "CMAU2623154",
+        "TCNU4356762",
+        "TGHU8788690"
+      ],
+      "date": "22-AUG-2025",
+      "amounts_aed": [
+        535.0
+      ]
+    },
+    "table_count": 2,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 992,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0126_DN (DSV-KP) Empty Return.pdf",
+    "size_bytes": 82909,
+    "sha256": "74c3b601ae884a1e",
+    "processed_at": "2026-06-15T16:39:52",
+    "page_count": 3,
+    "text_length": 7273,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0126",
+      "containers": [
+        "TGHU8788690",
+        "BAMF0017659",
+        "TCNU4356762",
+        "CMAU2623154"
+      ],
+      "date": "06/10/2025",
+      "amounts_aed": []
+    },
+    "table_count": 9,
+    "type_b": "INLAND",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0126_DN (KP-DSV).pdf",
+    "size_bytes": 60907,
+    "sha256": "fabd9678f76bd048",
+    "processed_at": "2026-06-15T16:39:54",
+    "page_count": 3,
+    "text_length": 7603,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "containers": [
+        "TCNU4356762",
+        "BAMF0017659",
+        "TGHU8788690",
+        "CMAU2623154"
+      ],
+      "date": "06/10/2025",
+      "amounts_aed": []
+    },
+    "table_count": 9,
+    "type_b": "INLAND",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0126_DO.pdf",
+    "size_bytes": 65434,
+    "sha256": "c2091644d750626d",
+    "processed_at": "2026-06-15T16:39:55",
+    "page_count": 3,
+    "text_length": 3767,
+    "image_only": false,
+    "doc_type": "DELIVERY_ORDER",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0126",
+      "containers": [
+        "CMAU2623154",
+        "TGHU8788690",
+        "TCNU4356762"
+      ],
+      "date": "09/09/2025",
+      "amounts_aed": []
+    },
+    "table_count": 11,
+    "type_b": "DO",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0126_PortCNTInspection.pdf",
+    "size_bytes": 55340,
+    "sha256": "8c34b5374fde42c1",
+    "processed_at": "2026-06-15T16:39:56",
+    "page_count": 3,
+    "text_length": 2574,
+    "image_only": false,
+    "doc_type": "PORT_ALLIED",
+    "keys": {
+      "containers": [
+        "TGHU8788690",
+        "CMAU2623154",
+        "TCNU4356762"
+      ],
+      "invoice_no": "IN00062808",
+      "date": "09/09/2025",
+      "amounts_aed": [
+        25.0,
+        1.25,
+        26.25,
+        25.0,
+        1.25,
+        26.25,
+        25.0,
+        1.25,
+        26.25,
+        25.0,
+        1.25,
+        26.25,
+        26.25
+      ]
+    },
+    "table_count": 2,
+    "type_b": "Inspection",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0127_BOE.pdf",
+    "size_bytes": 294955,
+    "sha256": "59fbdc4e2d2e325f",
+    "processed_at": "2026-06-15T16:39:56",
+    "page_count": 5,
+    "text_length": 4279,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [
+        "EGHU3884150"
+      ],
+      "bl_no": "EGLV142502495441",
+      "amounts_aed": []
+    },
+    "table_count": 40,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0127_CarrierInvoice.pdf",
+    "size_bytes": 69787,
+    "sha256": "581c5ee0b041dc89",
+    "processed_at": "2026-06-15T16:39:57",
+    "page_count": 2,
+    "text_length": 2777,
+    "image_only": false,
+    "doc_type": "CARRIER_RHS",
+    "keys": {
+      "containers": [
+        "EGHU3884150"
+      ],
+      "bl_no": "EGLV142502495441",
+      "invoice_no": "2509000908",
+      "date": "2025-09-09",
+      "amounts_aed": [
+        996.0,
+        175.0,
+        996.0
+      ]
+    },
+    "table_count": 2,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0127_DN.pdf",
+    "size_bytes": 43589,
+    "sha256": "24e0a656cae82f4f",
+    "processed_at": "2026-06-15T16:39:58",
+    "page_count": 1,
+    "text_length": 2583,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "containers": [
+        "EGHU3884150",
+        "BAMF0017850"
+      ],
+      "do_no": "20019259",
+      "date": "06/10/2025",
+      "amounts_aed": []
+    },
+    "table_count": 3,
+    "type_b": "INLAND",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0127_DO.pdf",
+    "size_bytes": 170671,
+    "sha256": "832208cc95637611",
+    "processed_at": "2026-06-15T16:39:59",
+    "page_count": 1,
+    "text_length": 1291,
+    "image_only": false,
+    "doc_type": "DELIVERY_ORDER",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0127",
+      "containers": [
+        "EGHU3884150"
+      ],
+      "bl_no": "EGLV142502495441",
+      "do_no": "20019259",
+      "date": "10-SEP-2025",
+      "amounts_aed": []
+    },
+    "table_count": 2,
+    "type_b": "DO",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 992,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0127_PortCNTInsp.pdf",
+    "size_bytes": 98660,
+    "sha256": "cff0a744105d2d1e",
+    "processed_at": "2026-06-15T16:39:59",
+    "page_count": 2,
+    "text_length": 3583,
+    "image_only": false,
+    "doc_type": "PORT_CSP",
+    "keys": {
+      "containers": [
+        "OOCU7430811",
+        "FSCU8897861",
+        "FBLU4927365",
+        "FBLU4922527",
+        "FBLU4921752",
+        "FBLU4915826",
+        "FBLU4913417",
+        "FBLU4910531",
+        "FBLU4910300",
+        "EGHU3884150",
+        "FBLU4917135"
+      ],
+      "invoice_no": "INMNR25-26905",
+      "date": "17-SEP-2025",
+      "amounts_aed": []
+    },
+    "table_count": 2,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1920,
+      "height": 1260
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0131_AirportFees.pdf",
+    "size_bytes": 64576,
+    "sha256": "e8b1afae7dfe8c1c",
+    "processed_at": "2026-06-15T16:40:00",
+    "page_count": 1,
+    "text_length": 657,
+    "image_only": false,
+    "doc_type": "AIRPORT_FEES",
+    "keys": {
+      "containers": [],
+      "date": "07/09/2025",
+      "amounts_aed": [
+        62.0
+      ]
+    },
+    "table_count": 0,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0131_Appointment.pdf",
+    "size_bytes": 43298,
+    "sha256": "d0f986ca3d8701ae",
+    "processed_at": "2026-06-15T16:40:00",
+    "page_count": 1,
+    "text_length": 660,
+    "image_only": false,
+    "doc_type": "APPOINTMENT",
+    "keys": {
+      "containers": [],
+      "date": "07/09/2025",
+      "amounts_aed": []
+    },
+    "table_count": 0,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0131_BOE.pdf",
+    "size_bytes": 250671,
+    "sha256": "9cb03780ec84c861",
+    "processed_at": "2026-06-15T16:40:01",
+    "page_count": 4,
+    "text_length": 4247,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0131_DN.pdf",
+    "size_bytes": 306319,
+    "sha256": "81f7dd9032b7a35b",
+    "processed_at": "2026-06-15T16:40:02",
+    "page_count": 1,
+    "text_length": 0,
+    "image_only": true,
+    "doc_type": "UNKNOWN",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 0,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0131_DO.pdf",
+    "size_bytes": 49438,
+    "sha256": "67e8af4146c3dd1d",
+    "processed_at": "2026-06-15T16:40:02",
+    "page_count": 2,
+    "text_length": 637,
+    "image_only": false,
+    "doc_type": "DELIVERY_ORDER",
+    "keys": {
+      "containers": [],
+      "date": "07/09/2025",
+      "amounts_aed": []
+    },
+    "table_count": 0,
+    "type_b": "DO",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0134_AirportFees.pdf",
+    "size_bytes": 64447,
+    "sha256": "069bed906992a829",
+    "processed_at": "2026-06-15T16:40:02",
+    "page_count": 1,
+    "text_length": 657,
+    "image_only": false,
+    "doc_type": "AIRPORT_FEES",
+    "keys": {
+      "containers": [],
+      "date": "26/09/2025",
+      "amounts_aed": [
+        62.0
+      ]
+    },
+    "table_count": 0,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0134_Appointment.pdf",
+    "size_bytes": 57982,
+    "sha256": "b5a7ddea4b8c0418",
+    "processed_at": "2026-06-15T16:40:02",
+    "page_count": 1,
+    "text_length": 679,
+    "image_only": false,
+    "doc_type": "APPOINTMENT",
+    "keys": {
+      "containers": [],
+      "date": "26/09/2025",
+      "amounts_aed": []
+    },
+    "table_count": 1,
+    "type_b": "OTHERS",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0134_BOE.pdf",
+    "size_bytes": 249160,
+    "sha256": "6d370a9cdb91c445",
+    "processed_at": "2026-06-15T16:40:02",
+    "page_count": 4,
+    "text_length": 4221,
+    "image_only": false,
+    "doc_type": "BOE_CUSTOMS",
+    "keys": {
+      "containers": [],
+      "amounts_aed": []
+    },
+    "table_count": 34,
+    "type_b": "Customs",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 1020,
+      "height": 1320
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0134_DN (1FB - AUHAirport-MIR-SHU).pdf",
+    "size_bytes": 22059,
+    "sha256": "55cacbcb17a4bb28",
+    "processed_at": "2026-06-15T16:40:03",
+    "page_count": 2,
+    "text_length": 5126,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0134",
+      "containers": [
+        "BAMF0018127"
+      ],
+      "date": "06/10/2025",
+      "amounts_aed": []
+    },
+    "table_count": 6,
+    "type_b": "INLAND",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0134_DN (3TonPU - AUHAirport-MOSB).pdf",
+    "size_bytes": 16751,
+    "sha256": "d7e97cc3aca2d07d",
+    "processed_at": "2026-06-15T16:40:04",
+    "page_count": 1,
+    "text_length": 2524,
+    "image_only": false,
+    "doc_type": "DELIVERY_NOTE",
+    "keys": {
+      "shipment_no": "HVDC-ADOPT-SCT-0134",
+      "containers": [
+        "BAMF0018127"
+      ],
+      "date": "06/10/2025",
+      "amounts_aed": []
+    },
+    "table_count": 3,
+    "type_b": "INLAND",
+    "verdict": "PASS",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1404
+    }
+  },
+  {
+    "file": "HVDC-ADOPT-SCT-0134_DO.pdf",
+    "size_bytes": 38250,
+    "sha256": "a059dfc5b9f9e544",
+    "processed_at": "2026-06-15T16:40:04",
+    "page_count": 2,
+    "text_length": 949,
+    "image_only": false,
+    "doc_type": "DELIVERY_ORDER",
+    "keys": {
+      "containers": [],
+      "date": "26/09/2025",
+      "amounts_aed": []
+    },
+    "table_count": 0,
+    "type_b": "DO",
+    "verdict": "AMBER",
+    "render_qa": {
+      "page": 1,
+      "rendered": true,
+      "width": 993,
+      "height": 1403
+    }
+  }
+]

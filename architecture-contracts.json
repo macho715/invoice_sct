@@ -1,0 +1,78 @@
+{
+  "version": "2026-06-16",
+  "purpose": "Runtime dependency edges that are not fully represented by the static Graphify import graph.",
+  "graphify_source": {
+    "root": "apps",
+    "graph_json": "apps/graphify-out/graph.json",
+    "graph_html": "apps/graphify-out/graph.html",
+    "graph_report": "apps/graphify-out/GRAPH_REPORT.md"
+  },
+  "edges": [
+    {
+      "id": "web-run-to-worker-parse",
+      "from": "apps/web:POST /api/invoice-audit/run",
+      "to": "apps/worker-py:POST /v1/parse",
+      "protocol": "https",
+      "auth": "PARSER_WORKER_TOKEN_OR_FUTURE_ID_TOKEN",
+      "contract": "apps/worker-py/app/schemas.py::ParseRequest",
+      "caller": "apps/web/src/lib/parser-client.ts",
+      "failure_verdict": "FAILED_OR_AMBER",
+      "artifact": "normalized invoice and evidence candidates"
+    },
+    {
+      "id": "web-export-to-worker-export",
+      "from": "apps/web:POST /api/audit/export",
+      "to": "apps/worker-py:POST /v1/export",
+      "protocol": "https",
+      "auth": "PARSER_WORKER_TOKEN_OR_FUTURE_ID_TOKEN",
+      "contract": "apps/worker-py/app/schemas.py::ExportRequest",
+      "caller": "apps/web/src/app/api/audit/export/route.ts",
+      "failure_verdict": "EXPORT_FAILED",
+      "artifact": "13-sheet-xlsx"
+    },
+    {
+      "id": "web-download-to-worker-export-fallback",
+      "from": "apps/web:GET /api/export/download",
+      "to": "apps/worker-py:POST /v1/export",
+      "protocol": "https",
+      "auth": "PARSER_WORKER_TOKEN_OR_FUTURE_ID_TOKEN",
+      "contract": "apps/worker-py/app/schemas.py::ExportRequest",
+      "caller": "apps/web/src/app/api/export/download/route.ts",
+      "failure_verdict": "EXPORT_FAILED",
+      "artifact": "13-sheet-xlsx download fallback"
+    },
+    {
+      "id": "web-to-vercel-blob",
+      "from": "apps/web:upload and download routes",
+      "to": "Vercel Blob private or public object storage",
+      "protocol": "https",
+      "auth": "BLOB_READ_WRITE_TOKEN_OR_CLIENT_UPLOAD_TOKEN",
+      "contract": "blob_ref and blob_url schemes in apps/web/src/lib/blob.ts",
+      "caller": "apps/web/src/lib/blob.ts",
+      "failure_verdict": "STORAGE_AUTH_FAILED",
+      "artifact": "invoice source file, evidence file, workbook blob"
+    },
+    {
+      "id": "web-to-neon-job-store",
+      "from": "apps/web:job-store",
+      "to": "Neon Postgres",
+      "protocol": "postgres",
+      "auth": "DATABASE_URL",
+      "contract": "packages/database pool plus apps/web/src/lib/job-store-pg.ts",
+      "caller": "apps/web/src/lib/job-store.ts",
+      "failure_verdict": "FAILED",
+      "artifact": "job, source file, result, trace persistence"
+    },
+    {
+      "id": "web-to-mcp-validation",
+      "from": "apps/web:validation runner",
+      "to": "apps/mcp-server:validation tools",
+      "protocol": "json-rpc-or-http",
+      "auth": "MCP_SHARED_SECRET_OR_CLIENT_POLICY",
+      "contract": "apps/mcp-server/src/tools/index.ts plus packages/tools/src/index.ts",
+      "caller": "apps/web/src/lib/cf-mcp-client.ts",
+      "failure_verdict": "AMBER_OR_FAILED",
+      "artifact": "validation findings used by gate bridge"
+    }
+  ]
+}

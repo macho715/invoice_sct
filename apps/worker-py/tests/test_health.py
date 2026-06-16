@@ -112,3 +112,39 @@ def test_health_ready_with_db_failure_returns_503(client: TestClient) -> None:
     assert body["checks"]["blob_storage"]["ok"] is True
     assert body["checks"]["parsers"]["ok"] is True
     assert body["checks"]["memory"]["ok"] is True
+
+
+def test_health_ready_with_db_skipped_when_url_unset(client: TestClient) -> None:
+    """When DATABASE_URL is unset, DB check returns skipped (200, not 503)."""
+
+    async def fake_db_skip() -> dict:
+        return {"ok": True, "latency_ms": 0, "skipped": True, "reason": "DATABASE_URL unset; audit logging disabled (optional)"}
+
+    async def fake_blob_ok() -> dict:
+        return {"ok": True, "latency_ms": 3}
+
+    async def fake_parsers_ok() -> dict:
+        return {
+            "ok": True,
+            "latency_ms": 1,
+            "parsers": ["xlsx", "pdf_text", "pdf_json"],
+            "missing": [],
+        }
+
+    async def fake_memory_ok() -> dict:
+        return {"ok": True, "latency_ms": 1, "rss_mb": 128}
+
+    with patch("app.routes.health._check_db", side_effect=fake_db_skip), \
+         patch("app.routes.health._check_blob", side_effect=fake_blob_ok), \
+         patch("app.routes.health._check_parsers", side_effect=fake_parsers_ok), \
+         patch("app.routes.health._check_memory", side_effect=fake_memory_ok):
+        r = client.get("/health/ready")
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "ok"
+    checks = body["checks"]
+    assert checks["db"]["ok"] is True
+    assert checks["db"]["skipped"] is True
+    assert "reason" in checks["db"]
+    assert checks["blob_storage"]["ok"] is True
