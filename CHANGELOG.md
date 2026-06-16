@@ -1,5 +1,33 @@
 # Changelog
 
+## DSV SHPT hybrid PDF parser (PDF → real invoice_lines) + root-doc sync - 2026-06-16
+
+> **Scope:** Document and reflect the **DSV SHPT hybrid PDF parser** (ported earlier same day via PR #35/#36, commits `8c00cb6`/`545c42a`) that makes native-text PDF uploads yield **real `invoice_lines`** instead of always falling back to AMBER, plus the root-doc sync that brings README / SYSTEM_ARCHITECTURE / LAYOUT up to date. Doc syncs shipped via PR #38, #39, and this PR to `macho715/invoice_sct:main`.
+
+### Added
+
+- **DSV SHPT hybrid PDF parser** — `apps/worker-py/app/parsers/dsv_pdf_hybrid.py` (`extract_dsv_from_text` / `parse_dsv_pdf_bytes`, `DsvPdfResult`, `LineItem`). Classifies the document (`CARRIER_RHS`, `PORT_ALLIED`, `AIRPORT_FEES`, `BOE_CUSTOMS`, `DELIVERY_ORDER`) and extracts charge lines with `type_b` + `evidence_status`. Native-text only (pdfplumber); OCR for scanned PDFs stays on the flag-gated Vision path. (#35/#36)
+- **`apps/worker-py/tests/test_dsv_pdf_hybrid.py`** — unit + integration coverage for doc-type classification, key extraction, and line extraction.
+
+### Changed
+
+- **`/v1/parse` pdf branch** (`apps/worker-py/app/routes/parse.py`) — now reuses the already-parsed pdfplumber text spans + table candidates (no 2nd pdfplumber pass), runs the DSV hybrid parser, and maps `LineItem[]` → `NormalizedInvoice.invoice_lines`. PDF-only intake reaches real MCP validation / gate / 13-sheet workbook instead of a forced AMBER. The final PASS/AMBER/ZERO verdict still lives in Vercel `gate-bridge.ts`. The separate `pdf_json` branch is unchanged (still `invoice_lines=[]`, evidence candidates only).
+- **Root docs synced** — `README.md` (#39: Rule #0 PDF-real-lines clarification, worker row, `/v1/parse`, new "DSV SHPT PDF parsing" section, web test count 167→195), `SYSTEM_ARCHITECTURE.md` + `LAYOUT.md` (this PR: corrected the stale "PDF branch returns `invoice_lines=[]` / Phase 2.5 pending" claim — Phase 2.5 shipped; migrations `0012`→`0013`; verification baseline 518→576). `README.md` GCS integrity/env/validation corrections (#38).
+
+### Verified
+
+- apps/web **195** · apps/worker-py **195** (incl. DSV hybrid parser tests) · apps/mcp-server **186** = **576**.
+- Live: DSV hybrid parser extracted **11 real line items** from 6 real BOE PDFs (`doc_type=BOE_CUSTOMS`).
+
+### Commits
+
+| SHA | PR | Subject |
+|---|---|---|
+| `8c00cb6` | #35 | feat(worker): port DSV SHPT hybrid parser — PDF uploads yield real invoice_lines |
+| `545c42a` | #36 | feat(worker): port DSV SHPT hybrid parser — PDF uploads yield real invoice_lines |
+| `0d9bc5a` | #39 | docs(readme): reflect DSV SHPT hybrid PDF parser (PDF → real invoice_lines) |
+| `e097e53` | #38 | docs: sync root docs for gs:// Vision fallback + parse_source_data self-heal |
+
 ## gs:// Vision OCR fallback + source-hash semantics + parse_source_data self-heal - 2026-06-16
 
 > **Scope:** End-to-end Google Vision OCR fallback (web↔worker) plus source-hash cross-check semantics, GCS signed-upload, parse_source_data persistence, and two prod-cascade export hotfixes found via production smoke. Shipped via PR #37 to macho715/invoice_sct:main + direct hotfix push; deployed to prod (Vercel `sct-ontology-invoice-audit.vercel.app` + Cloud Run worker `hvdc-invoice-parser-00007-jtn`).

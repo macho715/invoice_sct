@@ -8,18 +8,18 @@ SCT_ONTOLOGY-main/
 │   │   ├── src/app/api/        # 13 API routes (upload, GCS upload, audit, export, fx, mcp)
 │   │   ├── src/lib/            # Job store, gate-bridge, cf-mcp-client, parser client, blob, error codes
 │   │   │   └── mcp/            # In-process MCP validation tools port
-│   │   ├── tests/              # Vitest (30 files, 167 tests)
+│   │   ├── tests/              # Vitest (30 files, 195 tests)
 │   │   └── e2e/                # Playwright smoke tests
 │   │
 │   ├── worker-py/              # Python FastAPI parser/exporter (Google Cloud Run)
 │   │   ├── app/routes/         # /v1/parse, /v1/export, /v1/notebooklm/run, /v1/preflight, /v1/vision/*, /health
-│   │   ├── app/parsers/        # xlsx (+ DSV summary-matrix decomposition), md, txt, pdf, pdf_json, DSV waybill
+│   │   ├── app/parsers/        # xlsx (+ DSV summary-matrix decomposition), md, txt, pdf (DSV SHPT hybrid → real lines), pdf_json, DSV waybill
 │   │   ├── app/services/       # vision_client (stub), vision_normalizer
 │   │   ├── app/validators/     # numeric_integrity (PASS/AMBER)
 │   │   ├── app/middleware/     # Audit log middleware (FR-025)
 │   │   ├── app/notebooklm/     # MarkItDown → NotebookLM orchestrator + MCP client
 │   │   ├── app/exporters/      # 13-sheet workbook export logic
-│   │   └── tests/              # Pytest (165 tests)
+│   │   └── tests/              # Pytest (195 tests)
 │   │
 │   └── mcp-server/             # Hono MCP validation server (Google Cloud Run, standalone)
 │       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
@@ -45,7 +45,8 @@ SCT_ONTOLOGY-main/
 │   ├── 0009_job_store_persist.sql
 │   ├── 0010_invoices.sql
 │   ├── 0011_notebooklm_audit_trace.sql
-│   └── 0012_extraction_artifacts.sql
+│   ├── 0012_extraction_artifacts.sql
+│   └── 0013_parse_source_data.sql
 │
 ├── docs/                       # Architecture, layout, plan, security, QA, specs
 ├── scripts/                    # Utility scripts (audit, seed, graph, scans, deployment)
@@ -82,7 +83,7 @@ SCT_ONTOLOGY-main/
 | `apps/web/tests/` | Vitest coverage for API routes, gate logic, and runtime helpers |
 | `apps/web/e2e/` | Playwright smoke tests |
 | `apps/worker-py/app/routes/` | FastAPI route handlers: parse, export, notebooklm, vision/preflight, health |
-| `apps/worker-py/app/parsers/` | File parsers: xlsx (auto-detects DSV summary-matrix layout → charge-level line decomposition), md, txt, pdf (text), pdf_json (OpenDataLoader), DSV waybill |
+| `apps/worker-py/app/parsers/` | File parsers: xlsx (auto-detects DSV summary-matrix layout → charge-level line decomposition), md, txt, pdf (**DSV SHPT hybrid parser** `dsv_pdf_hybrid.py` → real `invoice_lines` for native-text PDFs: doc-type + charge lines), pdf_json (OpenDataLoader), DSV waybill |
 | `apps/worker-py/app/services/` | Google Vision client (stub) + OCR-JSON normalizer (flag-gated) |
 | `apps/worker-py/app/validators/` | `numeric_integrity` — line-level `qty × rate = amount` (PASS/AMBER) |
 | `apps/worker-py/app/notebooklm/` | MarkItDown → NotebookLM orchestrator + MCP client (SSRF-guarded) |
@@ -96,7 +97,7 @@ SCT_ONTOLOGY-main/
 | `packages/contracts/` | Shared invoice, validation, and export Zod schemas |
 | `packages/shared/` | Hashing and redaction helpers shared across TypeScript runtimes |
 | `packages/telemetry/` | OpenTelemetry helpers used by web + mcp-server |
-| `migrations/` | Neon Postgres schema migrations (`0008`–`0012`) |
+| `migrations/` | Neon Postgres schema migrations (`0008`–`0013`; `0013_parse_source_data` feeds workbook `90_Source_Data`) |
 | `scripts/` | Audit graphs, source/PII scans, seed/reconcile, deployment, smoke tests, graph build, index drift checks |
 | `docs/` | Architecture, layout, plan, security, QA, operations, specs |
 | `.github/workflows/` | CI/CD workflows covering web, worker, mcp-server, release gates, code scanning |
@@ -148,7 +149,7 @@ SCT_ONTOLOGY-main/
 
 | Route | Source | Purpose |
 |---|---|---|
-| `POST /v1/parse` | `parse.py` | Parse uploaded file (aliases: `/parse` deprecated, `/parse/pdf-json`) |
+| `POST /v1/parse` | `parse.py` | Parse uploaded file; `pdf` runs the DSV SHPT hybrid parser → real `invoice_lines` (aliases: `/parse` deprecated, `/parse/pdf-json`) |
 | `POST /v1/export` | `export.py` | Build 13-sheet audit workbook |
 | `POST /v1/notebooklm/run` | `notebooklm.py` | MarkItDown → NotebookLM first-pass orchestrator |
 | `POST /v1/preflight` | `vision.py` | Classify PDF (text/scanned/encrypted) *(flag-gated)* |
@@ -184,9 +185,9 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 | Area | Command |
 |---|---|
 | Web typecheck | `pnpm --dir apps/web typecheck` |
-| Web tests | `pnpm --dir apps/web test` (167) |
+| Web tests | `pnpm --dir apps/web test` (195) |
 | Web build | `pnpm --dir apps/web build` |
-| Worker tests | `cd apps/worker-py && pytest -q` (165) |
+| Worker tests | `cd apps/worker-py && pytest -q` (195) |
 | Worker syntax | `python -m py_compile apps/worker-py/app/routes/parse.py` |
 | MCP typecheck | `cd apps/mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps/mcp-server && pnpm test` (186) |
@@ -198,5 +199,5 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 Earlier the repository ran a Cloudflare Worker serving the SCT ontology ChatGPT App (`server/src/`,
 `public/`, `data/corpus/`, `wh status/`, root `tests/`, D1 migrations `0001-0007`). That runtime was
 deleted and replaced by the current invoice audit platform; D1 migrations are kept for reference only,
-superseded by Postgres `0008`–`0012`. Full change history: [`CHANGELOG.md`](./CHANGELOG.md). See
+superseded by Postgres `0008`–`0013`. Full change history: [`CHANGELOG.md`](./CHANGELOG.md). See
 [`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md) for the full architecture.
