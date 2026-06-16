@@ -42,7 +42,33 @@ export const SctValidationResultSchema = z.object({
   })),
   type_b_results: z.array(z.object({ line_id: z.string(), type_b: z.string(), confidence: z.number() })),
   hs_uae_results: z.array(z.object({ line_id: z.string(), verdict: VerdictSchema, boe_found: z.boolean(), reason_code: z.string().nullish() })),
-  rate_checks: z.array(z.object({ line_id: z.string(), rate_status: z.string(), validity_status: z.enum(['VALID','EXPIRED','PENDING']).nullish() })),
+  rate_checks: z.array(z.object({
+    line_id: z.string(),
+    rate_status: z.string(),
+    validity_status: z.enum(['VALID','EXPIRED','PENDING']).nullish(),
+    // rate_match_logic.md §3/§4/§7/§11 — extended fields from check_rate_card
+    rate_type: z.enum(['CONTRACT_NUMERIC','TEXT_EXCEPTION','MISSING_RATE']).nullish(),
+    ai_rate_status: z.enum([
+      'AUTO_COMPARE_OK',
+      'AUTO_COMPARE_WITH_DUPLICATE_REVIEW',
+      'AUTO_COMPARE_REQUIRE_REVIEW_EVIDENCE',
+      'EXCEPTION_EVIDENCE_REQUIRED',
+      'MISSING_RATE_NO_AUTO_PASS'
+    ]).nullish(),
+    match_eligible: z.enum(['Y','N']).nullish(),
+    contract_row_id: z.string().nullish(),
+    unit: z.string().nullish(),
+    scope: z.string().nullish(),
+    type_b: z.string().nullish(),
+    effective_from: z.string().nullish(),
+    effective_to: z.string().nullish(),
+    variance_pct: z.number().nullish(),
+    variance_amount: z.number().nullish(),
+    contracted_rate: z.number().nullish(),
+    evidence_status: z.enum([
+      'MATCHED_EXACT','MATCHED_AMOUNT','MATCHED_APPROVAL','PARTIAL','MISSING','CONFLICT','NOT_APPLICABLE'
+    ]).nullish()
+  })),
   evidence_requirements: z.array(z.object({ line_id: z.string(), required_evidence: z.array(z.string()) })),
   costguard_results: z.array(z.object({
     line_id: z.string(), band: z.enum(['PASS','WARN','HIGH','CRITICAL']),
@@ -183,12 +209,18 @@ export const LineViewRowSchema = z.object({
   rate_source: z.string().nullable(),
   rate_status: z.string().nullable(),
   validity_status: z.string().nullable(),
-  evidence_status: z.string().nullable(),
+  // rate_match_logic.md §7 — expanded to 7 values
+  evidence_status: z.enum([
+    'MATCHED_EXACT','MATCHED_AMOUNT','MATCHED_APPROVAL','PARTIAL','MISSING','CONFLICT','NOT_APPLICABLE'
+  ]).nullable(),
   gate_status: z.string().nullable(),
   band: z.string().nullable(),
   delta_pct: z.number().nullable(),
   numeric_integrity_status: z.string().nullable(),
   difference: z.number().nullable(),
+  // rate_match_logic.md §9 — Risk/Action outputs
+  risk: z.enum(['LOW','MEDIUM','HIGH']).nullable(),
+  action: z.string().nullable(),
   formula_text: z.string().nullable().optional()
 });
 export type LineViewRow = z.infer<typeof LineViewRowSchema>;

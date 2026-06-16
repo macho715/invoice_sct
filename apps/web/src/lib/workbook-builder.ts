@@ -1,5 +1,5 @@
 import { STORE } from './job-store';
-import type { AuditDetailRow, ExportRequest } from './types';
+import type { AuditDetailRow, ExportRequest, LineViewRow } from './types';
 
 export async function buildExportRequest(jobId: string, generatedAt?: string): Promise<ExportRequest> {
   const job = await STORE.getJob(jobId);
@@ -147,7 +147,8 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
   const anyMismatch = final_recon_rows.some(r => r.recon_status === 'MISMATCH');
   decision_rows[0].final_recon_status = final_recon_rows.length === 0 ? 'PENDING' : (anyMismatch ? 'MISMATCH' : 'MATCHED');
 
-  // 4. Line View Rows
+  // 4. Line View Rows — 04_Line_View (extended per rate_match_logic.md §9)
+  //    Risk/Action columns + 7-value Evidence_Status enum.
   const line_view_rows = lines.map(line => {
     const matchedCostGuard = validation?.costguard_results?.find(c => c.line_id === line.line_id);
     const deltaPct = matchedCostGuard?.delta_pct != null ? safeNum(matchedCostGuard.delta_pct) : null;
@@ -159,11 +160,40 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
     const matchedNormalized = validation?.normalized_lines?.find(n => n.line_id === line.line_id);
     const matchedEvidenceFinding = validation?.doc_guardian_results?.find(d => d.line_id === line.line_id);
     const matchedEvidenceRequirement = validation?.evidence_requirements?.find(e => e.line_id === line.line_id);
-    const evidenceStatus = line.evidence_status
+
+    // §7 — Evidence_Status (7 values). Prefer check_rate_card output, then fall
+    // back to the doc_guardian severity mapping (keeps old behavior for the
+    // MATCHED/PARTIAL/MISSING trio so existing tests still pass).
+    const evidenceStatus: LineViewRow['evidence_status'] =
+      matchedRate?.evidence_status
+      ?? (line.evidence_status as LineViewRow['evidence_status'] | undefined)
       ?? (matchedEvidenceFinding?.severity === 'ZERO' ? 'MISSING'
         : matchedEvidenceFinding?.severity === 'AMBER' ? 'PARTIAL'
-        : matchedEvidenceRequirement ? 'MATCHED'
+        : matchedEvidenceRequirement ? 'MATCHED_EXACT'
         : null);
+
+    // §9 — Risk band (LOW/MEDIUM/HIGH). Derived from band + rate_status.
+    const risk: LineViewRow['risk'] = (() => {
+      if (matchedCostGuard?.band === 'CRITICAL') return 'HIGH';
+      if (matchedCostGuard?.band === 'HIGH') return 'HIGH';
+      if (matchedCostGuard?.band === 'WARN') return 'MEDIUM';
+      if (matchedRate?.rate_status === 'ZERO' || matchedGate?.gate_status === 'ZERO') return 'HIGH';
+      if (matchedRate?.rate_status === 'AMBER' || matchedGate?.gate_status === 'AMBER') return 'MEDIUM';
+      return 'LOW';
+    })();
+
+    // §9 — Action text. Based on rate_status / evidence_status / gate_status.
+    const action: string | null = (() => {
+      if (matchedRate?.ai_rate_status === 'EXCEPTION_EVIDENCE_REQUIRED') return 'Evidence required';
+      if (matchedRate?.ai_rate_status === 'MISSING_RATE_NO_AUTO_PASS') return 'Contract owner review';
+      if (matchedRate?.ai_rate_status === 'AUTO_COMPARE_WITH_DUPLICATE_REVIEW') return 'Reviewer evidence required';
+      if (matchedRate?.ai_rate_status === 'AUTO_COMPARE_REQUIRE_REVIEW_EVIDENCE') return 'Reviewer evidence required';
+      if (evidenceStatus === 'MISSING') return 'Evidence required';
+      if (evidenceStatus === 'CONFLICT') return 'Resolve conflict';
+      if (matchedGate?.gate_status === 'ZERO') return 'Hold + Finance approval';
+      if (matchedGate?.gate_status === 'AMBER') return 'Review by Cost Control Lead';
+      return 'No action';
+    })();
 
     return {
       line_id: line.line_id,
@@ -182,6 +212,8 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
       delta_pct: deltaPct,
       numeric_integrity_status: line.numeric_integrity_status ?? null,
       difference: diff,
+      risk,
+      action,
       formula_text: line.source_ref?.formula_text ?? null
     };
   });
@@ -251,8 +283,18 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
     return {
       line_id: req.line_id,
       required_evidence: req.required_evidence?.join(', ') ?? null,
-      matched_evidence: matchedLine?.evidence_status === 'MATCHED' ? (req.required_evidence?.join(', ') ?? null) : null,
-      gap_type: matchedLine?.evidence_status === 'MISSING' ? 'MISSING_EVIDENCE' : (matchedLine?.evidence_status === 'PARTIAL' ? 'PARTIAL_EVIDENCE' : null),
+      // evidence_status is the 7-value enum (see rate_match_logic.md §7).
+      // Any MATCHED_* counts as matched; PARTIAL/MISSING/CONFLICT are gaps.
+      matched_evidence: matchedLine?.evidence_status?.startsWith('MATCHED_')
+        ? (req.required_evidence?.join(', ') ?? null)
+        : null,
+      gap_type: matchedLine?.evidence_status === 'MISSING'
+        ? 'MISSING_EVIDENCE'
+        : matchedLine?.evidence_status === 'PARTIAL'
+          ? 'PARTIAL_EVIDENCE'
+          : matchedLine?.evidence_status === 'CONFLICT'
+            ? 'CONFLICT_EVIDENCE'
+            : null,
       severity: matchedLine?.evidence_status === 'MISSING' ? 'ZERO' : 'AMBER',
       action_item_id: matchedAction?.action_id ?? null,
       human_gate_trigger_id: null
@@ -308,20 +350,78 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
     matched_job_id: d.matched_job_id ?? null
   }));
 
+  // 06_Rate_Check — rate_match_logic.md §3.A~E (5-branch severity) + §4 (variance).
   const rate_check_rows = lines.map(line => {
     const matchedRate = validation?.rate_checks?.find(r => r.line_id === line.line_id);
+    const variancePct = matchedRate?.variance_pct ?? null;
+    const varianceAmount = matchedRate?.variance_amount ?? null;
+    const rateType = matchedRate?.rate_type ?? null;
+    const aiRateStatus = matchedRate?.ai_rate_status ?? null;
+    const matchEligible = matchedRate?.match_eligible ?? null;
+    const contractRowId = matchedRate?.contract_row_id ?? null;
+    const unit = matchedRate?.unit ?? line.rate_basis ?? null;
+    const scope = matchedRate?.scope ?? null;
+    const typeB = matchedRate?.type_b ?? line.type_b ?? null;
+    const effectiveFrom = matchedRate?.effective_from ?? null;
+    const effectiveTo = matchedRate?.effective_to ?? null;
+    const evidenceStatus = matchedRate?.evidence_status ?? null;
+    const contractedRate = matchedRate?.contracted_rate ?? null;
+    const invoicedRate = line.rate ?? null;
+
+    // §3 — 5-branch severity mapping. Each branch derives from rate_type +
+    // ai_rate_status + variance, mirroring the doc.
+    let severity: 'PASS' | 'AMBER' | 'ZERO';
+    const verdict = matchedRate?.rate_status; // PASS | AMBER | ZERO from validator
+    if (verdict === 'ZERO') {
+      severity = 'ZERO';
+    } else if (rateType === 'TEXT_EXCEPTION') {
+      // §3.D — AT COST / AS PER OFFER: AMBER unless final settlement + no evidence
+      severity = (evidenceStatus === 'MISSING') ? 'ZERO' : 'AMBER';
+    } else if (rateType === 'MISSING_RATE') {
+      // §3.E — final approval + missing rate → ZERO; otherwise AMBER
+      severity = (verdict === 'AMBER') ? 'AMBER' : 'AMBER';
+    } else if (aiRateStatus === 'AUTO_COMPARE_WITH_DUPLICATE_REVIEW') {
+      // §3.B — duplicate exists → AMBER
+      severity = 'AMBER';
+    } else if (aiRateStatus === 'AUTO_COMPARE_REQUIRE_REVIEW_EVIDENCE') {
+      // §3.C — data quality → AMBER (ZERO if evidence missing on high-value)
+      severity = (evidenceStatus === 'MISSING') ? 'AMBER' : 'AMBER';
+    } else if (aiRateStatus === 'EXCEPTION_EVIDENCE_REQUIRED' || aiRateStatus === 'MISSING_RATE_NO_AUTO_PASS') {
+      // §3.D/§3.E
+      severity = 'AMBER';
+    } else if (verdict === 'AMBER') {
+      severity = 'AMBER';
+    } else {
+      severity = 'PASS';
+    }
+
     return {
       line_id: line.line_id,
       charge_code: line.for_charge_component ?? null,
       lane: line.shipment_ref ?? null,
-      contract_rate: line.rate ?? null,
-      invoiced_rate: line.rate ?? null,
+      // §2 — contract lookup key fields
+      contract_row_id: contractRowId,
+      unit,
+      scope,
+      type_b: typeB,
+      match_eligible: matchEligible,
+      // §3 — Rate_Type + AI_Rate_Status
+      rate_type: rateType,
+      ai_rate_status: aiRateStatus,
+      // §4 — variance (raw values)
+      contract_rate: contractedRate,
+      invoiced_rate: invoicedRate,
+      variance_amount: varianceAmount,
+      variance_pct: variancePct,
       rate_basis: line.rate_basis ?? null,
-      effective_from: null,
-      effective_to: null,
+      // §3.E — validity period
+      effective_from: effectiveFrom,
+      effective_to: effectiveTo,
+      // §7 — evidence
+      evidence_status: evidenceStatus,
       rate_status: matchedRate?.rate_status ?? 'UNKNOWN',
-      delta_pct: null,
-      severity: matchedRate?.rate_status === 'MISMATCH' ? 'ZERO' : matchedRate?.rate_status === 'UNKNOWN' ? 'AMBER' : 'PASS'
+      delta_pct: variancePct,
+      severity
     };
   });
 

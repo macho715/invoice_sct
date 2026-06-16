@@ -25,7 +25,7 @@ afterEach(() => {
 describe('check_rate_card', () => {
   it('exposes the expected tool identity', () => {
     expect(ToolName).toBe('check_rate_card');
-    expect(TOOL_VERSION).toBe('0.2.0');
+    expect(TOOL_VERSION).toBe('0.3.0');
   });
 
   it('returns AMBER with RATE_NOT_FOUND when DB is unavailable', async () => {
