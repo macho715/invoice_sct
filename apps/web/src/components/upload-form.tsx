@@ -53,6 +53,7 @@ export default function UploadForm() {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [workflowType, setWorkflowType] = useState<WorkflowType>('SHIPMENT');
+  const [autoRun, setAutoRun] = useState(false);
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
   function clearFiles() {
@@ -65,6 +66,19 @@ export default function UploadForm() {
     setFiles(current => current.filter((_, i) => i !== index));
     setErr(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function runValidation(jobId: string, jobToken: string) {
+    setProgress('Running validation…');
+    const runRes = await fetch('/api/invoice-audit/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, job_token: jobToken })
+    });
+    if (!runRes.ok) {
+      const runBody = await runRes.json().catch(() => ({ message: `HTTP ${runRes.status}` }));
+      throw new Error(`Validation failed: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -84,17 +98,7 @@ export default function UploadForm() {
         jobToken = uploaded.jobToken;
       }
       if (jobId && jobToken) {
-        setProgress('Running validation…');
-        const runRes = await fetch('/api/invoice-audit/run', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId, job_token: jobToken })
-        });
-        if (!runRes.ok) {
-          const runBody = await runRes.json().catch(() => ({ message: `HTTP ${runRes.status}` }));
-          setErr(`Validation failed: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
-          return;
-        }
+        if (autoRun) await runValidation(jobId, jobToken);
         router.push(`/invoice-audit/jobs/${jobId}?job_token=${encodeURIComponent(jobToken)}`);
       }
     } catch (e) {
@@ -116,7 +120,7 @@ export default function UploadForm() {
         <div>
           <p className="eyebrow">Invoice validation</p>
           <h2>Upload invoice or evidence</h2>
-          <p className="muted">Excel, text, markdown, or PDF files are accepted. You can upload one invoice, one PDF, or invoice plus evidence together.</p>
+          <p className="muted">Excel, text, markdown, or PDF files are accepted. Upload invoice and evidence together, or upload the invoice first and add evidence on the job dashboard before running validation.</p>
         </div>
 
         <fieldset className="workflow-selector">
@@ -150,10 +154,26 @@ export default function UploadForm() {
           <p className="muted" style={{ marginTop: '0.5rem' }}>{workflowDesc}</p>
         </fieldset>
 
+        <fieldset className="workflow-selector">
+          <legend className="fieldset-legend">Run Control</legend>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={autoRun}
+              onChange={e => setAutoRun(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Run validation immediately after upload</span>
+          </label>
+          <p className="muted" style={{ marginTop: '0.5rem' }}>
+            Leave unchecked when the invoice Excel will be uploaded first and evidence PDFs will be added later from the job dashboard.
+          </p>
+        </fieldset>
+
         <ol className="step-list" aria-label="Validation flow">
           <li className={files.length > 0 ? 'is-done' : 'is-current'}>Select files</li>
           <li className={busy ? 'is-current' : ''}>Upload</li>
-          <li>Run {workflowLabel} validation</li>
+          <li>{autoRun ? `Run ${workflowLabel} validation` : 'Add evidence or run manually'}</li>
           <li>Download workbook</li>
         </ol>
       </div>
@@ -196,7 +216,7 @@ export default function UploadForm() {
       {progress && <div className="alert alert-info" role="status">{progress}</div>}
       <div className="button-row">
         <button className="btn" type="submit" disabled={busy || files.length === 0}>
-          {busy ? 'Working...' : `Upload and validate${files.length > 1 ? ` (${files.length})` : ''}`}
+          {busy ? 'Working...' : `${autoRun ? 'Upload and validate' : 'Upload files'}${files.length > 1 ? ` (${files.length})` : ''}`}
         </button>
         <button className="btn btn-secondary" type="button" onClick={clearFiles} disabled={busy || files.length === 0}>
           Clear
