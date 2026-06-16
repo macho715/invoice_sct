@@ -110,6 +110,10 @@ jobs:
           uv run python -c "from app.parsers import parse, pdf_text, pdf_json; from app.routes import parse as r"
           echo "Exit: $?"
 
+      - name: Run domestic/ pytest (PR 5 — RateReferenceProvider adapter)
+        run: |
+          python3 -m pytest domestic/tests/ -q
+
   # ------------------------------------------------------------------
   # SC-TS-Checks: typecheck + lint + test for web & mcp-server
   # Consolidates: sc-vitest, sc-typecheck, sc-mcp-cardinality,
@@ -160,6 +164,12 @@ jobs:
         run: |
           cd apps/web
           pnpm run test -- --run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
+
+      # PR 5 — invoice/ test suite (101 tests across 3 files: statusMachine, validateInvoice, rateReferenceProvider)
+      - name: Vitest tests/invoice/ (PR 5 — 50+ tests gate)
+        run: |
+          cd apps/web
+          pnpm vitest run tests/invoice/
 
       # --- apps/mcp-server (pnpm) ---
       - name: Install mcp-server dependencies
