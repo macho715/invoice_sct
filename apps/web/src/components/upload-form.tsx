@@ -4,21 +4,16 @@ import { useRouter } from 'next/navigation';
 import { getUploadSelectionError } from '@/lib/upload-validation';
 import type { WorkflowType } from '@/lib/types';
 
-const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
-
 function formatKb(bytes: number) {
   return `${Math.ceil(bytes / 1024).toLocaleString()} KB`;
 }
 
 async function sha256Hex(file: File): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  // Bare 64-char hex — matches SourceFileSchema (z.string().length(64)).
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Large files (>4.5MB) can't pass through the Vercel serverless function body
-// limit, so they stream straight to Vercel Blob from the browser, then register.
-async function uploadLargeFile(
+async function uploadFile(
   file: File,
   jobId: string | null,
   jobToken: string | null,
@@ -28,11 +23,11 @@ async function uploadLargeFile(
   const { upload } = await import('@vercel/blob/client');
   const blob = await upload(file.name, file, {
     access: 'public',
-    handleUploadUrl: '/api/files/blob-upload',
+    handleUploadUrl: '/api/invoices/upload-url',
     onUploadProgress: e => onProgress(e.percentage),
   });
   const sha256 = await sha256Hex(file);
-  const res = await fetch('/api/files/register', {
+  const res = await fetch('/api/invoices', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-user-id': 'dev-user' },
     body: JSON.stringify({
@@ -74,7 +69,7 @@ export default function UploadForm() {
   }
 
   async function runValidation(jobId: string, jobToken: string) {
-    setProgress('검증 실행 중…');
+    setProgress('Running validation…');
     const runRes = await fetch('/api/invoice-audit/run', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -82,7 +77,7 @@ export default function UploadForm() {
     });
     if (!runRes.ok) {
       const runBody = await runRes.json().catch(() => ({ message: `HTTP ${runRes.status}` }));
-      throw new Error(`검증 실행 실패: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
+      throw new Error(`Validation failed: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
     }
   }
 
@@ -93,35 +88,14 @@ export default function UploadForm() {
 
     setBusy(true); setErr(null);
     try {
-      // First file creates the job; subsequent files append to the same job_id.
-      // Files >4.5MB stream client-direct to Blob (uploadLargeFile); smaller files
-      // go through /api/files/ingest. Either way the same job_id threads through.
       let jobId: string | null = null;
       let jobToken: string | null = null;
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.size > LARGE_FILE_THRESHOLD) {
-          const uploaded = await uploadLargeFile(file, jobId, jobToken, workflowType, pct =>
-            setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
-          jobId = uploaded.jobId;
-          jobToken = uploaded.jobToken;
-          continue;
-        }
-        setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name}`);
-        const fd = new FormData();
-        fd.set('file', file);
-        if (jobId) fd.set('job_id', jobId);
-        if (jobToken) fd.set('job_token', jobToken);
-        fd.set('workflow_type', workflowType);
-        const r = await fetch('/api/files/ingest', {
-          method: 'POST',
-          body: fd,
-          headers: { 'x-user-id': 'dev-user' }
-        });
-        const body = await r.json();
-        if (!r.ok) { setErr(`${file.name}: ${body.code} — ${body.message}`); setBusy(false); setProgress(null); return; }
-        jobId = jobId ?? body.job_id;
-        jobToken = jobToken ?? body.job_token;
+        const uploaded = await uploadFile(file, jobId, jobToken, workflowType, pct =>
+          setProgress(`Uploading ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
+        jobId = uploaded.jobId;
+        jobToken = uploaded.jobToken;
       }
       if (jobId && jobToken) {
         if (autoRun) await runValidation(jobId, jobToken);
