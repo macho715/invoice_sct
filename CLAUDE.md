@@ -34,7 +34,8 @@ Samsung C&T HVDC Abu Dhabi project. ADNOC/DSV partnership.
 **상태:**
 - ✅ **구현됨 (2026-06-15)**: OR 인테이크(409 제거), PDF-as-invoice 소스, 0-라인 → AMBER 표기, 최종 Excel 경로. (`run/route.ts`, `upload-validation.ts`, `upload-form.tsx`)
 - ✅ **검증됨 (2026-06-16)**: gs:// Google Vision OCR fallback 출시. Rule #0 prod 종단 검증 완료 (ingest→run→export→download → ZERO verdict에서도 유효한 13-sheet xlsx 다운로드).
-- 🔜 **예정**: ① 워커 `pdf_text.py`의 text_span → `invoice_lines` 실추출 (Phase 2.5) — PDF 단독을 AMBER가 아닌 실검증으로 승격. (gs:// Vision OCR fallback 출시로 OCR 경로는 확보, text_span→line 매핑은 잔여.) ② `EXPORT_FAILED` prod 해결 — 워커 `/v1/export` 도달·환경변수. (2026-06-16 종단 검증으로 export→download 경로 확인됨.)
+- ✅ **해결됨 (2026-06-16)**: 웹↔워커(Cloud Run) 스키마 드리프트 2겹 해소 — ① 워커 재배포로 `ParseRequest.workflow_type` 동기화(parse `422 extra_forbidden` 해결), ② export row 모델(`LineViewRow`/`RateCheckRow`)을 `extra='ignore'`로 전환해 rate_match enrichment 필드 수용(export `500`/`EXPORT_FAILED` 해결), ③ Cloud Run `--allow-unauthenticated` 복원 — 웹은 앱 토큰(`PARSER_WORKER_TOKEN`)으로 호출하므로 `allUsers` invoker 필요(`--no-allow-unauthenticated` 배포 시 401 회귀). prod 종단 재검증 통과. 커밋 `e51f924`·`f8cb95b`, 워커 rev `00012`.
+- 🔜 **예정**: ① 워커 `pdf_text.py`의 text_span → `invoice_lines` 실추출 (Phase 2.5) — PDF 단독을 AMBER가 아닌 실검증으로 승격. (gs:// Vision OCR fallback 출시로 OCR 경로는 확보, text_span→line 매핑은 잔여.) ② `06_Rate_Check`/`04_Line_View`에 rate_match 신규 컬럼 노출 — 워커 익스포터(`xlsx.py`)에 컬럼 추가 필요 (현재는 필드 수용만 하고 셀에는 미기재).
 
 ## DLP 정책 (2026-06-15 추가)
 

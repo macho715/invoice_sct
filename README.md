@@ -30,8 +30,16 @@ downloadable final Excel (13-sheet audit pack). OR semantics, never AND:
 
 ## Architecture
 
-Three apps plus shared packages. Canonical role definition:
+Three apps plus shared packages. Target role definition (2026-06-14):
 [`docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md`](./docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md).
+
+> **Actual operation (2026-06-16):** the production path is **direct-parse** — the web
+> app calls the worker's `/v1/parse` (pdfplumber / DSV SHPT hybrid) and `/v1/export`
+> (13-sheet workbook), then computes the verdict itself. So the worker does more than
+> the spec's "orchestrator only" role (it parses and exports), and the spec's
+> NotebookLM-centric flow is **flag-gated, off by default**. Verdict authority still
+> lives in Vercel (`gate-bridge.ts`). The table below reflects this real behavior; see
+> [`CLAUDE.md`](./CLAUDE.md) → *Architecture Status* for the tracked deviations.
 
 | Layer | Role | Must not do |
 | --- | --- | --- |
@@ -64,6 +72,25 @@ graph LR
   W --> G["Gate PASS/AMBER/ZERO"]
   G --> E["/v1/export → 13-sheet xlsx"]
   E --> DL["/api/export/download"]
+```
+
+## Verdict Gate
+
+Every upload flows through the gate; PASS/AMBER/ZERO all yield a downloadable
+13-sheet Excel (Rule #0). Added 2026-06-16.
+
+```mermaid
+flowchart TD
+  RUN["/api/invoice-audit/run"] --> PARSE["worker /v1/parse"]
+  PARSE --> VAL["MCP validation<br/>(15 tools)"]
+  VAL --> GATE{"Gate verdict"}
+  GATE -->|PASS| FA["Final Approved Workbook"]
+  GATE -->|AMBER| REV["Reviewer approval"]
+  REV --> FA
+  GATE -->|ZERO| RP["Review Pack<br/>(blocked / unverified labeled)"]
+  GATE -->|FAILED| ERR["Error surfaced"]
+  FA --> XLSX["13-sheet Excel<br/>Rule #0: always downloadable"]
+  RP --> XLSX
 ```
 
 ## Quick Start
@@ -100,12 +127,12 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 │   ├── worker-py/           # FastAPI parser + 13-sheet workbook exporter
 │   └── mcp-server/          # Hono JSON-RPC MCP server (external clients)
 ├── packages/
-│   ├── tools/               # 14 MCP validation tools (single source of truth)
+│   ├── tools/               # 15 MCP validation tools (single source of truth)
 │   ├── database/            # Neon/Postgres pool singleton
 │   ├── contracts/           # Shared Zod schemas
 │   ├── shared/              # Hash and redaction helpers
 │   └── telemetry/           # OpenTelemetry helpers
-├── migrations/              # Postgres schema migrations (0008–0013)
+├── migrations/              # Postgres schema migrations (0008–0016)
 ├── docs/                    # Architecture, specs, plans, operations, security
 ├── .github/workflows/       # CI and deployment workflows
 └── .env.example             # Local environment variable template
@@ -286,6 +313,16 @@ The worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) 
 > `PARSER_WORKER_URL` points at its `*.run.app` URL. mcp-server and markitdown-mcp
 > are **not** deployed yet (the worker alone serves the audit flow). Actual URL,
 > auth caveat, and the BuildKit Dockerfile fix are in runbook §11.
+
+> **Update (2026-06-16):** `deploy-cloudrun.sh` must deploy with
+> `--allow-unauthenticated`. The web calls `/v1/parse` and `/v1/export` with the
+> `PARSER_WORKER_TOKEN` app bearer (not a Google IAM identity token), so the
+> service needs the `allUsers → run.invoker` binding. Deploying with
+> `--no-allow-unauthenticated` strips it and breaks prod with a Cloud Run HTML
+> `401` on `/v1/parse`. Also keep the worker request schemas in sync with the web:
+> the export row models (`LineViewRow`/`RateCheckRow`) use `extra='ignore'` so
+> web-side rate_match enrichment fields don't cause a `422` / `EXPORT_FAILED`.
+> Re-verified end-to-end after the fix (worker rev `00012`).
 
 1. One-time: enable `run`, `cloudbuild`, `artifactregistry` APIs; connect billing on the GCP project.
 2. Worker: `cd apps/worker-py && GCP_PROJECT=<proj> GCP_REGION=<region> ./deploy-cloudrun.sh` (`--port 8000`).
