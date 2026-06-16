@@ -1,6 +1,59 @@
 # Changelog
 
-## NotebookLM MCP `waitForStableAnswer` BUGFIX + Test Infrastructure - 2026-06-14
+## Vision OCR prod 실가동 + 업로드 플로우 수리 + PDF 파서 고도화 — 2026-06-16/17
+
+> **Scope:** 3일간의 집중 개발/배포/검증: (1) 업로드 폼 2단계 Wizard + 하이브리드 업로드 복원, (2) PR 3.2 클라이언트 마이그레이션 (deprecated → `/api/invoices`), (3) 일반 PDF 라인 추출 (Track ①), (4) 스캔 PDF Vision OCR 동기 환류 (Track ②), (5) Worker `/health/ready` 503 수정, (6) GCS 업로드 경로 + Vision OCR prod 연동 검증. 총 test: web 331 + worker 209 = 540.
+
+### Added
+
+- **2단계 업로드 Wizard** (`upload-form.tsx`): Step1 인보이스 → Step2 증빙 PDF. `autoRun` 체크박스로 즉시 검증 또는 대시보드에서 증빙 추가 선택. CSS 스타일 20종 신규.
+- **하이브리드 업로드 복원**: ≤4.5MB → `/api/files/ingest` (안정적 서버 경로), >4.5MB → `/api/invoices/upload-url` + `/api/invoices` (client-direct). PR #56 회귀 수정.
+- **일반 PDF 라인 추출** (`extract_generic_invoice_lines`): 비-DSV PDF에서 테이블 행 우선, 텍스트 라인 fallback으로 `InvoiceLine[]` 생성. DSV 경로 불변.
+- **Vision OCR 동기 환류**: `POST /v1/vision/run` (start→poll→collect→normalize), `VisionRunRequest/Response`, `vision_result_to_invoice_lines()`. `ParseResponse.parser_issues` 전파. Web `runVisionOcr()` sync 호출 → `cf.validate` 전 병합.
+- **Vision prod 연동**: Worker Cloud Run `00016-s92`, Vercel env 7종, GCS 서명 PUT 실동작, 웹 run 경로 Vision 실발화 확인 (`VISION_RUN_COLLECTED`), OCR sidecar `gs://dsv-invoice-ocr/.../output-1-to-1.json` 생성.
+- **대시보드 첨부 파일 목록**: status route `source_files` 응답, job page 파일 목록 + 단계 인디케이터.
+- **Vision OCR 운영 체크리스트** (`reports/20260616_VISION_OCR_OPERATIONAL_CHECKLIST_v1.md`).
+- **PDF 파서 인벤토리** (`reports/20260616_PDF_PARSER_INVENTORY_v1.md`): 92개 파일, 10개 카테고리.
+
+### Changed
+
+- **PR 3.2 마이그레이션**: `upload-form.tsx` + `AppendEvidenceUpload.tsx` → `/api/invoices` + `/api/invoices/upload-url`로 deprecated 엔드포인트 교체. `middleware.ts` `PUBLIC_UI_API_ROUTES` 신규 라우트 추가.
+- **Fire-and-forget → Sync Vision**: `run/route.ts` Vision 블록을 fire-and-forget에서 동기 환류로 대체. `SCANNED_PAGE_DETECTED` 감지 → `runVisionOcr` → 라인/증빙 병합 → 실패 시 AMBER `SCANNED_PDF_NEEDS_OCR`.
+- **Worker vision_client.py**: feature type `DOCUMENT_TEXT_DETECTION` 고정.
+- **`/health/ready` 503 수정**: `DATABASE_URL` 미설정 시 graceful skip (`ok:True, skipped:True`). DB-optional 설계와 일치.
+- **`GCS_UPLOAD_ENABLED` + `VISION_FALLBACK_ENABLED`**: Vercel production env 설정, `gcs-upload.ts` `normalizePrivateKey` 실동작 입증.
+- **AuditTraceStep**: `VISION_RUN` trace step 추가.
+
+### Fixed
+
+- **업로드 0% 고착 (P0)**: PR #56이 모든 파일을 client-direct로 통합하면서 ≤4.5MB 파일 업로드 실패. 하이브리드 경로 복원으로 해결.
+- **레이아웃 깨짐 (P1)**: `globals.css`에 구조 클래스 20종 누락. `.eyebrow .stack .workflow-selector .radio-group .radio-card .step-list .file-drop .file-panel .file-list .button-row .checkbox-row` 등 추가.
+- **Worker readiness 503**: `DATABASE_URL` 미설정 시 하드 실패 → graceful skip으로 변경.
+
+### Verified
+
+- Web: **331 tests / 43 files** pass, typecheck 0 errors, build 성공.
+- Worker: **209 tests** pass (210 post-health-fix).
+- Vision worker 직접 smoke: `VISION_RUN_COLLECTED`, confidence 0.967, evidence 11건.
+- Vision 웹 run 경로: job `job_mqh72djd`에서 Vision 실발화 → OCR sidecar 생성 → 13-sheet export.
+- Rule #0: 모든 verdict에서 13-sheet Excel export 유지.
+
+### Commits
+
+| SHA | Subject |
+|---|---|
+| `9085167` | fix: broaden Vision fallback env check |
+| `98c1487` | feat: sync Vision OCR for scanned PDFs → used in invoice validation (#64) |
+| `02826a5` | feat(web): wire GCS upload path for PDF evidence (#63) |
+| `6296cb0` | feat(worker): extract invoice_lines from generic PDFs (#62) |
+| `15b90fa` | feat(web): migrate upload client to /api/invoices (PR 3.2) (#56) |
+
+### Known follow-up
+
+- **GCS PDF를 1차 인보이스로**: confirm된 GCS PDF는 evidence 전용 → `invoice_lines=0`. 1차 인보이스 소스 경로 추가 필요.
+- **스캔 인보이스 `invoice_lines>0` 검증**: DN은 charge 미포함 문서. 금액·라인 있는 스캔 인보이스로 종단 입증 필요.
+- **Worker `pdf_text.py` text_span → `invoice_lines` 실추출**: PDF 단독 AMBER→실검증 승격.
+- **06_Rate_Check / 04_Line_View rate_match 컬럼**: exporter `xlsx.py`에 컬럼 추가.
 
 > **Scope:** Patch the `notebooklm-mcp-pr53-pr55` fork to fix a 2m 10s timeout when a notebook accumulates prior answers with matching text. Adds opt-in diagnostic instrumentation, vitest unit tests, and project docs. All commits pushed to `macho715/notebooklm-mcp`. Upstream PR #61 opened against `PleasePrompto/notebooklm-mcp:main`.
 

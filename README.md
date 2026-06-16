@@ -20,9 +20,9 @@ downloadable final Excel (13-sheet audit pack). OR semantics, never AND:
 
 - `xlsx` / `md` / `txt` present → it is the invoice source; PDFs are evidence.
 - No structured doc → the first PDF becomes the invoice source; remaining PDFs are evidence.
-- (2026-06-16) A native-text **DSV SHPT PDF** is now parsed into **real `invoice_lines`**
-  (doc-type classification + charge-line extraction, see [DSV SHPT PDF parsing](#dsv-shpt-pdf-parsing)),
-  so PDF-only uploads can reach real validation instead of a forced AMBER.
+- (2026-06-17) **Vision OCR operational**: scanned PDFs (pdfplumber 0-extract) are processed by Google Cloud Vision OCR via GCS upload → sync `/v1/vision/run` → evidence/line extraction → merged before validation. Flag-gated (`VISION_FALLBACK_ENABLED`).
+- (2026-06-16) **Generic PDF line extraction**: non-DSV text-based PDFs now produce `invoice_lines` via table-row-first / text-line-fallback extraction (`extract_generic_invoice_lines`), so PDF-only uploads can reach real validation instead of a forced AMBER.
+- (2026-06-16) A native-text **DSV SHPT PDF** is also parsed into **real `invoice_lines`**
 - A PDF-only upload that still yields 0 structured lines (scanned / line-less PDF) is routed to
   **AMBER / REVIEW_REQUIRED** (`NO_INVOICE_LINES_EXTRACTED`) and still exports. A PDF-only upload
   is **never** rejected with 409.
@@ -98,7 +98,7 @@ flowchart TD
 ```bash
 pnpm install
 pnpm --dir apps/web typecheck    # 0 errors
-pnpm --dir apps/web test         # 195 tests
+pnpm --dir apps/web test         # 331 tests
 pnpm --dir apps/web build
 ```
 
@@ -252,7 +252,7 @@ Never paste secret values into issues, docs, prompts, or logs.
 
 Baseline (2026-06-15): **515 tests** — apps/web 167, apps/worker-py 162, apps/mcp-server 186.
 
-Baseline (2026-06-16): **576 tests** — apps/web 195, apps/worker-py 195, apps/mcp-server 186.
+Baseline (2026-06-17): **540 tests** — apps/web 331, apps/worker-py 209.
 Rule #0 verified end-to-end in prod: ingest → run → export → download yields a valid 13-sheet
 xlsx, even for a ZERO verdict.
 

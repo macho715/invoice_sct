@@ -121,8 +121,9 @@ Browser-facing routes are public via middleware; all others require an `API_SECR
 | `/v1/export` | POST | Build the 13-sheet audit workbook |
 | `/v1/notebooklm/run` | POST | MarkItDown → NotebookLM first-pass orchestrator (callback to web) |
 | `/v1/preflight` | POST | Classify a PDF (text/scanned/encrypted) → `recommended_route`, `requires_vision`, `requires_markitdown` *(flag-gated)* |
-| `/v1/vision/start` | POST | Start Google Vision async OCR → `operation_name` *(stub until `VISION_ENABLED`)* |
-| `/v1/vision/collect` | POST | Collect Vision OCR result → `ocr_json_gcs_uri`, `page_count`, `confidence` *(stub)* |
+| `/v1/vision/start` | POST | Start Google Vision async OCR → `operation_name` (async, legacy) |
+| `/v1/vision/collect` | POST | Collect Vision OCR result → `ocr_json_gcs_uri`, `page_count`, `confidence` (async, legacy) |
+| `/v1/vision/run` | POST | **Sync OCR orchestrator** (start→poll→collect→normalize) → `VISION_RUN_COLLECTED` *(prod 2026-06-17)* |
 | `/health/ready` | GET | Readiness check (DB, blob, parser, memory) |
 | `/health/live` | GET | Liveness check |
 

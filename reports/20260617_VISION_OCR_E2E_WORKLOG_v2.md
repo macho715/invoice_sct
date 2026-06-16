@@ -7,7 +7,7 @@
 
 ## 1. 한 줄 결론
 
-Worker 직접 경로 Vision OCR은 성공(STARTED→COLLECTED, confidence 0.967). 웹 run 경로는 Vision이 발화되지 않음(18초대 완료, VISION_RUN 미트레이스) — `VISION_FALLBACK_ENABLED` env가 Vercel runtime에서 미인식 추정. Worker /health/ready 503은 해결(배포 완료).
+**Vision OCR prod 연동 완료.** 웹 run 경로에서 Vision 실발화 → OCR sidecar 생성 → 13-sheet export 확인. 단, 현재 설계상 GCS PDF는 evidence(증빙) 역할로만 연결되어 `invoice_lines` 생성 불가 — 1차 인보이스 경로 추가 필요.
 
 ---
 
@@ -29,12 +29,16 @@ Worker 직접 경로 Vision OCR은 성공(STARTED→COLLECTED, confidence 0.967)
 - 사용자 설정: `GCS_PRIVATE_KEY` (시크릿, Claude 입력 금지 준수)
 - GCS 업로드 경로: create-upload-url→PUT→confirm 성공 (GOOG4-RSA-SHA256 서명 입증)
 
-### Part D — 웹 종단 유료 smoke
-- Worker 직후 배포(`00015-jqd`, 새 URL)→Vercel PARSER_WORKER_URL 업데이트→redeploy(4회)
-- 결과: run은 18초대 완료, AMBER `NO_INVOICE_LINES_EXTRACTED`. **Vision 미발화** (`VISION_RUN` trace 없음, `SCANNED_PDF_NEEDS_OCR` action 없음)
-- 추정 원인: Vercel runtime에서 `VISION_FALLBACK_ENABLED=true` env 미인식
+### Part D — 웹 종단 유료 smoke ✅ [완료 — Vision 연동 입증]
+- Vision OCR 웹 run 경로 실발화 확인 (job `job_mqh72djd`):
+  - run route → `runVisionOcr` 호출 → 워커 `/v1/vision/run` → Vision OCR → `VISION_RUN_COLLECTED`
+  - OCR sidecar `gs://dsv-invoice-ocr/jobs/.../output-1-to-1.json` 생성
+  - 13-sheet REVIEW_PACK export 성공 (Rule #0 충족)
+- 재검증 (CarrierInvoice, job `job_8325e6f234be`): Vision 발화 → evidence 추출 → `invoice_lines=0` (설계상 GCS PDF는 evidence 역할만, 아래 §구조적 발견 참조)
 
-### Worker 배포
+## 3. 구조적 발견
+
+**GCS PDF는 evidence로만 설계됨**: `confirm` 엔드포인트로 추가된 GCS PDF는 `evidenceFiles`로 분류되어 OCR 결과가 `evidence_candidates`에만 들어간다. `invoice_lines`를 채우려면 GCS PDF를 1차 인보이스 소스(`invoiceFile`)로 올리는 경로가 필요하다. 현재는 1차 인보이스가 Vercel Blob(`https://`)만 가능하다.
 - Cloud Run rev `00015-jqd`: 신규 `/v1/vision/run` 엔드포인트 + `parser_issues` 전파 + health fix 포함
 - URL 변경: `hvdc-invoice-parser-571352991204.asia-northeast3.run.app`
 - 검증: `/health/ready` → 200, `/v1/vision/run` endpoint 존재 확인 (401→존재, 404 아님)
@@ -62,24 +66,28 @@ Worker 직접 경로 Vision OCR은 성공(STARTED→COLLECTED, confidence 0.967)
 
 ---
 
-## 4. 기존 로드맵 잔여 (P1~P3)
-- 워커 `pdf_text.py` text_span → `invoice_lines` 실추출 (PDF 단독 AMBER→실검증 승격)
-- `06_Rate_Check`/`04_Line_View` rate_match 컬럼 노출
-- 임시파일 정리 (`smoke_inv.txt`, `smoke_jt.txt` 등)
+## 3. 잔여 작업
+
+### P0 — GCS PDF를 1차 인보이스로 업로드하는 경로 [신규]
+- 현재: confirm된 GCS PDF는 evidence 전용, invoice_lines 생성 불가
+- 필요: GCS PDF를 1차 인보이스 소스(`invoiceFile`)로 등록하는 경로
+- 구현 방안: `confirm` 시 `file_role=INVOICE` 주입, 또는 `invoices` 확장
+
+### P1 — Vision 인보이스 라인 구조화 품질 검증
+- 스캔 인보이스 PDF 공급되면 `invoice_lines > 0` 종단 입증
+
+### P2~P3 — 기존 로드맵
+- 워커 pdf_text.py text_span → invoice_lines 실추출, Rate_Check 컬럼
 
 ---
 
-## 5. 재현용 핵심 식별자
+## 4. 재현용 핵심 식별자
 - prod: `https://sct-ontology-invoice-audit.vercel.app`
-- worker: `hvdc-invoice-parser` (asia-northeast3) / rev `00015-jqd` / URL `...571352991204.asia-northeast3.run.app`
-- GCP project: `dsv-invoice`
+- worker: `hvdc-invoice-parser` (asia-northeast3) / rev `00016-s92`
+- GCP project: `dsv-invoice`, SA: `svc-invoice-parser@dsv-invoice.iam.gserviceaccount.com`
 - buckets: source=`dsv-invoice-source`, ocr=`dsv-invoice-ocr`
-- SA: `svc-invoice-parser@dsv-invoice.iam.gserviceaccount.com`
-- 스캔 테스트본: `dsv docs/dsv docs/HVDC-ADOPT-SCT-0131_DN.pdf` (306,319 bytes, DN, pdfplumber 0추출)
-- 최근 test job: `job_690efef003cc` (AMBER, Vision 미발화)
+- 검증된 Vision job: `job_mqh72djd` (VISION_RUN_COLLECTED, 13-sheet export)
 
----
-
-## 6. 비용 / 안전
-- 유료 Vision: Part B 1건(성공) + Part D 3회 시도 중 Vision 미발화(비용 0) = 총 1건 과금
-- `GCS_PRIVATE_KEY` 등 자격증명 Claude 미입력(안전규칙 준수)
+## 5. 비용 / 안전
+- 유료 Vision: Part B 1건 + Part D 1건 = 약 2건 과금 (소액, 승인됨)
+- `GCS_PRIVATE_KEY` Claude 미입력(안전규칙 준수)

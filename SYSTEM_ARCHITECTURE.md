@@ -145,16 +145,20 @@ Browser-facing routes are public via middleware; all others require an `API_SECR
 | `/v1/export` | POST | Build the 13-sheet audit workbook |
 | `/v1/notebooklm/run` | POST | MarkItDown → NotebookLM first-pass orchestrator (callback to web) |
 | `/v1/preflight` | POST | Classify a PDF (text/scanned/encrypted) → `recommended_route`, `requires_vision`, `requires_markitdown` *(flag-gated)* |
-| `/v1/vision/start` | POST | Start Google Vision async OCR → `operation_name` *(stub until `VISION_ENABLED`)* |
-| `/v1/vision/collect` | POST | Collect Vision OCR result → `ocr_json_gcs_uri`, `page_count`, `confidence` *(stub)* |
+| `/v1/vision/start` | POST | Start Google Vision async OCR → `operation_name` (async, legacy) |
+| `/v1/vision/collect` | POST | Collect Vision OCR result → `ocr_json_gcs_uri`, `page_count`, `confidence` (async, legacy) |
+| `/v1/vision/run` | POST | **Sync OCR orchestrator** (start→poll→collect→normalize) → `VISION_RUN_COLLECTED` + `invoice_lines`/`evidence` *(prod operational 2026-06-17)* |
 | `/health/ready` | GET | Readiness check (DB, blob, parser, memory) |
 | `/health/live` | GET | Liveness check |
 
 Vision routes register on the worker with no router prefix (`include_router(vision_router, prefix="")`);
 each path already carries its own `/v1/` segment. Parse/export/notebooklm routers mount under `/v1`.
 
-> **Updated: 2026-06-16** — Vision OCR fallback wired end-to-end (already on `main`, deployed to prod):
-> - **Worker** (`app/routes/vision.py`) now serves `/v1/vision/start` (+ `/v1/vision/collect`) as an
+> **Updated: 2026-06-17** — Vision OCR operational in prod:
+> - **Worker** serves `/v1/vision/run` (sync orchestrator), `/v1/vision/start` + `/v1/vision/collect` (async, legacy).
+> - **Web run route**: sync `/v1/vision/run` replaces fire-and-forget. Scanned PDFs with `gs://` input → Vision OCR → evidence/lines merged before `cf.validate`.
+> - **Generic PDF line extraction** (`extract_generic_invoice_lines`): non-DSV text PDFs produce `invoice_lines` (table-first, text-fallback).
+> - **Worker `/health/ready`**: DB-optional graceful skip when `DATABASE_URL` unset (200, not 503).
 >   **async Google Vision document-text-detection OCR fallback for `gs://` PDF evidence; OCR JSON is
 >   written to GCS**, backed by `app/services/vision_client.py`, `vision_normalizer.py`, and
 >   `v_vision_rules.py`.
@@ -170,16 +174,17 @@ forced AMBER. Only scanned / line-less PDFs (0 lines extracted) still land in AM
 separate `pdf_json` branch still returns `invoice_lines=[]` (evidence candidates only). Parsing stays
 in the worker; the final verdict remains in Vercel (`gate-bridge.ts`).
 
-## Extraction & Vision (flag-gated, default off)
+## Extraction & Vision (prod operational since 2026-06-17)
 
-A scaffolded extraction path routes scanned/low-text PDFs through Google Vision OCR and MarkItDown
+Scanned/low-text PDFs processed through Google Vision OCR (GCS upload path) and generic
+PDF line extraction for text-based PDFs.
 before validation. It is **off by default** and ships as stubs; with all flags off, the standard
 parse → validate → export path is unchanged.
 
 | Piece | Location | Status |
 |---|---|---|
 | PDF preflight | `apps/worker-py/app/routes/vision.py` (`/v1/preflight`) | Classifies text/scanned/encrypted, recommends route |
-| Vision client | `apps/worker-py/app/services/vision_client.py` | **Stub** — returns `VISION_DISABLED` until `google-cloud-vision` installed + `VISION_ENABLED=true` |
+| Vision client | `apps/worker-py/app/services/vision_client.py` | Google Cloud Vision async document text detection. Prod operational (`VISION_ENABLED=true`, `DOCUMENT_TEXT_DETECTION`) |
 | Vision normalizer | `apps/worker-py/app/services/vision_normalizer.py` | OCR JSON → EvidenceCandidate + invoice fields (hash-only) |
 | GCS upload | `apps/web/src/app/api/files/create-upload-url` + `confirm` | **Dev-stub** local URL until GCS configured |
 | Artifact tracking | `extraction_artifacts`, `extraction_comparisons` (migration `0012`) | Stores sha256/confidence/GCS URI only — never raw text |
@@ -316,13 +321,12 @@ sensitive evidence in environment variables.
 
 | Component | Tests | Typecheck |
 |---|---|---|
-| apps/web | 195 | 0 errors |
-| apps/worker-py | 195 | py_compile OK |
-| apps/mcp-server | 186 | 0 errors |
-| **Total** | **576** | **0 errors** |
+| apps/web | 331 | 0 errors |
+| apps/worker-py | 209 | py_compile OK |
+| **Total** | **540** | **0 errors** |
 
-> Incl. the DSV SHPT hybrid PDF parser tests (#35/#36) and the Vision OCR fallback tests (#37).
-> Prior baseline (2026-06-15): web 167, worker-py 165, mcp-server 186 = 518.
+> Incl. sync Vision OCR tests, generic PDF line extraction, DSV SHPT hybrid, Vision OCR fallback.
+> Prior baseline (2026-06-16): web 195, worker-py 195 = 390. (mcp-server 186 excluded, unchanged.)
 
 ## History
 
