@@ -1,5 +1,6 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse } from 'next/server';
+import { withDeprecation } from '../deprecation';
 
 // Client-direct upload token minter. The browser calls `upload()` from
 // @vercel/blob/client, which POSTs here to mint a short-lived client token, then
@@ -30,7 +31,10 @@ export async function POST(req: Request): Promise<Response> {
   try {
     body = (await req.json()) as HandleUploadBody;
   } catch {
-    return NextResponse.json({ code: 'INVALID_REQUEST', message: 'invalid JSON body' }, { status: 400 });
+    return withDeprecation(
+      NextResponse.json({ code: 'INVALID_REQUEST', message: 'invalid JSON body' }, { status: 400 }),
+      '/api/files/blob-upload',
+    );
   }
 
   try {
@@ -45,11 +49,14 @@ export async function POST(req: Request): Promise<Response> {
       // No-op: see header comment. Registration happens via /api/files/register.
       onUploadCompleted: async () => {},
     });
-    return NextResponse.json(json);
+    return withDeprecation(NextResponse.json(json), '/api/files/blob-upload');
   } catch (e) {
-    return NextResponse.json(
-      { code: 'STORAGE_AUTH_FAILED', message: (e as Error).message },
-      { status: 400 },
+    return withDeprecation(
+      NextResponse.json(
+        { code: 'STORAGE_AUTH_FAILED', message: (e as Error).message },
+        { status: 400 },
+      ),
+      '/api/files/blob-upload',
     );
   }
 }
