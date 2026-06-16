@@ -216,7 +216,10 @@ class FinalReconRow(BaseModel):
     evidence_ref: Optional[str] = None
 
 class LineViewRow(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    # extra='ignore': web sends rate_match enrichment fields (risk, action, ...)
+    # the exporter does not yet write to cells. Tolerate them so the 13-sheet
+    # workbook still builds (Rule #0). Full column threading is follow-up work.
+    model_config = ConfigDict(extra='ignore')
     line_id: str
     shipment_ref: Optional[str] = None
     description: str
@@ -295,7 +298,10 @@ class DuplicateCheckRow(BaseModel):
     matched_job_id: Optional[str] = None
 
 class RateCheckRow(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    # extra='ignore': web sends rate_match enrichment fields (rate_type,
+    # ai_rate_status, variance_pct, contract_row_id, ...) the exporter does not
+    # yet write. Tolerate them so the 13-sheet workbook builds (Rule #0).
+    model_config = ConfigDict(extra='ignore')
     line_id: str
     charge_code: Optional[str] = None
     lane: Optional[str] = None

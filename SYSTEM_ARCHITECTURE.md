@@ -130,6 +130,15 @@ Browser-facing routes are public via middleware; all others require an `API_SECR
 
 ## Worker Boundary (`apps/worker-py`)
 
+> **Auth (Updated: 2026-06-16):** the Cloud Run service is deployed
+> `--allow-unauthenticated` (`allUsers → run.invoker`) and protected at the
+> **app layer** by the `PARSER_WORKER_TOKEN` bearer the web sends — not by Google
+> IAM identity tokens. Deploying with `--no-allow-unauthenticated` strips the
+> `allUsers` binding and breaks prod with a Cloud Run HTML 401 on `/v1/parse`.
+> See `apps/worker-py/deploy-cloudrun.sh`. Request bodies on `/v1/parse` and
+> `/v1/export` must stay schema-compatible with the web (`packages`/`apps/web`);
+> the export row models use `extra='ignore'` to tolerate web-side enrichment fields.
+
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/v1/parse` | POST | Parse uploaded file (xlsx/md/txt/pdf/pdf_json + DSV waybill). xlsx auto-detects the DSV summary-matrix layout (charge=column, shipment=row) and decomposes each non-empty charge cell into its own line (currency USD, `invoice_total` from the TOTAL AMOUNT (USD) row); falls back to the flat one-charge-per-row parser otherwise. **`pdf` runs the DSV SHPT hybrid parser → real `invoice_lines`** (doc-type + charge lines; reuses the pdfplumber text spans + table candidates, no 2nd pass). Aliases: `/parse` (deprecated), `/parse/pdf-json`. |
@@ -227,6 +236,23 @@ Assembled by `apps/web/src/lib/workbook-builder.ts`; rendered to xlsx by the wor
 > surfaced in the final manifest.
 
 ## Deployment
+
+### Topology (Updated: 2026-06-16)
+
+```mermaid
+flowchart LR
+  B["Browser"] --> WEB["apps/web<br/>Vercel"]
+  WEB --> NEON[("Neon Postgres<br/>DATABASE_URL")]
+  WEB --> BLOB[["Vercel Blob<br/>private"]]
+  WEB -->|"PARSER_WORKER_TOKEN bearer"| WORKER["hvdc-invoice-parser<br/>Cloud Run · asia-northeast3<br/>--allow-unauthenticated"]
+  WORKER -->|"/v1/parse · /v1/export"| WEB
+  WEB -.->|"signed upload (flag)"| GCS[["GCS source/evidence bucket"]]
+  WORKER -.->|"Vision OCR fallback (flag)"| OCR[["GCS OCR bucket"]]
+```
+
+> The worker is publicly invokable at the IAM layer (`--allow-unauthenticated`)
+> and protected by the `PARSER_WORKER_TOKEN` app bearer — see the Worker Boundary
+> Auth note. Dashed edges are flag-gated paths (default off).
 
 | App | Host | Status | Workflow |
 |---|---|---|---|

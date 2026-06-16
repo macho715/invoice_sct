@@ -24,12 +24,19 @@ SERVICE="${SERVICE:-hvdc-invoice-parser}"
 #   (Vision path) VISION_ENABLED, GOOGLE_CLOUD_PROJECT, GCS bucket var.
 # On Cloud Run, Vision/GCS auth uses the service's attached service account
 # (Application Default Credentials) — no GOOGLE_APPLICATION_CREDENTIALS key file.
+#
+# AUTH: --allow-unauthenticated is REQUIRED. The Vercel web app calls /v1/parse
+# and /v1/export with an app-level bearer (PARSER_WORKER_TOKEN), NOT a Google
+# IAM identity token, so the service must be publicly invokable at the IAM layer
+# (allUsers → roles/run.invoker) while the app enforces the token. Using
+# --no-allow-unauthenticated strips the allUsers binding on every deploy and
+# breaks production with a Cloud Run HTML 401 on /v1/parse. Do not flip this back.
 gcloud run deploy "${SERVICE}" \
   --project "${GCP_PROJECT}" \
   --region "${GCP_REGION}" \
   --source . \
   --port 8000 \
-  --no-allow-unauthenticated \
+  --allow-unauthenticated \
   --min-instances 0 \
   --max-instances 5 \
   --memory 1Gi \

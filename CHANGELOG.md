@@ -1,5 +1,38 @@
 # Changelog
 
+## Worker schema-drift fix — parse/export web↔Cloud Run sync - 2026-06-16
+
+> **Scope:** Production upload→13-sheet Excel was broken by a two-layer schema
+> drift between the Vercel web app and the deployed Cloud Run worker
+> (`hvdc-invoice-parser`, `asia-northeast3`). Diagnosed by reproducing the full
+> `ingest → run → export` flow against prod; fixed and re-verified end-to-end
+> (valid 13-sheet xlsx downloads, ZERO verdict included — Rule #0).
+
+### Fixed
+
+- **parse `422 extra_forbidden: workflow_type`** — the deployed worker predated
+  the DOMESTIC feature, so `ParseRequest` had no `workflow_type` field while the
+  web sends it. Redeployed the worker from current branch code (which already has
+  `workflow_type` at `schemas.py:69`). Revision `00010` → `00012`.
+- **export `500` / `EXPORT_FAILED`** — `apps/worker-py/app/schemas.py`: switched
+  `LineViewRow` and `RateCheckRow` from `extra='forbid'` to `extra='ignore'` so
+  the worker tolerates the rate_match enrichment fields the web now sends to
+  `/v1/export` (`risk`, `action`, `ai_rate_status`, `rate_type`, `variance_pct`,
+  `contract_row_id`, ...). The 13-sheet workbook builds again (Rule #0). Commit `e51f924`.
+- **Cloud Run `401 Unauthorized` regression** — `apps/worker-py/deploy-cloudrun.sh`:
+  changed `--no-allow-unauthenticated` → `--allow-unauthenticated`. The web calls
+  `/v1/parse` and `/v1/export` with an app-level bearer (`PARSER_WORKER_TOKEN`),
+  not a Google IAM identity token, so the service must keep the `allUsers →
+  run.invoker` binding; the previous flag stripped it on every deploy and broke
+  prod with a Cloud Run HTML 401. Documented inline so it is not flipped back.
+  Commit `f8cb95b`.
+
+### Known follow-up
+
+- rate_match enrichment fields are now **accepted but not yet written** to the
+  `06_Rate_Check` / `04_Line_View` sheets — the exporter (`xlsx.py`) still emits
+  the prior fixed column set. Threading the new columns is outstanding feature work.
+
 ## DOMESTIC workflow — full pipeline (UI, parser, MCP tool, gate, rate cards) - 2026-06-16
 
 > **Scope:** Build the complete DOMESTIC invoice audit pipeline — upload-form toggle,
