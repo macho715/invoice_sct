@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function RunAuditButton({ jobId, disabled }: { jobId: string; disabled: boolean }) {
+export default function RunAuditButton({ jobId, jobToken, disabled }: { jobId: string; jobToken: string | null; disabled: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,7 +13,7 @@ export default function RunAuditButton({ jobId, disabled }: { jobId: string; dis
       const res = await fetch('/api/invoice-audit/run', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ job_id: jobId })
+        body: JSON.stringify({ job_id: jobId, job_token: jobToken })
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));

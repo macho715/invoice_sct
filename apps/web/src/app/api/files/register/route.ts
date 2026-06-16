@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { STORE } from '@/lib/job-store';
 import { httpForError, type ErrorCode } from '@/lib/error-codes';
 import { SourceFileSchema } from '@/lib/types';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { createJobToken, requireJobToken } from '@/lib/job-token';
 
 // Register a file that the browser already streamed straight to Vercel Blob via
 // the client-direct upload path (/api/files/blob-upload). This is the >4.5MB
@@ -27,6 +28,18 @@ const ALLOWED_EXT: Record<string, 'xlsx' | 'md' | 'txt' | 'pdf'> = {
 
 function err(code: ErrorCode, message: string, extra: Record<string, unknown> = {}) {
   return NextResponse.json({ code, message, ...extra }, { status: httpForError(code) });
+}
+
+async function verifyBlobBytes(blobUrl: string, expectedSize: number, expectedSha256: string): Promise<void> {
+  const res = await fetch(blobUrl);
+  if (!res.ok) {
+    throw new Error(`blob fetch failed: HTTP ${res.status}`);
+  }
+  const bytes = Buffer.from(await res.arrayBuffer());
+  const actualSha256 = createHash('sha256').update(bytes).digest('hex');
+  if (bytes.byteLength !== expectedSize || actualSha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+    throw new Error('blob bytes do not match declared size or sha256');
+  }
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -69,12 +82,20 @@ async function handleRegister(req: Request): Promise<Response> {
   if (jobIdIn) {
     const existing = await STORE.getJob(jobIdIn);
     if (!existing) return err('JOB_NOT_FOUND', 'unknown job_id');
+    const tokenError = requireJobToken(req, existing, body);
+    if (tokenError) return tokenError;
     if (existing.status !== 'UPLOADED' && existing.status !== 'QUEUED') {
       return err('INVALID_STATE', `cannot add files to job in status ${existing.status}`);
     }
     job = existing;
   } else {
     job = await STORE.createJob({ created_by: userId });
+  }
+
+  try {
+    await verifyBlobBytes(blobUrl, sizeBytes, sha256);
+  } catch (e) {
+    return err('INVALID_REQUEST', (e as Error).message);
   }
 
   const sourceFile = SourceFileSchema.parse({
@@ -95,7 +116,7 @@ async function handleRegister(req: Request): Promise<Response> {
   await STORE.appendTrace(job.job_id, { step: 'UPLOAD', input_ref: sourceFile.blob_ref, output_ref: job.job_id, source_hash: sourceFile.sha256 });
 
   return NextResponse.json(
-    { job_id: job.job_id, file_ids: [sourceFile.file_id], status: 'UPLOADED', blob_ref: sourceFile.blob_ref },
+    { job_id: job.job_id, job_token: createJobToken(job), file_ids: [sourceFile.file_id], status: 'UPLOADED', blob_ref: sourceFile.blob_ref },
     { status: 201 },
   );
 }

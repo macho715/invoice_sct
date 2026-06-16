@@ -20,8 +20,9 @@ async function sha256Hex(file: File): Promise<string> {
 async function uploadLargeFile(
   file: File,
   jobId: string | null,
+  jobToken: string | null,
   onProgress: (pct: number) => void,
-): Promise<string> {
+): Promise<{ jobId: string; jobToken: string }> {
   const { upload } = await import('@vercel/blob/client');
   const blob = await upload(file.name, file, {
     access: 'public',
@@ -38,12 +39,12 @@ async function uploadLargeFile(
       content_type: file.type,
       size_bytes: file.size,
       sha256,
-      ...(jobId ? { job_id: jobId } : {}),
+      ...(jobId ? { job_id: jobId, job_token: jobToken } : {}),
     }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(`${file.name}: ${body.code} — ${body.message}`);
-  return body.job_id as string;
+  return { jobId: body.job_id as string, jobToken: body.job_token as string };
 }
 
 export default function UploadForm() {
@@ -78,17 +79,21 @@ export default function UploadForm() {
       // Files >4.5MB stream client-direct to Blob (uploadLargeFile); smaller files
       // go through /api/files/ingest. Either way the same job_id threads through.
       let jobId: string | null = null;
+      let jobToken: string | null = null;
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size > LARGE_FILE_THRESHOLD) {
-          jobId = await uploadLargeFile(file, jobId, pct =>
+          const uploaded = await uploadLargeFile(file, jobId, jobToken, pct =>
             setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
+          jobId = uploaded.jobId;
+          jobToken = uploaded.jobToken;
           continue;
         }
         setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name}`);
         const fd = new FormData();
         fd.set('file', file);
         if (jobId) fd.set('job_id', jobId);
+        if (jobToken) fd.set('job_token', jobToken);
         const r = await fetch('/api/files/ingest', {
           method: 'POST',
           body: fd,
@@ -97,20 +102,21 @@ export default function UploadForm() {
         const body = await r.json();
         if (!r.ok) { setErr(`${file.name}: ${body.code} — ${body.message}`); setBusy(false); setProgress(null); return; }
         jobId = jobId ?? body.job_id;
+        jobToken = jobToken ?? body.job_token;
       }
-      if (jobId) {
+      if (jobId && jobToken) {
         setProgress('검증 실행 중…');
         const runRes = await fetch('/api/invoice-audit/run', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId })
+          body: JSON.stringify({ job_id: jobId, job_token: jobToken })
         });
         if (!runRes.ok) {
           const runBody = await runRes.json().catch(() => ({ message: `HTTP ${runRes.status}` }));
           setErr(`검증 실행 실패: ${runBody.code ?? 'ERROR'} — ${runBody.message ?? 'unknown'}`);
           return;
         }
-        router.push(`/invoice-audit/jobs/${jobId}`);
+        router.push(`/invoice-audit/jobs/${jobId}?job_token=${encodeURIComponent(jobToken)}`);
       }
     } catch (e) {
       setErr((e as Error).message);

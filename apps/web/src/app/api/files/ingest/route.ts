@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { uploadToBlob } from '@/lib/blob';
 import { createJobStore, STORE } from '@/lib/job-store';
-import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
+import { httpForError, type ErrorCode } from '@/lib/error-codes';
 import { SourceFileSchema } from '@/lib/types';
 import { randomUUID } from 'node:crypto';
+import { createJobToken, requireJobToken } from '@/lib/job-token';
 
 export const runtime = 'nodejs';
 void createJobStore;
@@ -52,6 +53,8 @@ async function ingestFile(req: Request): Promise<Response> {
   if (jobId) {
     const existing = await STORE.getJob(jobId);
     if (!existing) return err('JOB_NOT_FOUND', 'unknown job_id');
+    const tokenError = requireJobToken(req, existing, form);
+    if (tokenError) return tokenError;
     if (existing.status !== 'UPLOADED' && existing.status !== 'QUEUED') {
       return err('INVALID_STATE', `cannot add files to job in status ${existing.status}`);
     }
@@ -73,5 +76,5 @@ async function ingestFile(req: Request): Promise<Response> {
   await STORE.addSourceFile(job.job_id, { ...sourceFile, blob_url: blobRes.blob_url } as typeof sourceFile & { blob_url: string });
   await STORE.updateJob(job.job_id, { status: 'UPLOADED' });
   await STORE.appendTrace(job.job_id, { step: 'UPLOAD', input_ref: sourceFile.blob_ref, output_ref: job.job_id, source_hash: blobRes.sha256 });
-  return NextResponse.json({ job_id: job.job_id, file_ids: [sourceFile.file_id], status: 'UPLOADED', sha256: blobRes.sha256, blob_ref: blobRes.blob_ref }, { status: 201 });
+  return NextResponse.json({ job_id: job.job_id, job_token: createJobToken(job), file_ids: [sourceFile.file_id], status: 'UPLOADED', sha256: blobRes.sha256, blob_ref: blobRes.blob_ref }, { status: 201 });
 }

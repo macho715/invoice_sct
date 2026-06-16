@@ -7,6 +7,7 @@ import { EXPORTS_MAP, isDevStub } from '@/lib/export-store';
 import { evaluateApprovalGate, type ExportType } from '@/lib/approval-gate';
 import { buildExportRequest } from '@/lib/workbook-builder';
 import type { ExportRequest } from '@/lib/types';
+import { requireJobToken } from '@/lib/job-token';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +22,8 @@ export async function GET(req: Request): Promise<Response> {
 
   const job = await STORE.getJob(jobId);
   if (!job) return err('JOB_NOT_FOUND', 'unknown job_id');
+  const tokenError = requireJobToken(req, job);
+  if (tokenError) return tokenError;
 
   const exportType = (url.searchParams.get('export_type') || 'FINAL_APPROVED') as ExportType;
 
