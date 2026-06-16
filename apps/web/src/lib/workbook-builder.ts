@@ -155,19 +155,28 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
 
     const matchedRate = validation?.rate_checks?.find(r => r.line_id === line.line_id);
     const matchedGate = validation?.gate_results?.find(g => g.line_id === line.line_id);
+    const matchedTypeB = validation?.type_b_results?.find(t => t.line_id === line.line_id);
+    const matchedNormalized = validation?.normalized_lines?.find(n => n.line_id === line.line_id);
+    const matchedEvidenceFinding = validation?.doc_guardian_results?.find(d => d.line_id === line.line_id);
+    const matchedEvidenceRequirement = validation?.evidence_requirements?.find(e => e.line_id === line.line_id);
+    const evidenceStatus = line.evidence_status
+      ?? (matchedEvidenceFinding?.severity === 'ZERO' ? 'MISSING'
+        : matchedEvidenceFinding?.severity === 'AMBER' ? 'PARTIAL'
+        : matchedEvidenceRequirement ? 'MATCHED'
+        : null);
 
     return {
       line_id: line.line_id,
       shipment_ref: line.shipment_ref ?? null,
       description: line.description,
-      for_charge_component: line.for_charge_component ?? null,
-      type_b: line.type_b ?? null,
+      for_charge_component: line.for_charge_component ?? matchedNormalized?.charge_code ?? matchedTypeB?.type_b ?? null,
+      type_b: line.type_b ?? matchedTypeB?.type_b ?? null,
       amount: line.amount,
       currency: line.currency,
       rate_source: line.rate_source_candidate ?? null,
       rate_status: matchedRate?.rate_status ?? null,
       validity_status: matchedRate?.validity_status ?? null,
-      evidence_status: line.evidence_status ?? null,
+      evidence_status: evidenceStatus,
       gate_status: matchedGate?.gate_status ?? null,
       band: matchedCostGuard?.band ?? null,
       delta_pct: deltaPct,

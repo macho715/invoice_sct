@@ -50,6 +50,7 @@ export const SctValidationResultSchema = z.object({
   })),
   doc_guardian_results: z.array(z.object({ line_id: z.string().nullish(), code: z.string(), severity: z.enum(['AMBER','ZERO']) })),
   gate_results: z.array(z.object({ line_id: z.string().nullish(), gate_status: VerdictSchema, reason_codes: z.array(z.string()) })),
+  normalized_lines: z.array(z.object({ line_id: z.string(), charge_code: z.string().nullish(), unit: z.string().nullish() })).optional(),
   confidence: z.number().min(0).max(1),
   reason_codes: z.array(z.string()),
   warnings: z.array(z.string())

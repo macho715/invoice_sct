@@ -53,4 +53,16 @@ describe('check_evidence_required', () => {
     expect(result.present_evidence).toEqual(['BL', 'DN', 'PO']);
     expect(result.missing_evidence).toEqual([]);
   });
+
+  it('matches evidence aliases found in document text spans', async () => {
+    const result = await run({
+      line_id: 'L8',
+      charge_code: 'CUSTOMS',
+      sct_code: null,
+      present_evidence: ['Scanned Bill of Entry and customs declaration attached']
+    });
+
+    expect(result.verdict).toBe('PASS');
+    expect(result.missing_evidence).toEqual([]);
+  });
 });

@@ -35,10 +35,27 @@ const EVIDENCE_MAP: Record<string, string[]> = {
   GENERAL: ['DN', 'PO']
 };
 
+const EVIDENCE_ALIASES: Record<string, RegExp[]> = {
+  BL: [/\bBL\b/i, /bill of lading/i],
+  DN: [/\bDN\b/i, /delivery note/i, /dispatch note/i],
+  PO: [/\bPO\b/i, /purchase order/i],
+  BOE: [/\bBOE\b/i, /bill of entry/i],
+  CUSTOMS_DECL: [/customs declaration/i, /customs proof/i],
+  DEM_DET_CALC: [/demurrage/i, /detention/i, /free\s*time/i, /tariff/i],
+  WAREHOUSE_RECEIPT: [/warehouse receipt/i, /storage invoice/i],
+  LIFT_LOG: [/lift log/i, /terminal invoice/i, /port invoice/i],
+  INSURANCE_CERT: [/insurance cert/i, /insurance certificate/i]
+};
+
+function hasEvidence(required: string, present: string[]): boolean {
+  const aliases = EVIDENCE_ALIASES[required] ?? [new RegExp(`\\b${required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')];
+  return present.some((doc) => aliases.some((pattern) => pattern.test(doc)));
+}
+
 export async function check_evidence_required(input: CheckEvidenceRequiredInput): Promise<CheckEvidenceRequiredOutput> {
   const required = EVIDENCE_MAP[input.charge_code] ?? EVIDENCE_MAP['GENERAL'];
   const present = input.present_evidence ?? [];
-  const missing = required.filter((r) => !present.includes(r));
+  const missing = required.filter((r) => !hasEvidence(r, present));
   let verdict: MCP_Verdict;
   if (missing.length === 0) verdict = 'PASS';
   else if (missing.length <= 1) verdict = 'AMBER';

@@ -70,7 +70,18 @@ function normCostguard(raw: any): CostguardNorm[] {
 
 /** Map an evidence_index entry to a string token for BOE/evidence pattern checks. */
 function evidenceToken(e: any): string {
-  return String(e?.type ?? e?.doc_type ?? e?.evidence_type ?? e?.text ?? e ?? '');
+  if (typeof e === 'string') return e;
+  const parts = [
+    e?.type,
+    e?.doc_type,
+    e?.evidence_type,
+    e?.text,
+    e?.text_span,
+    e?.matched_reference,
+    e?.source_ref,
+    e?.waybill_fields ? JSON.stringify(e.waybill_fields) : null
+  ].filter(Boolean);
+  return parts.join(' ');
 }
 
 function sha256(value: string): string {
