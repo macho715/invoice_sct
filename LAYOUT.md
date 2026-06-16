@@ -73,6 +73,36 @@ SCT_ONTOLOGY-main/
 └── README.md                   # Project overview + quick start
 ```
 
+## Module Dependency Graph
+
+> Added 2026-06-16. `apps/web` and `apps/mcp-server` (TypeScript) import the shared
+> `packages/*`; `apps/worker-py` (Python) is standalone and reached over HTTP.
+
+```mermaid
+flowchart TD
+  subgraph apps
+    WEB["apps/web<br/>Next.js 15 · Vercel"]
+    WORKER["apps/worker-py<br/>FastAPI · Cloud Run"]
+    MCP["apps/mcp-server<br/>Hono · Cloud Run"]
+  end
+  subgraph packages
+    TOOLS["packages/tools<br/>15 MCP tools"]
+    DB["packages/database<br/>Neon pool"]
+    CONTRACTS["packages/contracts<br/>Zod schemas"]
+    SHARED["packages/shared<br/>hash / redaction"]
+    TEL["packages/telemetry<br/>OpenTelemetry"]
+  end
+  WEB --> TOOLS
+  WEB --> DB
+  WEB --> CONTRACTS
+  WEB --> SHARED
+  WEB --> TEL
+  MCP --> TOOLS
+  MCP --> DB
+  MCP --> TEL
+  WEB -->|"HTTP /v1/parse · /v1/export"| WORKER
+```
+
 ## Directory Responsibilities
 
 | Path | Responsibility |

@@ -4,6 +4,16 @@
 **Status:** Final (supersedes earlier architecture sketches)
 **Scope:** 3-layer separation of concerns for HVDC invoice audit pipeline
 
+> **Status update (2026-06-16) — reflects actual operation.** This document describes
+> the *target* NotebookLM-centric flow. The **production path is now direct-parse**:
+> `apps/worker-py` performs `/v1/parse` (pdfplumber / DSV SHPT hybrid → real
+> `invoice_lines`) and `/v1/export` (13-sheet workbook), which exceeds the
+> "orchestrator only" Worker role defined below. The NotebookLM extraction flow in
+> §2 is **flag-gated and off by default** (`NOTEBOOKLM_ENABLED=false`). The role
+> **boundary invariants still hold** — Worker and NoteLM never produce the final
+> PASS/AMBER/ZERO verdict; that authority remains in Vercel (`gate-bridge.ts`). See
+> `CLAUDE.md → Architecture Status (2026-06-14 audit)` for the tracked deviations.
+
 ---
 
 ## 1. Final Role Definition
