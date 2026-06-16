@@ -20,8 +20,12 @@ downloadable final Excel (13-sheet audit pack). OR semantics, never AND:
 
 - `xlsx` / `md` / `txt` present → it is the invoice source; PDFs are evidence.
 - No structured doc → the first PDF becomes the invoice source; remaining PDFs are evidence.
-- A PDF-only upload that yields 0 structured lines is routed to **AMBER / REVIEW_REQUIRED**
-  (`NO_INVOICE_LINES_EXTRACTED`) and still exports. A PDF-only upload is **never** rejected with 409.
+- (2026-06-16) A native-text **DSV SHPT PDF** is now parsed into **real `invoice_lines`**
+  (doc-type classification + charge-line extraction, see [DSV SHPT PDF parsing](#dsv-shpt-pdf-parsing)),
+  so PDF-only uploads can reach real validation instead of a forced AMBER.
+- A PDF-only upload that still yields 0 structured lines (scanned / line-less PDF) is routed to
+  **AMBER / REVIEW_REQUIRED** (`NO_INVOICE_LINES_EXTRACTED`) and still exports. A PDF-only upload
+  is **never** rejected with 409.
 - Verdict is **always** stamped in the workbook; blocked/unverified items are labeled, not withheld.
 
 ## Architecture
@@ -32,7 +36,7 @@ Three apps plus shared packages. Canonical role definition:
 | Layer | Role | Must not do |
 | --- | --- | --- |
 | **`apps/web`** (Next.js 15, Vercel) | Upload, audit orchestration, gate (PASS/AMBER/ZERO/FAILED), approval, 13-sheet workbook, NotebookLM callback receiver. **Final audit authority.** | Directly automate Chrome / NotebookLM. |
-| **`apps/worker-py`** (FastAPI, Google Cloud Run) | Parse (`xlsx/md/txt/pdf/pdf_json` + DSV waybill), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet export, MarkItDown→NotebookLM orchestration. | Produce the final business verdict. |
+| **`apps/worker-py`** (FastAPI, Google Cloud Run) | Parse (`xlsx/md/txt/pdf/pdf_json` + DSV waybill); **DSV SHPT hybrid PDF parser** extracts real `invoice_lines` (doc-type + charge lines); PDF preflight + Google Vision OCR (flag-gated stub); 13-sheet export; MarkItDown→NotebookLM orchestration. | Produce the final business verdict. |
 | **`apps/mcp-server`** (Hono, Google Cloud Run) | Standalone JSON-RPC MCP server for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. | — |
 
 Shared packages: `packages/tools` (14 validation tools — single source of truth),
@@ -67,7 +71,7 @@ graph LR
 ```bash
 pnpm install
 pnpm --dir apps/web typecheck    # 0 errors
-pnpm --dir apps/web test         # 167 tests
+pnpm --dir apps/web test         # 195 tests
 pnpm --dir apps/web build
 ```
 
@@ -136,11 +140,22 @@ Upload form (`apps/web/src/components/upload-form.tsx`) calls
 
 **Worker** (`apps/worker-py`)
 
-- `POST /v1/parse` — parse source files (aliases `/parse` deprecated, `/parse/pdf-json`)
+- `POST /v1/parse` — parse source files (aliases `/parse` deprecated, `/parse/pdf-json`). PDF inputs run the DSV SHPT hybrid parser → real `invoice_lines` (native-text PDFs).
 - `POST /v1/export` — generate the 13-sheet workbook
 - `POST /v1/notebooklm/run` — MarkItDown → NotebookLM first-pass orchestrator
 - `POST /v1/preflight` — classify a PDF (text / scanned / encrypted) and recommend a route *(flag-gated)*
 - `POST /v1/vision/start` · `POST /v1/vision/collect` — Google Vision async OCR start/collect *(stub until `VISION_ENABLED`)*. (2026-06-16) `/v1/vision/start` also backs the `gs://` Vision OCR fallback (web fire-and-forget, flag `VISION_FALLBACK_ENABLED`).
+
+### DSV SHPT PDF parsing
+
+(2026-06-16) Native-text PDF uploads are run through the **DSV SHPT hybrid parser**
+(`apps/worker-py/app/parsers/dsv_pdf_hybrid.py`, ported in PR #35/#36). The `/v1/parse` PDF branch
+reuses the already-parsed pdfplumber text spans + table candidates (no second pdfplumber pass),
+classifies the document, and extracts charge lines into real `invoice_lines` with `type_b` and
+`evidence_status`. Doc types: `CARRIER_RHS`, `PORT_ALLIED`, `AIRPORT_FEES`, `BOE_CUSTOMS`,
+`DELIVERY_ORDER`. The worker only **parses** — the final PASS/AMBER/ZERO verdict is still computed in
+Vercel (`gate-bridge.ts`). Scanned / line-less PDFs extract 0 lines and fall back to AMBER (Rule #0).
+Scope: native-text only; OCR (Vision) for scanned PDFs is the flag-gated path below.
 
 ### Extraction & Vision (flag-gated, default off)
 
