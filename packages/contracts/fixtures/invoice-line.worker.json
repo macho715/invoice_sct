@@ -1,0 +1,23 @@
+{
+  "line_id": "l1",
+  "shipment_ref": "SHP-001",
+  "job_number": "JOB-001",
+  "description": "TRUCKING",
+  "normalized_description": "TRUCKING",
+  "qty": 2,
+  "rate": 50,
+  "rate_basis": "PER_TRUCK",
+  "currency": "AED",
+  "amount": 100,
+  "numeric_integrity_status": "PASS",
+  "numeric_delta": 0,
+  "rate_source_candidate": "CONTRACT",
+  "for_charge_component": "DOMESTIC_DELIVERY",
+  "type_b": "N",
+  "source_ref": {
+    "sheet": "Invoice",
+    "row": 2,
+    "col": "A",
+    "text_span": "TRUCKING 2 x 50 AED"
+  }
+}
