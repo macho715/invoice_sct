@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   JobStatusSchema,
   SourceFileSchema,
@@ -34,6 +36,17 @@ describe('types', () => {
       line_id: 'l1', description: 'TRUCKING', currency: 'AED', amount: 100.0
     });
     expect(ok.numeric_integrity_status ?? null).toBeNull();
+  });
+
+  it('InvoiceLineSchema accepts the worker InvoiceLine fixture', () => {
+    const fixturePath = path.resolve(__dirname, '../../../packages/contracts/fixtures/invoice-line.worker.json');
+    const fixture = JSON.parse(readFileSync(fixturePath, 'utf-8'));
+
+    const ok = InvoiceLineSchema.parse(fixture);
+
+    expect(ok.line_id).toBe('l1');
+    expect(ok.currency).toBe('AED');
+    expect(ok.amount).toBe(100);
   });
 
   it('GateResultSchema verdict is one of PASS/AMBER/ZERO/FAILED', () => {

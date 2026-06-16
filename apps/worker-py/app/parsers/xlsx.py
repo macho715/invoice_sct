@@ -145,6 +145,28 @@ def _cell_str(cell) -> str | None:
     s = str(cell).strip()
     return s if s else None
 
+def _currency_from_amount_header(header: object) -> str | None:
+    h = _normalize_key(str(header or ''))
+    if 'usd' in h:
+        return 'USD'
+    if 'aed' in h:
+        return 'AED'
+    return None
+
+def _amount_column_for_row(header_row: list, cmap: dict[str, int]) -> int:
+    amount_col = cmap['amount']
+    current_currency = _currency_from_amount_header(header_row[amount_col])
+    if current_currency != 'AED':
+        return amount_col
+
+    for idx, cell in enumerate(header_row):
+        if _currency_from_amount_header(cell) != 'USD':
+            continue
+        candidate_map = _detect_headers([cell])
+        if 'amount' in candidate_map:
+            return idx
+    return amount_col
+
 def _clean_header(s: str) -> str:
     """Collapse embedded newlines / repeated spaces in a column header."""
     return re.sub(r'\s+', ' ', str(s or '').strip())
@@ -238,16 +260,13 @@ def _try_parse_matrix(rows: list, *, ws_title: str, file_id: str, parser_version
         )
     return None
 
-def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version: str) -> NormalizedInvoice:
-    wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
+def _parse_xlsx_rows(rows: list, *, ws_title: str, file_id: str, parser_version: str) -> NormalizedInvoice:
     if not rows:
         raise ValueError("empty xlsx")
 
     # DSV summary-matrix layout (charge-per-column) — decompose into charge lines.
     # Falls through to the flat one-charge-per-row parser when not a matrix.
-    matrix = _try_parse_matrix(rows, ws_title=ws.title, file_id=file_id, parser_version=parser_version)
+    matrix = _try_parse_matrix(rows, ws_title=ws_title, file_id=file_id, parser_version=parser_version)
     if matrix is not None:
         return matrix
 
@@ -264,22 +283,24 @@ def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version
         raise ValueError("xlsx missing required columns (description, amount)")
 
     lines: list[InvoiceLine] = []
+    amount_col = _amount_column_for_row(list(rows[header_row_idx]), cmap)
+    amount_header_currency = _currency_from_amount_header(rows[header_row_idx][amount_col])
     for r_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
         desc = _cell_str(row[cmap['description']]) if 'description' in cmap else None
-        amt  = _cell_num(row[cmap['amount']])    if 'amount'    in cmap else None
+        amt  = _cell_num(row[amount_col]) if amount_col < len(row) else None
         if desc is None and amt is None:
             continue
-        currency = (_cell_str(row[cmap['currency']]) or 'AED') if 'currency' in cmap else 'AED'
+        currency = (_cell_str(row[cmap['currency']]) or amount_header_currency or 'AED') if 'currency' in cmap else (amount_header_currency or 'AED')
         if currency not in ('AED', 'USD'):
             currency = 'AED'
         line = InvoiceLine(
-            line_id=normalize_line_id(file_id, ws.title, r_idx, cmap['description']),
+            line_id=normalize_line_id(file_id, ws_title, r_idx, cmap['description']),
             description=desc or '(missing description)',
             currency=currency,
             amount=float(amt or 0.0),
             qty=_cell_num(row[cmap['qty']]) if 'qty' in cmap else None,
             rate=_cell_num(row[cmap['rate']]) if 'rate' in cmap else None,
-            source_ref={'sheet': ws.title, 'row': r_idx, 'col': str(cmap['description'])},
+            source_ref={'sheet': ws_title, 'row': r_idx, 'col': str(amount_col)},
             shipment_ref=_cell_str(row[cmap['shipment_ref']]) if 'shipment_ref' in cmap else None,
             job_number=_cell_str(row[cmap['job_number']]) if 'job_number' in cmap else None,
             rate_basis=_cell_str(row[cmap['rate_basis']]) if 'rate_basis' in cmap else None,
@@ -330,3 +351,33 @@ def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version
         parser_confidence=0.9,
         parser_version=parser_version
     )
+
+
+def parse_xlsx_bytes(raw: bytes, *, file_id: str, file_name: str, parser_version: str) -> NormalizedInvoice:
+    wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+    if not wb.worksheets:
+        raise ValueError("empty xlsx")
+
+    preferred = {
+        '04_line_view',
+        '90_source_data',
+        'invoice',
+    }
+    worksheets = sorted(
+        wb.worksheets,
+        key=lambda ws: (0 if ws.title.strip().lower() in preferred else 1, wb.worksheets.index(ws)),
+    )
+
+    first_error: ValueError | None = None
+    for ws in worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        try:
+            return _parse_xlsx_rows(rows, ws_title=ws.title, file_id=file_id, parser_version=parser_version)
+        except ValueError as exc:
+            if first_error is None:
+                first_error = exc
+            continue
+
+    if first_error is not None:
+        raise first_error
+    raise ValueError("empty xlsx")

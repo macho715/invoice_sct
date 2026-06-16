@@ -103,3 +103,68 @@ def test_header_fields_none_when_missing():
     assert ni.invoice_header.vendor is None
     assert ni.invoice_header.issue_date is None
     assert len(ni.invoice_lines) == 1
+
+def test_parses_line_view_when_decision_sheet_is_first():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '00_Decision'
+    ws.append(['job_id', 'verdict'])
+    ws.append(['job_1', 'AMBER'])
+    ws = wb.create_sheet('04_Line_View')
+    ws.append([
+        'line_id', 'shipment_ref', 'description', 'for_charge_component',
+        'type_b', 'amount', 'currency'
+    ])
+    ws.append([
+        'line_1', 'HVDC-001', 'MASTER DO CHARGE', 'MASTER DO CHARGE',
+        None, 80.0, 'USD'
+    ])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ni = parse_xlsx_bytes(
+        buf.getvalue(),
+        file_id='audit_pack',
+        file_name='audit_pack.xlsx',
+        parser_version='parser-0.1.0',
+    )
+
+    assert len(ni.invoice_lines) == 1
+    assert ni.invoice_lines[0].description == 'MASTER DO CHARGE'
+    assert ni.invoice_lines[0].amount == 80.0
+    assert ni.invoice_lines[0].currency == 'USD'
+    assert ni.invoice_lines[0].source_ref['sheet'] == '04_Line_View'
+
+def test_parses_shpiment_v32_line_view_total_usd_contract():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '00_Decision'
+    ws.append(['Overall Verdict'])
+    ws.append(['AMBER'])
+    ws = wb.create_sheet('03_Type_B_Summary')
+    ws.append(['Shipment_No', 'Customs', 'DO', 'INLAND', 'THC', 'Inspection', 'Detention', 'STROAGE', 'OTHERS', 'Total_AED', 'Total_USD', 'Line_Count'])
+    ws = wb.create_sheet('04_Line_View')
+    ws.append([
+        'Shipment_No', 'Source_Row_ID', 'Rate_Source', 'Description',
+        'Total_AED', 'Total_USD', 'TYPE_B', 'Evidence_Status'
+    ])
+    ws.append([
+        'HVDC-001', 'SRC-001', 'CONTRACT', 'Document delivery order fee',
+        367.30, 100.0, 'DO', 'AUTO_VERIFIED'
+    ])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ni = parse_xlsx_bytes(
+        buf.getvalue(),
+        file_id='shpiment_pack',
+        file_name='DSV_Audit_Pack.xlsx',
+        parser_version='parser-0.1.0',
+    )
+
+    assert len(ni.invoice_lines) == 1
+    assert ni.invoice_lines[0].shipment_ref == 'HVDC-001'
+    assert ni.invoice_lines[0].description == 'Document delivery order fee'
+    assert ni.invoice_lines[0].amount == 100.0
+    assert ni.invoice_lines[0].currency == 'USD'
+    assert ni.invoice_lines[0].for_charge_component == 'DO'
