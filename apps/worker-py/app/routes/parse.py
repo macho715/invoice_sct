@@ -65,6 +65,7 @@ def parse_deprecated_alias(req: ParseRequest) -> ParseResponse:
 def parse_v1(req: ParseRequest) -> ParseResponse:
     try:
         raw = _fetch_blob(req.blob_url)
+        source_sha256 = hashlib.sha256(raw).hexdigest()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f'BLOB_FETCH_FAILED: {e!s}')
 
@@ -169,7 +170,7 @@ def parse_v1(req: ParseRequest) -> ParseResponse:
     validate_numeric_integrity(ni.invoice_lines)
 
     parse_result_id = 'pr_' + hashlib.sha1(f"{req.job_id}|{req.file_id}|{req.parser_version}".encode()).hexdigest()[:12]
-    return ParseResponse(parse_result_id=parse_result_id, job_id=req.job_id, file_id=req.file_id, normalized=ni, source_data=source_data)
+    return ParseResponse(parse_result_id=parse_result_id, job_id=req.job_id, file_id=req.file_id, source_sha256=source_sha256, normalized=ni, source_data=source_data)
 
 @router.post('/parse/pdf-json', response_model=ParseResponse)
 def parse_pdf_json(req: ParseRequest) -> ParseResponse:

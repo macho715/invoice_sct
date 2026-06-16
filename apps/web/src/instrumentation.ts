@@ -6,7 +6,7 @@ export async function register() {
   // Only instrument in Node.js runtime (not Edge)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { initTelemetry } = await import('@invoice-audit/telemetry');
-    initTelemetry({
+    await initTelemetry({
       serviceName: 'sct-web',
       serviceVersion: process.env.npm_package_version ?? '0.0.0',
       otlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,

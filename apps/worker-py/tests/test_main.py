@@ -35,7 +35,9 @@ def test_parse_xlsx_via_http(monkeypatch):
     })
     assert r.status_code == 200, r.text
     body = r.json()
+    import hashlib
     assert body['file_id'] == 'f1'
+    assert body['source_sha256'] == hashlib.sha256(_xlsx_bytes()).hexdigest()
     assert body['normalized']['invoice_lines'][0]['description'] == 'TRUCKING'
     assert body['normalized']['invoice_lines'][0]['numeric_integrity_status'] == 'PASS'
 

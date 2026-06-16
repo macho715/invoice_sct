@@ -1,11 +1,8 @@
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { trace, SpanStatusCode, type Span, type Tracer } from '@opentelemetry/api';
+import { redactAttributes } from './redaction.js';
 
 export { SpanStatusCode };
+export { redactAttributes };
 export type { Span, Tracer };
 
 export type ServiceConfig = {
@@ -14,14 +11,38 @@ export type ServiceConfig = {
   otlpEndpoint?: string;
 };
 
-let _sdk: NodeSDK | null = null;
+type TelemetrySdk = {
+  start(): void;
+  shutdown(): Promise<void>;
+};
+
+let _sdk: TelemetrySdk | null = null;
+
+async function runtimeImport<T>(specifier: string): Promise<T> {
+  const importer = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<T>;
+  return importer(specifier);
+}
 
 /**
  * Bootstrap OTel SDK. Must be called only when OTEL_ENABLED=true.
  * Safe to call multiple times — subsequent calls are no-ops.
  */
-export function initTelemetry(config: ServiceConfig): void {
+export async function initTelemetry(config: ServiceConfig): Promise<void> {
   if (_sdk) return;
+
+  const [
+    { NodeSDK },
+    { getNodeAutoInstrumentations },
+    { OTLPTraceExporter },
+    { Resource },
+    { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION },
+  ] = await Promise.all([
+    runtimeImport<typeof import('@opentelemetry/sdk-node')>('@opentelemetry/sdk-node'),
+    runtimeImport<typeof import('@opentelemetry/auto-instrumentations-node')>('@opentelemetry/auto-instrumentations-node'),
+    runtimeImport<typeof import('@opentelemetry/exporter-trace-otlp-http')>('@opentelemetry/exporter-trace-otlp-http'),
+    runtimeImport<typeof import('@opentelemetry/resources')>('@opentelemetry/resources'),
+    runtimeImport<typeof import('@opentelemetry/semantic-conventions')>('@opentelemetry/semantic-conventions'),
+  ]);
 
   const exporter = new OTLPTraceExporter({
     url: config.otlpEndpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318/v1/traces',
@@ -77,24 +98,4 @@ export async function withSpan<T>(
       span.end();
     }
   });
-}
-
-/**
- * Redact P2 attributes before they reach the trace backend.
- * Keys that look like rates, amounts, identifiers, or PII are masked.
- */
-const P2_KEYS = /rate|amount|price|cost|trn|boe|bl_|bol|container|vessel|email|phone|pii|password|secret|token|key/i;
-
-export function redactAttributes(
-  attrs: Record<string, string | number | boolean>,
-): Record<string, string | number | boolean> {
-  const out: Record<string, string | number | boolean> = {};
-  for (const [k, v] of Object.entries(attrs)) {
-    if (P2_KEYS.test(k)) {
-      out[k] = '[REDACTED]';
-    } else {
-      out[k] = v;
-    }
-  }
-  return out;
 }

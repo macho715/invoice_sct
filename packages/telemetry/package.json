@@ -4,7 +4,8 @@
   "description": "OpenTelemetry bootstrap and span helpers for SCT_ONTOLOGY",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./redaction": "./src/redaction.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

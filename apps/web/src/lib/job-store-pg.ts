@@ -3,7 +3,7 @@ import pg from 'pg';
 import type { JobStore, Job, GateResultLite, TraceInput } from './job-store';
 import type {
   SourceFile, AuditTraceEntry, NormalizedInvoice,
-  SctValidationResult, ApprovalRecord, FxPolicy
+  SctValidationResult, ApprovalRecord, FxPolicy, SourceDataRow
 } from './types';
 
 const { Pool } = pg;
@@ -107,6 +107,19 @@ export function createPgJobStore(): JobStore | null {
       );
     },
 
+    async updateSourceFile(jobId: string, fileId: string, patch: Partial<Pick<SourceFile, 'sha256' | 'size_bytes' | 'parser_status'>>) {
+      const current = await pool.query('SELECT * FROM source_files WHERE job_id = $1 AND file_id = $2', [jobId, fileId]);
+      if (!current.rows[0]) return undefined;
+      const next = { ...mapSourceFileRow(current.rows[0]), ...patch };
+      const result = await pool.query(
+        `UPDATE source_files SET sha256 = $1, size_bytes = $2, parser_status = $3
+         WHERE job_id = $4 AND file_id = $5
+         RETURNING *`,
+        [next.sha256, next.size_bytes, next.parser_status, jobId, fileId]
+      );
+      return result.rows[0] ? mapSourceFileRow(result.rows[0]) : undefined;
+    },
+
     async listSourceFiles(jobId: string) {
       const result = await pool.query(
         'SELECT * FROM source_files WHERE job_id = $1 ORDER BY uploaded_at',
@@ -201,6 +214,25 @@ export function createPgJobStore(): JobStore | null {
       if (!result.rows[0]) return undefined;
       const row = result.rows[0];
       return (typeof row.invoice_json === 'string' ? JSON.parse(row.invoice_json) : row.invoice_json) as NormalizedInvoice;
+    },
+
+    async setParseSourceData(jobId: string, rows: SourceDataRow[]) {
+      await pool.query(
+        `INSERT INTO parse_source_data (job_id, source_data_json)
+         VALUES ($1, $2)
+         ON CONFLICT (job_id) DO UPDATE SET source_data_json = EXCLUDED.source_data_json, updated_at = NOW()`,
+        [jobId, JSON.stringify(rows)]
+      );
+    },
+
+    async getParseSourceData(jobId: string) {
+      const result = await pool.query(
+        'SELECT source_data_json FROM parse_source_data WHERE job_id = $1',
+        [jobId]
+      );
+      if (!result.rows[0]) return [];
+      const row = result.rows[0];
+      return (typeof row.source_data_json === 'string' ? JSON.parse(row.source_data_json) : row.source_data_json) as SourceDataRow[];
     },
 
     async setValidationResult(jobId: string, vr: SctValidationResult) {

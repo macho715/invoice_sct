@@ -1,9 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: [
+    '@opentelemetry/auto-instrumentations-node',
+    '@opentelemetry/exporter-trace-otlp-http',
+    '@opentelemetry/sdk-node',
+  ],
   experimental: {
     serverActions: { bodySizeLimit: '5mb' }
   },
-  transpilePackages: ['@invoice-audit/database', '@invoice-audit/tools'],
+  transpilePackages: ['@invoice-audit/database', '@invoice-audit/tools', '@invoice-audit/telemetry'],
   webpack: (config) => {
     config.resolve.extensionAlias = {
       '.js': ['.ts', '.tsx', '.js', '.jsx'],

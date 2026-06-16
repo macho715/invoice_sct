@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
+import { createGcsSignedUploadUrl, isGcsUploadEnabled } from '@/lib/gcs-upload';
 
 export const runtime = 'nodejs';
 
@@ -34,10 +35,35 @@ async function handleCreateUploadUrl(req: NextRequest) {
   // Dev stub: return local upload URL
   const jobId = `job_${Date.now().toString(36)}`;
   const fileId = `file_${Math.random().toString(36).slice(2, 10)}`;
+  const safeFilename = filename.replace(/[^\w.\-가-힣()[\], ]+/g, '_');
 
-  // In production, use GCS signed URL generation via @google-cloud/storage
-  // For now, return a dev-local ingestion reference
-  const gcsUri = `gs://hvdc-invoice-source-prod/source/${jobId}/${fileId}/${filename}`;
+  if (isGcsUploadEnabled()) {
+    const bucket = process.env.GCS_SOURCE_BUCKET || process.env.GCS_EVIDENCE_BUCKET;
+    if (!bucket) return err('STORAGE_AUTH_FAILED', 'GCS_SOURCE_BUCKET is required');
+    const objectName = `source/${jobId}/${fileId}/${safeFilename}`;
+    const signed = createGcsSignedUploadUrl({
+      bucket,
+      objectName,
+      contentType: mime_type,
+      expiresInSeconds: 15 * 60,
+    });
+    return NextResponse.json(
+      {
+        job_id: jobId,
+        file_id: fileId,
+        gcs_uri: signed.gcs_uri,
+        signed_upload_url: signed.signed_upload_url,
+        expires_at: signed.expires_at,
+        upload_method: 'PUT',
+        required_headers: { 'content-type': mime_type },
+        file_role: file_role || 'INVOICE',
+      },
+      { status: 201 },
+    );
+  }
+
+  // Dev-local fallback keeps existing tests and local upload flow working.
+  const gcsUri = `gs://hvdc-invoice-source-prod/source/${jobId}/${fileId}/${safeFilename}`;
   const signedUploadUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'}/api/files/ingest`;
 
   return NextResponse.json(

@@ -5,6 +5,8 @@ const mockGetResult = vi.fn();
 const mockGetNormalizedInvoice = vi.fn();
 const mockGetValidationResult = vi.fn();
 const mockGetApprovalRecord = vi.fn();
+const mockGetParseSourceData = vi.fn();
+const mockListTrace = vi.fn();
 
 vi.mock('../src/lib/job-store', () => ({
   STORE: {
@@ -13,6 +15,8 @@ vi.mock('../src/lib/job-store', () => ({
     getNormalizedInvoice: (...args: unknown[]) => mockGetNormalizedInvoice(...args),
     getValidationResult: (...args: unknown[]) => mockGetValidationResult(...args),
     getApprovalRecord: (...args: unknown[]) => mockGetApprovalRecord(...args),
+    getParseSourceData: (...args: unknown[]) => mockGetParseSourceData(...args),
+    listTrace: (...args: unknown[]) => mockListTrace(...args),
   },
 }));
 
@@ -97,10 +101,14 @@ function setupFullMocks() {
     warnings: [],
   });
   mockGetApprovalRecord.mockResolvedValue(null);
+  mockGetParseSourceData.mockResolvedValue([]);
+  mockListTrace.mockResolvedValue([]);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetParseSourceData.mockResolvedValue([]);
+  mockListTrace.mockResolvedValue([]);
 });
 
 // ---------- T16 TEST 1 ----------
@@ -137,6 +145,36 @@ describe('buildExportRequest - correct structure', () => {
       verdict: 'AMBER',
       watermark: 'SCT_AUDIT_DRAFT',
     });
+  });
+
+  it('includes PDF fixture source_data pdf_page and text_span_hash in 90_Source_Data rows', async () => {
+    setupFullMocks();
+    mockGetParseSourceData.mockResolvedValue([
+      {
+        file_id: 'file_pdf_fixture',
+        source_ref: 'SHP-001',
+        original_text: 'Fixture PDF text span for shipment SHP-001',
+        normalized_value: 'SHP-001',
+        confidence: 0.91,
+        routing_pattern: 'PDF_TEXT_SPAN',
+        pdf_page: 2,
+        text_span_hash: 'span_hash_fixture_001',
+        doc_type: 'WAYBILL',
+        shipment_id: 'SHP-001',
+        is_portal_fee: false,
+      },
+    ]);
+
+    const result = await buildExportRequest(JOB_ID);
+
+    expect(result.source_data_rows).toContainEqual(expect.objectContaining({
+      file_id: 'file_pdf_fixture',
+      pdf_page: 2,
+      text_span_hash: 'span_hash_fixture_001',
+      doc_type: 'WAYBILL',
+      shipment_id: 'SHP-001',
+      is_portal_fee: false,
+    }));
   });
 });
 
@@ -252,5 +290,62 @@ describe('buildExportRequest - band counts', () => {
     expect(result.decision_rows[0].zero_count).toBe(0);
     expect(result.decision_rows[0].amber_count).toBe(0);
     expect(result.decision_rows[0].costguard_band_summary).toBe('PASS: 0, WARN: 0, HIGH: 0, CRITICAL: 0');
+  });
+});
+
+
+describe('buildExportRequest - duplicate checks', () => {
+  it('populates duplicate_check_rows from duplicate validation results without raw vendor data', async () => {
+    setupFullMocks();
+    mockGetResult.mockResolvedValue(makeSampleResult({
+      verdict: 'ZERO' as const,
+      action_items: [{
+        action_id: 'act_dup_001',
+        severity: 'ZERO' as const,
+        line_id: '',
+        issue_type: 'DUPLICATE_INVOICE',
+        required_action: 'Duplicate invoice detected — hold payment and Finance approval required'
+      }]
+    }));
+    mockGetValidationResult.mockResolvedValue({
+      validation_id: 'val_dup_001',
+      job_id: JOB_ID,
+      sct_trace_id: 'trace_dup_001',
+      cf_mcp_tool_calls: [{ tool: 'check_duplicate_invoice', latency_ms: 42, status: 'OK' as const, request_ref: null, response_ref: null }],
+      type_b_results: [],
+      hs_uae_results: [],
+      rate_checks: [],
+      evidence_requirements: [],
+      costguard_results: makeSampleCostguardResults(),
+      doc_guardian_results: [],
+      gate_results: [],
+      confidence: 0.95,
+      reason_codes: ['DUPLICATE_INVOICE'],
+      warnings: [],
+      duplicate_checks: [{
+        vendor_hash: 'a'.repeat(64),
+        invoice_no_hash: 'b'.repeat(64),
+        verdict: 'ZERO',
+        reason_code: 'DUPLICATE_INVOICE',
+        duplicate_count: 1,
+        amount_hash: 'amount_hash_11500',
+        issue_date_hash: 'issue_date_hash_20260601',
+        matched_job_id: 'job_prior'
+      }]
+    } as any);
+
+    const result = await buildExportRequest(JOB_ID);
+
+    expect(result.action_items_rows.some(a => a.issue_type === 'DUPLICATE_INVOICE' && a.severity === 'ZERO')).toBe(true);
+    expect(result.duplicate_check_rows).toEqual([{
+      vendor_hash: 'a'.repeat(64),
+      invoice_no_hash: 'b'.repeat(64),
+      amount_hash: 'amount_hash_11500',
+      issue_date_hash: 'issue_date_hash_20260601',
+      match_type: 'DUPLICATE_INVOICE',
+      severity: 'ZERO',
+      matched_job_id: 'job_prior'
+    }]);
+    expect(JSON.stringify(result.duplicate_check_rows)).not.toContain('OFCO');
   });
 });

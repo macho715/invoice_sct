@@ -67,6 +67,13 @@ def test_issues_for_too_large():
     assert res.is_text_based is False
     assert res.pdf_page_count == 0
 
+def test_issues_for_encrypted_marker():
+    raw = b"%PDF-1.7\n1 0 obj<</Encrypt 2 0 R>>endobj\n%%EOF"
+    res = parse_pdf_text_bytes(raw, file_id="encrypted", file_name="encrypted.pdf", parser_version="p")
+    assert "PDF_ENCRYPTED" in res.parser_issues
+    assert res.is_text_based is False
+    assert res.pdf_page_count == 0
+
 def test_low_confidence_and_evidence_fallback():
     # use the low-text one; even if issues, evidence fallback should exist
     raw = _load("text-pdf-005.pdf")

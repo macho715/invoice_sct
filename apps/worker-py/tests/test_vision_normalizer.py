@@ -117,3 +117,52 @@ def test_uses_text_length_confidence_fallback():
     assert result.confidence == pytest.approx(0.5)
     assert result.issues == []
 
+
+def test_runs_dsv_vision_rules_on_synthetic_ocr_text():
+    vision_json = {
+        "responses": [
+            {
+                "fullTextAnnotation": {
+                    "text": (
+                        "RAIS HASSAN SAADI\n"
+                        "TAX INVOICE\n"
+                        "Shipment Ref HVDC-ADOPT-SCT-0123\n"
+                        "Invoice No: IN12345678\n"
+                        "1 Container Inspection Fee AED 130.00 6.50 136.50"
+                    ),
+                    "pages": [
+                        {
+                            "blocks": [
+                                {
+                                    "paragraphs": [
+                                        {
+                                            "words": [
+                                                {"confidence": 0.92},
+                                                {"confidence": 0.88},
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                }
+            }
+        ]
+    }
+
+    result = normalize_vision_output(
+        vision_json,
+        file_id="file_rhs_vision",
+        file_name="HVDC-ADOPT-SCT-0123.pdf",
+    )
+
+    assert result.dsv_parse_result is not None
+    assert result.dsv_parse_result["doc_type"] == "CARRIER_RHS"
+    assert result.dsv_parse_result["parser_verdict"] == "PASS"
+    assert result.dsv_parse_result["type_b"] == "Inspection"
+    assert result.dsv_parse_result["line_items"][0]["total_aed"] == pytest.approx(136.50)
+    assert any(
+        candidate.get("matched_reference") == "HVDC-ADOPT-SCT-0123"
+        for candidate in result.evidence_candidates
+    )

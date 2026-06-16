@@ -17,7 +17,7 @@ export interface CfMcpClient {
     reason_codes: string[];
     warnings: string[];
     normalized_lines: Array<{ line_id: string; charge_code: string | null; unit: string | null }>;
-    duplicate_checks: Array<{ vendor_hash: string; invoice_no_hash: string; verdict: string; reason_code: string | null; duplicate_count: number }>;
+    duplicate_checks: Array<{ vendor_hash: string; invoice_no_hash: string; verdict: string; reason_code: string | null; duplicate_count: number; amount_hash: string | null; issue_date_hash: string | null; matched_job_id: string | null }>;
     shipment_matches: Array<{ line_id: string; verdict: string; match_count: number; matches: Array<{ shipment_ref: string; confidence: number; matched_via: string }> }>;
     contract_validity_results: Array<{ vendor_hash: string; vendor_name: string; verdict: string; contract_id: string | null; reason_code: string | null }>;
     tax_vat_results: Array<{ line_id: string; verdict: string; expected_vat: number | null; applied_vat: number | null; reason_code: string | null }>;
@@ -75,6 +75,11 @@ function evidenceToken(e: any): string {
 
 function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function hashNullable(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  return sha256(String(value));
 }
 
 // --------------------------------------------------------------------------
@@ -231,7 +236,7 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
       }
 
       // Step 7: check_duplicate_invoice — per unique vendor+invoice_no
-      const duplicate_checks: Array<{ vendor_hash: string; invoice_no_hash: string; verdict: string; reason_code: string | null; duplicate_count: number }> = [];
+      const duplicate_checks: Array<{ vendor_hash: string; invoice_no_hash: string; verdict: string; reason_code: string | null; duplicate_count: number; amount_hash: string | null; issue_date_hash: string | null; matched_job_id: string | null }> = [];
       const seenVendorInvoice = new Set<string>();
       for (const line of processedLines) {
         const vendorName = line.vendor_name ?? line.vendor_id ?? null;
@@ -244,7 +249,7 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
         try {
           const vendorHash = sha256(vendorName);
           const invoiceNoHash = sha256(invoiceNo);
-          const dupResult = await callTool<{ verdict: string; duplicates: Array<unknown>; reason_code: string | null }>('check_duplicate_invoice', {
+          const dupResult = await callTool<{ verdict: string; duplicates: Array<{ amount?: number; issue_date?: string | null; job_id?: string }>; reason_code: string | null }>('check_duplicate_invoice', {
             vendor_hash: vendorHash,
             invoice_no_hash: invoiceNoHash,
             amount: line.amount,
@@ -256,7 +261,10 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
             invoice_no_hash: invoiceNoHash,
             verdict: dupResult.result.verdict,
             reason_code: dupResult.result.reason_code,
-            duplicate_count: (dupResult.result.duplicates ?? []).length
+            duplicate_count: (dupResult.result.duplicates ?? []).length,
+            amount_hash: hashNullable(typeof line.amount === 'number' ? line.amount.toFixed(2) : line.amount),
+            issue_date_hash: hashNullable(line.issue_date),
+            matched_job_id: dupResult.result.duplicates?.[0]?.job_id ?? null
           });
         } catch {
           toolCalls.push({ tool: 'check_duplicate_invoice', latency_ms: 0, status: 'ERROR' });

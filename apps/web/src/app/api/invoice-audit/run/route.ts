@@ -4,13 +4,90 @@ import { createParserClient } from '@/lib/parser-client';
 import { createCfMcpClient, McpUnavailableError } from '@/lib/cf-mcp-client';
 import { buildGateResult, checkReconciliation } from '@/lib/gate-bridge';
 import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
-import { getSignedDownloadUrl } from '@/lib/blob';
+import { getSignedDownloadUrl, streamFromBlob } from '@/lib/blob';
+import { createHash } from 'node:crypto';
+import type { SourceDataRow, SourceFile, Verdict } from '@/lib/types';
 
 export const runtime = 'nodejs';
 void createJobStore;
 
+type PdfParseIssueType = 'PDF_ENCRYPTED' | 'PDF_TOO_LARGE' | 'SCANNED_PAGE_DETECTED' | 'PDF_PARSE_UNSUPPORTED';
+
+function classifyPdfParseIssue(message: string): PdfParseIssueType | null {
+  const upper = message.toUpperCase();
+  if (upper.includes('PDF_ENCRYPTED')) return 'PDF_ENCRYPTED';
+  if (upper.includes('PDF_TOO_LARGE')) return 'PDF_TOO_LARGE';
+  if (upper.includes('SCANNED_PAGE_DETECTED')) return 'SCANNED_PAGE_DETECTED';
+  if (upper.includes('PARSE_PDF_UNSUPPORTED')) return 'PDF_PARSE_UNSUPPORTED';
+  return null;
+}
+
+const PENDING_SHA256_PLACEHOLDER = '0'.repeat(64);
+const VERDICT_RANK: Record<Verdict, number> = { PASS: 0, AMBER: 1, ZERO: 2, FAILED: 3 };
+
+function maxVerdict(a: Verdict, b: Verdict): Verdict {
+  return VERDICT_RANK[b] > VERDICT_RANK[a] ? b : a;
+}
+
 function err(code: ErrorCode, message: string) {
   return NextResponse.json({ code, message }, { status: httpForError(code) });
+}
+
+function normalizeSourceDataRows(rows: unknown): SourceDataRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    const textSpan = r.text_span ?? r.original_text ?? null;
+    const sourceRef = r.source_ref ?? r.matched_reference ?? r.shipment_id ?? null;
+    return {
+      file_id: String(r.file_id ?? r.source_file_id ?? ''),
+      source_ref: sourceRef == null ? null : String(sourceRef),
+      original_text: textSpan == null ? null : String(textSpan),
+      normalized_value: r.normalized_value == null ? (sourceRef == null ? null : String(sourceRef)) : String(r.normalized_value),
+      confidence: typeof r.confidence === 'number' ? r.confidence : null,
+      routing_pattern: r.routing_pattern == null ? 'PDF_TEXT_SPAN' : String(r.routing_pattern),
+      pdf_page: typeof r.pdf_page === 'number' ? r.pdf_page : null,
+      text_span_hash: r.text_span_hash == null ? null : String(r.text_span_hash),
+      doc_type: r.doc_type == null ? null : String(r.doc_type),
+      shipment_id: r.shipment_id == null ? null : String(r.shipment_id),
+      gate_score: typeof r.gate_score === 'number' ? r.gate_score : null,
+      gate_status: r.gate_status == null ? null : String(r.gate_status),
+      is_portal_fee: typeof r.is_portal_fee === 'boolean' ? r.is_portal_fee : null
+    };
+  }).filter((row) => row.file_id);
+}
+
+async function appendParseSourceData(jobId: string, rows: unknown): Promise<void> {
+  const normalized = normalizeSourceDataRows(rows);
+  if (normalized.length === 0) return;
+  const existing = await STORE.getParseSourceData(jobId);
+  await STORE.setParseSourceData(jobId, [...existing, ...normalized]);
+}
+
+async function verifyAndPersistSourceHashes(jobId: string, files: SourceFile[]): Promise<{ files: SourceFile[]; mismatch?: { file: SourceFile; actual: string } }> {
+  const verified: SourceFile[] = [];
+  for (const file of files) {
+    // GCS-stored objects (gs:// URIs from the Vision/OCR confirm path) cannot be
+    // byte-streamed from the Vercel runtime (no GCS client/credentials here), so we
+    // can't recompute their hash. Trust the stored sha256 and defer integrity to the
+    // GCS confirm step. Skip rehash so the audit proceeds (e.g. async Vision OCR fallback).
+    if (file.blob_ref.startsWith('gs://')) {
+      verified.push(file);
+      continue;
+    }
+    const bytes = await streamFromBlob(file.blob_ref);
+    const actual = createHash('sha256').update(bytes).digest('hex');
+    if (file.sha256 !== PENDING_SHA256_PLACEHOLDER && file.sha256 !== actual) {
+      return { files: verified, mismatch: { file, actual } };
+    }
+    if (file.sha256 === PENDING_SHA256_PLACEHOLDER || file.size_bytes !== bytes.byteLength) {
+      const updated = await STORE.updateSourceFile(jobId, file.file_id, { sha256: actual, size_bytes: bytes.byteLength });
+      verified.push(updated ?? { ...file, sha256: actual, size_bytes: bytes.byteLength });
+    } else {
+      verified.push(file);
+    }
+  }
+  return { files: verified };
 }
 
 async function parseBody(req: Request): Promise<{ job_id?: string } | null> {
@@ -37,8 +114,35 @@ export async function POST(req: Request): Promise<Response> {
   const job = await STORE.getJob(body.job_id);
   if (!job) return err('JOB_NOT_FOUND', 'unknown job_id');
   if (job.status !== 'UPLOADED' && job.status !== 'QUEUED') return err('INVALID_STATE', `cannot run from status ${job.status}`);
-  const files = await STORE.listSourceFiles(body.job_id);
+  let files = await STORE.listSourceFiles(body.job_id);
   if (files.length === 0) return err('INVALID_STATE', 'no source files');
+
+  try {
+    const hashCheck = await verifyAndPersistSourceHashes(body.job_id, files);
+    if (hashCheck.mismatch) {
+      const actionItems = [{
+        action_id: `act_hash_${body.job_id}`,
+        severity: 'ZERO' as const,
+        line_id: '',
+        issue_type: 'SOURCE_HASH_MISMATCH',
+        required_action: 'Uploaded source bytes do not match the stored source hash — re-upload and investigate storage integrity'
+      }];
+      await STORE.setResult(body.job_id, { gate_id: `gate_hash_${body.job_id}`, job_id: body.job_id, verdict: 'ZERO', line_results: [], action_items: actionItems } as any);
+      await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: 'ZERO' });
+      await STORE.appendTrace(body.job_id, {
+        step: 'DECISION',
+        input_ref: hashCheck.mismatch.file.blob_ref,
+        output_ref: 'SOURCE_HASH_MISMATCH',
+        source_hash: hashCheck.mismatch.actual,
+        attributedTo: 'run-route:source-hash-guard'
+      });
+      return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: 'ZERO', action_items: actionItems }, { status: 202 });
+    }
+    files = hashCheck.files;
+  } catch (e) {
+    await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
+    return err('STORAGE_AUTH_FAILED', (e as Error).message);
+  }
 
   // Rule #0 (CLAUDE.md): Excel invoice OR PDF evidence — either alone must yield a
   // final Excel. Prefer a structured doc (xlsx/md/txt) as the invoice source; if none
@@ -88,6 +192,38 @@ export async function POST(req: Request): Promise<Response> {
     parseRes = await parser.parse(basePayload as any);
   } catch (e) {
     const msg = (e as Error).message || '';
+    const pdfIssue = invoiceFile.file_type === 'pdf' ? classifyPdfParseIssue(msg) : null;
+    if (pdfIssue) {
+      const issueType = pdfIssue;
+      const parseResultId = `parse_unsupported_${body.job_id}`;
+      const actionItems = [{
+        action_id: `act_pdf_parse_${body.job_id}`,
+        severity: 'AMBER' as const,
+        line_id: '',
+        issue_type: issueType,
+        required_action: `PDF invoice source could not be parsed automatically (${issueType}) — review the source PDF and provide a structured invoice if needed`
+      }];
+      await STORE.setNormalizedInvoice(body.job_id, {
+        invoice_id: body.job_id,
+        invoice_header: { currency: 'AED' },
+        invoice_lines: [],
+        evidence_candidates: [],
+        parser_confidence: 0,
+        parser_version: job.parser_version
+      });
+      await STORE.setResult(body.job_id, { gate_id: `gate_pdf_parse_${body.job_id}`, job_id: body.job_id, verdict: 'AMBER', line_results: [], action_items: actionItems } as any);
+      await STORE.appendTrace(body.job_id, {
+        step: 'PARSE',
+        input_ref: invoiceFile.blob_ref,
+        output_ref: issueType,
+        source_hash: invoiceFile.sha256,
+        calculation_hash: parseResultId,
+        attributedTo: 'python-worker:error'
+      });
+      await STORE.appendTrace(body.job_id, { step: 'DECISION', input_ref: parseResultId, output_ref: issueType, attributedTo: 'run-route:pdf-parse-guard' });
+      await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: 'AMBER' });
+      return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: 'AMBER', action_items: actionItems }, { status: 202 });
+    }
     await STORE.updateJob(body.job_id, { status: 'FAILED', verdict: 'FAILED' });
     return err('PARSE_FAILED', msg);
   }
@@ -97,10 +233,50 @@ export async function POST(req: Request): Promise<Response> {
     input_ref: invoiceFile.blob_ref,
     output_ref: parseRes.parse_result_id,
     source_hash: invoiceFile.sha256,
-    calculation_hash: parseRes.parse_result_id,
+    calculation_hash: parseRes.source_sha256 ?? parseRes.parse_result_id,
     attributedTo: 'python-worker'
   });
   await STORE.setNormalizedInvoice(body.job_id, parseRes.normalized as any);
+  await appendParseSourceData(body.job_id, parseRes.source_data);
+
+  const sourceHashActionItems: Array<{ action_id: string; severity: Verdict; line_id: string | null; issue_type: string; required_action: string }> = [];
+  const expectedSourceHash = invoiceFile.sha256;
+  const actualSourceHash = parseRes.source_sha256;
+  let sourceHashVerdict: 'PASS' | 'AMBER' | 'ZERO' = 'PASS';
+  let sourceHashStatus = 'SOURCE_HASH_MATCH';
+  if (expectedSourceHash === PENDING_SHA256_PLACEHOLDER) {
+    sourceHashVerdict = 'AMBER';
+    sourceHashStatus = 'HASH_UNVERIFIED';
+    sourceHashActionItems.push({
+      action_id: `act_hash_unverified_${body.job_id}`,
+      severity: 'AMBER' as const,
+      line_id: '',
+      issue_type: 'HASH_UNVERIFIED',
+      required_action: 'Large-upload source hash is still pending; rehash the stored source object before final approval'
+    });
+  } else if (actualSourceHash && actualSourceHash !== expectedSourceHash) {
+    // Only a POSITIVE mismatch (parser echoed a source hash AND it differs) is ZERO.
+    // A parser that doesn't return source_sha256 (common for PDF) leaves cross-check
+    // unavailable — not tampering. The byte-level guard above (verifyAndPersistSourceHashes)
+    // already verified integrity, so absence stays PASS rather than blocking as ZERO.
+    sourceHashVerdict = 'ZERO';
+    sourceHashStatus = 'SOURCE_HASH_MISMATCH';
+    sourceHashActionItems.push({
+      action_id: `act_source_hash_mismatch_${body.job_id}`,
+      severity: 'ZERO' as const,
+      line_id: '',
+      issue_type: 'SOURCE_HASH_MISMATCH',
+      required_action: 'Parser source bytes hash does not match uploaded source hash — quarantine source and re-upload from trusted storage'
+    });
+  }
+  await STORE.appendTrace(body.job_id, {
+    step: 'SOURCE_DATA',
+    input_ref: invoiceFile.blob_ref,
+    output_ref: sourceHashStatus,
+    source_hash: expectedSourceHash,
+    calculation_hash: actualSourceHash ?? undefined,
+    attributedTo: 'run-route:source-hash-check'
+  });
 
   // Phase 1: MarkItDown -> NotebookLM dual-extraction trigger (verification path).
   // Flag-gated (default OFF) and fire-and-forget — the pdfplumber result above stays
@@ -108,8 +284,8 @@ export async function POST(req: Request): Promise<Response> {
   // orchestrator and POSTs its first-pass extraction to /api/notebooklm/ingest-summary,
   // which cross-checks it against this parser result. A trigger failure must never
   // affect the audit verdict, so it is fully isolated in a catch.
-  // NOTE: enabling this sends invoice/evidence content to the external NotebookLM
-  // service — confirm P2/DLP policy before flipping NOTEBOOKLM_ENABLED on in prod.
+  // NOTE: enabling this sends private audit content to the external NotebookLM
+  // service — require explicit operator approval before enabling it in prod.
   if (process.env.NOTEBOOKLM_ENABLED === 'true') {
     const nbJobId = body.job_id;
     const nbBlobRef = invoiceFile.blob_ref;
@@ -134,22 +310,72 @@ export async function POST(req: Request): Promise<Response> {
     })();
   }
 
+  // Phase 2: Google Vision OCR fallback trigger for PDF evidence.
+  // Flag-gated (VISION_FALLBACK_ENABLED, default OFF) and fire-and-forget.
+  // Only triggers for PDF files that have a GCS URI (gs:// protocol).
+  // The worker starts async Vision document text detection and writes
+  // OCR JSON to GCS; collection is deferred to a later phase or polling.
+  // Vision trigger failure is fully isolated — never changes verdict.
+  if (process.env.VISION_FALLBACK_ENABLED === 'true') {
+    const visJobId = body.job_id;
+    const gcsOcrBucket = process.env.GCS_OCR_BUCKET || 'dsv-invoice-ocr';
+    const pdfsToScan = [invoiceFile, ...evidenceFiles].filter(f => f.file_type === 'pdf');
+
+    for (const pdfFile of pdfsToScan) {
+      // Only trigger when we have a GCS URI (gs:// protocol). GCS confirm stores
+      // the object URI in blob_ref; older drafts may still carry a gcs_uri field.
+      const gcsUri = String((pdfFile as any).gcs_uri || pdfFile.blob_ref || '');
+      if (!gcsUri || !String(gcsUri).startsWith('gs://')) {
+        await STORE.appendTrace(visJobId, {
+          step: 'VISION_FALLBACK', input_ref: pdfFile.file_id,
+          output_ref: 'VISION_FALLBACK_SKIPPED', attributedTo: 'run-route:no-gcs-uri'
+        }).catch(() => undefined);
+        continue;
+      }
+
+      const ocrPrefix = `gs://${gcsOcrBucket}/jobs/${visJobId}/${pdfFile.file_id}/`;
+      void (async () => {
+        try {
+          const result = await parser.startVisionOcr({
+            job_id: visJobId,
+            file_id: pdfFile.file_id,
+            source_gcs_uri: gcsUri,
+            output_gcs_prefix: ocrPrefix,
+          });
+          await STORE.appendTrace(visJobId, {
+            step: 'VISION_FALLBACK', input_ref: gcsUri,
+            output_ref: result.status === 'STARTED' ? 'VISION_FALLBACK_TRIGGERED' : `VISION_${result.status}`,
+            source_hash: pdfFile.sha256,
+            attributedTo: 'run-route:vision-fallback',
+            ...(result.operation_name ? { calculation_hash: result.operation_name } : {}),
+          });
+        } catch {
+          await STORE.appendTrace(visJobId, {
+            step: 'VISION_FALLBACK', input_ref: pdfFile.file_id,
+            output_ref: 'VISION_FALLBACK_FAILED', attributedTo: 'run-route:vision-fallback'
+          }).catch(() => undefined);
+        }
+      })();
+    }
+  }
+
   // P0-4: parser extracted zero invoice lines (empty/unmapped invoice, or PDF text
   // with no structured lines). Validating [] would yield empty COST-GUARD results and
   // a false PASS, so short-circuit to AMBER and route to human review instead.
   const parsedLines = ((parseRes.normalized as { invoice_lines?: unknown[] })?.invoice_lines) ?? [];
   if (parsedLines.length === 0) {
-    const actionItems = [{
+    const actionItems = [...sourceHashActionItems, {
       action_id: `act_nolines_${body.job_id}`,
       severity: 'AMBER' as const,
       line_id: '',
       issue_type: 'NO_INVOICE_LINES_EXTRACTED',
       required_action: 'Parser extracted 0 invoice lines — verify file/column mapping or supply a structured invoice'
     }];
-    await STORE.setResult(body.job_id, { gate_id: `gate_nolines_${body.job_id}`, job_id: body.job_id, verdict: 'AMBER', line_results: [], action_items: actionItems } as any);
-    await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: 'AMBER' });
+    const zeroLineVerdict = maxVerdict('AMBER', sourceHashVerdict) as 'AMBER' | 'ZERO';
+    await STORE.setResult(body.job_id, { gate_id: `gate_nolines_${body.job_id}`, job_id: body.job_id, verdict: zeroLineVerdict, line_results: [], action_items: actionItems } as any);
+    await STORE.updateJob(body.job_id, { status: 'REVIEW_REQUIRED', verdict: zeroLineVerdict });
     await STORE.appendTrace(body.job_id, { step: 'DECISION', input_ref: parseRes.parse_result_id, output_ref: 'NO_INVOICE_LINES_EXTRACTED', attributedTo: 'run-route:guard' });
-    return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: 'AMBER', action_items: actionItems }, { status: 202 });
+    return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: zeroLineVerdict, action_items: actionItems }, { status: 202 });
   }
 
   const mergedEvidence = [...((parseRes.normalized as any)?.evidence_candidates ?? [])];
@@ -163,6 +389,7 @@ export async function POST(req: Request): Promise<Response> {
       const evParse = await parser.parsePdfText(evPayload);
       const evCandidates = (evParse.normalized as any)?.evidence_candidates ?? [];
       mergedEvidence.push(...evCandidates);
+      await appendParseSourceData(body.job_id, evParse.source_data);
       await STORE.appendTrace(body.job_id, {
         step: 'EVIDENCE_PARSE',
         input_ref: evFile.blob_ref,
@@ -213,7 +440,15 @@ export async function POST(req: Request): Promise<Response> {
   for (const hs of sct.hs_uae_results) {
     evidenceFindings.push({ line_id: hs.line_id, code: hs.reason_code ?? 'HS_UAE_CHECK', severity: hs.verdict === 'ZERO' ? 'ZERO' : 'AMBER' });
   }
-  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), evidenceFindings);
+  const duplicateFindings = (sct.duplicate_checks ?? [])
+    .filter(d => d.reason_code)
+    .map(d => ({
+      vendor_hash: d.vendor_hash,
+      invoice_no_hash: d.invoice_no_hash,
+      severity: d.verdict === 'ZERO' ? 'ZERO' as const : 'AMBER' as const,
+      reason_code: d.reason_code ?? 'DUPLICATE_INVOICE'
+    }));
+  const gate = buildGateResult(body.job_id, sct.costguard_results.map(c => ({ line_id: c.line_id, band: c.band, delta_pct: c.delta_pct, reason_codes: [`COSTGUARD_${c.band}`] })), evidenceFindings, duplicateFindings);
   const normalized = parseRes.normalized as any;
   const invoiceTotal = normalized?.invoice_header?.invoice_total ?? null;
   const lineAuditTotal = (normalized?.invoice_lines as any[] | undefined)?.reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0) ?? 0;
@@ -224,11 +459,10 @@ export async function POST(req: Request): Promise<Response> {
       }, 0) ?? 0
     : null;
   const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal);
-  let finalVerdict = gate.verdict;
-  const actionItems = [...(gate.action_items || [])];
+  let finalVerdict = maxVerdict(gate.verdict as Verdict, sourceHashVerdict);
+  const actionItems = [...sourceHashActionItems, ...(gate.action_items || [])];
   if (!recon.ok && recon.verdict !== 'PASS') {
-    const VERDICT_RANK: Record<string, number> = { PASS: 0, AMBER: 1, ZERO: 2, FAILED: 3 };
-    if (VERDICT_RANK[recon.verdict] > VERDICT_RANK[finalVerdict]) finalVerdict = recon.verdict;
+    finalVerdict = maxVerdict(finalVerdict, recon.verdict as Verdict);
     actionItems.push({
       action_id: `act_recon_${body.job_id}`,
       severity: recon.verdict,

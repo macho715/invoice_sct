@@ -97,6 +97,20 @@ def parse_pdf_text_bytes(
             parser_issues=issues,
         )
 
+    if b"/Encrypt" in raw:
+        issues.append("PDF_ENCRYPTED")
+        return PdfParseResponse(
+            file_id=file_id,
+            parser_version=parser_version or "parser-0.2.0-pdf-0.1.0",
+            text_spans=[],
+            table_candidates=[],
+            pdf_page_count=0,
+            parser_confidence=0.0,
+            is_text_based=False,
+            evidence_candidates=[],
+            parser_issues=issues,
+        )
+
     try:
         with pdfplumber.open(BytesIO(raw)) as pdf:
             page_count = len(pdf.pages)

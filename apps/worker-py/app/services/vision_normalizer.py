@@ -2,8 +2,10 @@
 from __future__ import annotations
 import hashlib
 import re
-from typing import Optional
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from typing import Any, Optional
+
+from app.services.v_vision_rules import parse_vision_text
 
 # Reference patterns for evidence extraction (same as pdf_text.py)
 REF_PATTERNS = {
@@ -30,6 +32,7 @@ class VisionNormalizedResult:
     vendor: Optional[str] = None
     invoice_total: Optional[float] = None
     issues: list[str] = field(default_factory=list)
+    dsv_parse_result: Optional[dict[str, Any]] = None
 
 def normalize_vision_output(
     vision_json: dict,
@@ -84,6 +87,15 @@ def normalize_vision_output(
     if not result.full_text.strip():
         result.issues.append('SCANNED_PAGE_DETECTED')
         return result
+
+    dsv_result = parse_vision_text(
+        result.full_text,
+        file_id=file_id,
+        file_name=file_name,
+        confidence=result.confidence,
+        page_count=result.page_count,
+    )
+    result.dsv_parse_result = asdict(dsv_result)
     
     # Extract evidence candidates from full text
     for doc_kind, pattern in REF_PATTERNS.items():
@@ -102,6 +114,9 @@ def normalize_vision_output(
                 'confidence': min(0.85, result.confidence),
                 'text_span_hash': f"sha256:{h}",
             })
+
+    for candidate in dsv_result.evidence_candidates:
+        result.evidence_candidates.append(candidate)
     
     # Try to extract invoice_no
     for pattern_name in ['INVOICE_NO']:
