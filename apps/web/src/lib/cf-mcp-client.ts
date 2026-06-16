@@ -164,7 +164,7 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
           totalMinor: Math.round((totals as number) * 100),
           lines: payload.invoice_lines as unknown[],
         } as unknown as InvoiceInput;
-        const pre = validateInvoice(precheckInput, {
+        const pre = await validateInvoice(precheckInput, {
           rateManifestVersion: payload.rule_version,
         });
         precheckIssues = pre.issues;
@@ -283,6 +283,11 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
       }> = [];
       for (const line of processedLines) {
         try {
+          // DOMESTIC: build lane key from origin/destination/vehicle/unit for lane-based rate lookup
+          const domesticLaneKey = isDomestic
+            ? [line.origin, line.destination, line.vehicle, line.unit ?? 'per truck']
+                .map((v: any) => (v ?? '').toString().trim().toUpperCase()).join('||')
+            : null;
           const rateRes = await callTool<{
             verdict: string;
             reason_code: string | null;
@@ -309,7 +314,7 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
               | null;
           }>('check_rate_card', {
             charge_code: chargeCodeOf(line),
-            lane: line.lane ?? null,
+            lane: isDomestic ? domesticLaneKey : (line.lane ?? null),
             rate_basis: line.unit ?? null,
             effective_date: null,
             applied_rate: line.rate ?? null,
@@ -319,7 +324,8 @@ export function createCfMcpClient(_opts?: { baseUrl?: string; timeoutMs?: number
             type_b: typeBByLine.get(line.line_id) ?? null,
             qty: line.qty ?? null,
             rate: line.rate ?? null,
-            currency: line.currency ?? null
+            currency: line.currency ?? null,
+            workflow_type: workflowType
           });
           toolCalls.push({ tool: 'check_rate_card', latency_ms: rateRes.latency_ms, status: rateRes.status });
           rate_checks.push({
