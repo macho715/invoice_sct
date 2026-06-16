@@ -217,19 +217,47 @@ export function createPgJobStore(): JobStore | null {
     },
 
     async setParseSourceData(jobId: string, rows: SourceDataRow[]) {
-      await pool.query(
+      const insert = () => pool.query(
         `INSERT INTO parse_source_data (job_id, source_data_json)
          VALUES ($1, $2)
          ON CONFLICT (job_id) DO UPDATE SET source_data_json = EXCLUDED.source_data_json, updated_at = NOW()`,
         [jobId, JSON.stringify(rows)]
       );
+      try {
+        await insert();
+      } catch (e) {
+        // Self-heal when migration 0013 has not been applied to this database yet
+        // (relation does not exist = Postgres 42P01): create the table idempotently
+        // and retry once, so the audit deliverable is never blocked (Rule #0).
+        if ((e as { code?: string }).code !== '42P01') throw e;
+        await pool.query(
+          `CREATE TABLE IF NOT EXISTS parse_source_data (
+             id BIGSERIAL PRIMARY KEY,
+             job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE UNIQUE,
+             source_data_json JSONB NOT NULL DEFAULT '[]',
+             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+           )`
+        );
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_parse_source_data_job_id ON parse_source_data(job_id)');
+        await insert();
+      }
     },
 
     async getParseSourceData(jobId: string) {
-      const result = await pool.query(
-        'SELECT source_data_json FROM parse_source_data WHERE job_id = $1',
-        [jobId]
-      );
+      let result;
+      try {
+        result = await pool.query(
+          'SELECT source_data_json FROM parse_source_data WHERE job_id = $1',
+          [jobId]
+        );
+      } catch (e) {
+        // Table absent (migration 0013 not yet applied on this DB) — degrade to no
+        // source rows instead of failing the whole export (Rule #0: always produce
+        // the final Excel; the workbook still carries evidence-derived source rows).
+        if ((e as { code?: string }).code === '42P01') return [];
+        throw e;
+      }
       if (!result.rows[0]) return [];
       const row = result.rows[0];
       return (typeof row.source_data_json === 'string' ? JSON.parse(row.source_data_json) : row.source_data_json) as SourceDataRow[];
