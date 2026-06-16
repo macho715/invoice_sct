@@ -22,7 +22,7 @@ function err(code: ErrorCode, message: string, extra: Record<string, unknown> = 
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ invoiceId: string }> | { invoiceId: string } },
+  { params }: { params: Promise<{ invoiceId: string }> },
 ): Promise<Response> {
   // Next.js 15: params is a Promise<>
   const resolved = await Promise.resolve(params);
