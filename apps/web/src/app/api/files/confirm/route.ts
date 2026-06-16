@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { STORE } from '@/lib/job-store';
 import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
 import { SourceFileSchema } from '@/lib/types';
+import { withDeprecation } from '../deprecation';
 
 export const runtime = 'nodejs';
 
 function err(code: ErrorCode, message: string, extra: Record<string, unknown> = {}) {
-  return NextResponse.json({ code, message, ...extra }, { status: httpForError(code) });
+  return withDeprecation(
+    NextResponse.json({ code, message, ...extra }, { status: httpForError(code) }),
+    '/api/files/confirm',
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -72,21 +76,27 @@ async function handleConfirm(req: NextRequest) {
       source_hash: sha256,
     });
 
-    return NextResponse.json(
-      {
-        job_id,
-        file_id,
-        sha256,
-        gcs_uri: resolvedGcsUri,
-        status: 'UPLOADED',
-      },
-      { status: 200 },
+    return withDeprecation(
+      NextResponse.json(
+        {
+          job_id,
+          file_id,
+          sha256,
+          gcs_uri: resolvedGcsUri,
+          status: 'UPLOADED',
+        },
+        { status: 200 },
+      ),
+      '/api/files/confirm',
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'CONFIRM_FAILED';
-    return NextResponse.json(
-      { code: 'CONFIRM_FAILED' as ErrorCode, message, extra: {} },
-      { status: httpForError('CONFIRM_FAILED') },
+    return withDeprecation(
+      NextResponse.json(
+        { code: 'CONFIRM_FAILED' as ErrorCode, message, extra: {} },
+        { status: httpForError('CONFIRM_FAILED') },
+      ),
+      '/api/files/confirm',
     );
   }
 }

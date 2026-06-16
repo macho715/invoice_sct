@@ -60,6 +60,24 @@ HEADER_ALIASES: dict[str, list[str]] = {
         'formula text', 'formula_text', 'formula', 'formula as text',
         'calculation text', 'calc text', 'formula_text_original',
     ],
+    'origin': [
+        'origin', 'from', 'place of loading', 'loading point', 'loading address',
+        'origin location', 'port of loading', 'pol', 'pickup', 'pick up',
+        'pickup location', 'source', 'origin address',
+    ],
+    'destination': [
+        'destination', 'to', 'place of delivery', 'delivery point', 'delivery address',
+        'destination location', 'port of delivery', 'pod', 'dropoff', 'drop off',
+        'delivery location', 'dest', 'destination address',
+    ],
+    'vehicle': [
+        'vehicle', 'vehicle type', 'truck type', 'transport type', 'req truck type',
+        'carrier type', 'equipment type', 'truck', 'trailer', 'vehicle desc',
+    ],
+    'distance_km': [
+        'distance km', 'distance (km)', 'distance_km', 'km', 'mileage',
+        'distance', 'trip distance', 'route distance',
+    ],
 }
 
 HEADER_FIELD_LABELS: dict[str, list[str]] = {
@@ -308,7 +326,11 @@ def _parse_xlsx_rows(rows: list, *, ws_title: str, file_id: str, parser_version:
             shipment_ref=_cell_str(row[cmap['shipment_ref']]) if 'shipment_ref' in cmap else None,
             job_number=_cell_str(row[cmap['job_number']]) if 'job_number' in cmap else None,
             rate_basis=_cell_str(row[cmap['rate_basis']]) if 'rate_basis' in cmap else None,
-            for_charge_component=_cell_str(row[cmap['charge_component']]) if 'charge_component' in cmap else None
+            for_charge_component=_cell_str(row[cmap['charge_component']]) if 'charge_component' in cmap else None,
+            origin=_cell_str(row[cmap['origin']]) if 'origin' in cmap else None,
+            destination=_cell_str(row[cmap['destination']]) if 'destination' in cmap else None,
+            vehicle=_cell_str(row[cmap['vehicle']]) if 'vehicle' in cmap else None,
+            distance_km=_cell_num(row[cmap['distance_km']]) if 'distance_km' in cmap else None,
         )
         if 'formula_text' in cmap:
             formula_row = formula_rows[r_idx - 1] if formula_rows and r_idx - 1 < len(formula_rows) else row

@@ -5,6 +5,7 @@ export interface ParseRequestPayload {
   file_type: 'xlsx' | 'md' | 'txt' | 'pdf';  // P3B pdf support
   parser_version: string;
   blob_url: string;
+  workflow_type?: 'SHIPMENT' | 'DOMESTIC';
 }
 
 export interface ParseResponse {

@@ -20,7 +20,9 @@ export const CheckRateCardInputSchema = z.object({
   type_b: z.string().nullable().optional(),
   qty: z.number().nullable().optional(),
   rate: z.number().nullable().optional(),
-  currency: z.string().nullable().optional()
+  currency: z.string().nullable().optional(),
+  // DOMESTIC: when set, uses lane-key lookup instead of charge_code
+  workflow_type: z.enum(['SHIPMENT', 'DOMESTIC']).nullable().optional(),
 });
 
 export type CheckRateCardInput = z.infer<typeof CheckRateCardInputSchema>;
@@ -115,6 +117,7 @@ export async function check_rate_card(input: CheckRateCardInput): Promise<CheckR
   let unit: string | null = input.unit ?? input.rate_basis ?? null;
   let scope: string | null = input.scope ?? null;
   let typeB: string | null = input.type_b ?? null;
+  const isDomestic = input.workflow_type === 'DOMESTIC';
 
   // Best-effort: select extended columns if they exist. The query is wrapped in
   // a try/catch and falls back to the legacy contract_rate-only SELECT so that
@@ -122,6 +125,29 @@ export async function check_rate_card(input: CheckRateCardInput): Promise<CheckR
   const tryExtended = async (): Promise<boolean> => {
     try {
       const pool = getPool();
+      if (isDomestic && input.lane) {
+        // DOMESTIC: lookup by composite lane key
+        const sql = `SELECT contracted_rate, effective_from, effective_to, match_eligible
+                     FROM rate_cards WHERE lane = $1 AND workflow_type = 'DOMESTIC' LIMIT 1`;
+        const result = await pool.query<{
+          contracted_rate: string | number | null;
+          effective_from: string | null;
+          effective_to: string | null;
+          match_eligible: string | null;
+        }>(sql, [input.lane]);
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          if (row.contracted_rate != null) {
+            contractedRate = typeof row.contracted_rate === 'string' ? Number(row.contracted_rate) : row.contracted_rate;
+          }
+          effectiveFrom = row.effective_from;
+          effectiveTo = row.effective_to;
+          matchEligible = (row.match_eligible === 'Y' || row.match_eligible === 'N') ? row.match_eligible : null;
+          return true;
+        }
+        return false;
+      }
+
       const params: (string | null)[] = [input.charge_code];
       let sql = `SELECT contracted_rate, effective_from, effective_to, match_eligible
                  FROM rate_cards WHERE charge_code = $1`;

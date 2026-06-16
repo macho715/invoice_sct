@@ -3,6 +3,9 @@ import { z } from 'zod';
 export { InvoiceLineSchema, NormalizedInvoiceSchema, EvidenceCandidateSchema } from '@invoice-audit/contracts/invoice';
 export type { InvoiceLine, NormalizedInvoice, EvidenceCandidate } from '@invoice-audit/contracts/invoice';
 
+export const WorkflowTypeSchema = z.enum(['SHIPMENT', 'DOMESTIC']);
+export type WorkflowType = z.infer<typeof WorkflowTypeSchema>;
+
 export const JobStatusSchema = z.enum([
   'CREATED','UPLOADING','UPLOADED','QUEUED','PARSING','VALIDATING',
   'REVIEW_REQUIRED','APPROVED','EXPORTING','COMPLETED','FAILED','REJECTED'
@@ -69,6 +72,10 @@ export const SctValidationResultSchema = z.object({
       'MATCHED_EXACT','MATCHED_AMOUNT','MATCHED_APPROVAL','PARTIAL','MISSING','CONFLICT','NOT_APPLICABLE'
     ]).nullish()
   })),
+  // PR 4.4 — which rate-card snapshot produced the rate_checks above.
+  // null when no rate lookup succeeded (Rule #0: validation must still
+  // produce a result, just without a manifest tag).
+  rate_manifest_version: z.string().nullish(),
   evidence_requirements: z.array(z.object({ line_id: z.string(), required_evidence: z.array(z.string()) })),
   costguard_results: z.array(z.object({
     line_id: z.string(), band: z.enum(['PASS','WARN','HIGH','CRITICAL']),

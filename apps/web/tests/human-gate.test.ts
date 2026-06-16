@@ -8,6 +8,7 @@ describe('human-gate evaluator', () => {
     job_id: 'j1',
     status: 'REVIEW_REQUIRED',
     verdict: null,
+    workflow_type: 'SHIPMENT',
     created_by: 'u1',
     created_at: '',
     updated_at: '',

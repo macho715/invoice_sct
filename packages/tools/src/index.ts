@@ -12,6 +12,7 @@ import { check_tax_vat, CheckTaxVatInputSchema } from './check_tax_vat.js';
 import { check_fx_policy, CheckFxPolicyInputSchema } from './check_fx_policy.js';
 import { build_validation_explanation, BuildValidationExplanationInputSchema } from './build_validation_explanation.js';
 import { check_dem_det, CheckDemDetInputSchema } from './check_dem_det.js';
+import { domestic_lane_check, DomesticLaneCheckInputSchema } from './domestic_lane_check.js';
 import type { ToolEntry } from './types.js';
 
 export { route_question, RouteQuestionInputSchema } from './route_question.js';
@@ -56,6 +57,9 @@ export type { BuildValidationExplanationInput, BuildValidationExplanationOutput 
 export { check_dem_det, CheckDemDetInputSchema } from './check_dem_det.js';
 export type { CheckDemDetInput, CheckDemDetOutput } from './check_dem_det.js';
 
+export { domestic_lane_check, DomesticLaneCheckInputSchema } from './domestic_lane_check.js';
+export type { DomesticLaneCheckInput, DomesticLaneCheckOutput, DomesticLaneLineResult } from './domestic_lane_check.js';
+
 export type { MCP_Verdict, ToolResult, ToolError } from './types.js';
 
 const TOOLS: Record<string, ToolEntry> = {
@@ -72,7 +76,8 @@ const TOOLS: Record<string, ToolEntry> = {
   check_tax_vat: { input: CheckTaxVatInputSchema, run: (a) => check_tax_vat(a as never) },
   check_fx_policy: { input: CheckFxPolicyInputSchema, run: (a) => check_fx_policy(a as never) },
   build_validation_explanation: { input: BuildValidationExplanationInputSchema, run: (a) => build_validation_explanation(a as never) },
-  check_dem_det: { input: CheckDemDetInputSchema, run: (a) => check_dem_det(a as never) }
+  check_dem_det: { input: CheckDemDetInputSchema, run: (a) => check_dem_det(a as never) },
+  domestic_lane_check: { input: DomesticLaneCheckInputSchema, run: (a) => domestic_lane_check(a as never) }
 };
 
 export async function dispatch<T = unknown>(name: string, args: unknown): Promise<T> {

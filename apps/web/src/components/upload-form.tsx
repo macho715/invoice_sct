@@ -2,6 +2,7 @@
 import { useRef, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getUploadSelectionError } from '@/lib/upload-validation';
+import type { WorkflowType } from '@/lib/types';
 
 const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
 
@@ -21,6 +22,7 @@ async function uploadLargeFile(
   file: File,
   jobId: string | null,
   jobToken: string | null,
+  workflowType: WorkflowType,
   onProgress: (pct: number) => void,
 ): Promise<{ jobId: string; jobToken: string }> {
   const { upload } = await import('@vercel/blob/client');
@@ -39,6 +41,7 @@ async function uploadLargeFile(
       content_type: file.type,
       size_bytes: file.size,
       sha256,
+      workflow_type: workflowType,
       ...(jobId ? { job_id: jobId, job_token: jobToken } : {}),
     }),
   });
@@ -54,6 +57,7 @@ export default function UploadForm() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const [workflowType, setWorkflowType] = useState<WorkflowType>('SHIPMENT');
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
   function clearFiles() {
@@ -83,7 +87,7 @@ export default function UploadForm() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size > LARGE_FILE_THRESHOLD) {
-          const uploaded = await uploadLargeFile(file, jobId, jobToken, pct =>
+          const uploaded = await uploadLargeFile(file, jobId, jobToken, workflowType, pct =>
             setProgress(`업로드 중 ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`));
           jobId = uploaded.jobId;
           jobToken = uploaded.jobToken;
@@ -94,6 +98,7 @@ export default function UploadForm() {
         fd.set('file', file);
         if (jobId) fd.set('job_id', jobId);
         if (jobToken) fd.set('job_token', jobToken);
+        fd.set('workflow_type', workflowType);
         const r = await fetch('/api/files/ingest', {
           method: 'POST',
           body: fd,
@@ -126,6 +131,11 @@ export default function UploadForm() {
     }
   }
 
+  const workflowLabel = workflowType === 'SHIPMENT' ? 'Import Shipment' : 'Domestic Delivery';
+  const workflowDesc = workflowType === 'SHIPMENT'
+    ? 'International import invoice audit — AED/USD, customs/BOE, BL/DO/PO, DEM/DET'
+    : 'Korean domestic delivery audit — KRW, lane/distance rates, short-run detection';
+
   return (
     <form className="card" onSubmit={onSubmit}>
       <div className="stack">
@@ -134,10 +144,42 @@ export default function UploadForm() {
           <h2>Upload invoice or evidence</h2>
           <p className="muted">Excel, text, markdown, or PDF files are accepted. You can upload one invoice, one PDF, or invoice plus evidence together.</p>
         </div>
+
+        <fieldset className="workflow-selector">
+          <legend className="fieldset-legend">Workflow Type</legend>
+          <div className="radio-group">
+            <label className={`radio-card${workflowType === 'SHIPMENT' ? ' is-active' : ''}`}>
+              <input
+                type="radio"
+                name="workflow_type"
+                value="SHIPMENT"
+                checked={workflowType === 'SHIPMENT'}
+                onChange={() => setWorkflowType('SHIPMENT')}
+                disabled={busy}
+              />
+              <span className="radio-label">SHIPMENT</span>
+              <span className="radio-desc">Import shipment invoice audit</span>
+            </label>
+            <label className={`radio-card${workflowType === 'DOMESTIC' ? ' is-active' : ''}`}>
+              <input
+                type="radio"
+                name="workflow_type"
+                value="DOMESTIC"
+                checked={workflowType === 'DOMESTIC'}
+                onChange={() => setWorkflowType('DOMESTIC')}
+                disabled={busy}
+              />
+              <span className="radio-label">DOMESTIC</span>
+              <span className="radio-desc">Domestic delivery invoice audit</span>
+            </label>
+          </div>
+          <p className="muted" style={{ marginTop: '0.5rem' }}>{workflowDesc}</p>
+        </fieldset>
+
         <ol className="step-list" aria-label="Validation flow">
           <li className={files.length > 0 ? 'is-done' : 'is-current'}>Select files</li>
           <li className={busy ? 'is-current' : ''}>Upload</li>
-          <li>Run validation</li>
+          <li>Run {workflowLabel} validation</li>
           <li>Download workbook</li>
         </ol>
       </div>

@@ -8,12 +8,13 @@ Extracts text spans + table candidates from text-based PDFs for invoice/evidence
 """
 from __future__ import annotations
 
+import json
 import re
 from io import BytesIO
 from statistics import mean
 from typing import Optional, Dict, Any
 
-from app.parsers.dsv_waybill import is_dsv_waybill_text, parse_dsv_waybill_from_text
+from app.parsers.dsv_waybill import is_dsv_waybill_text, parse_dsv_waybill_from_text, extract_consignment_from_pdfplumber
 
 import pdfplumber
 
@@ -114,6 +115,14 @@ def parse_pdf_text_bytes(
     try:
         with pdfplumber.open(BytesIO(raw)) as pdf:
             page_count = len(pdf.pages)
+
+            # Extract consignment table for DSV waybill (PDF is already open)
+            consignment: Optional[dict] = None
+            try:
+                consignment = extract_consignment_from_pdfplumber(pdf, max_pages=2)
+            except Exception:
+                pass
+
             for p_idx, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text() or ""
                 all_page_texts.append(text)
@@ -172,7 +181,7 @@ def parse_pdf_text_bytes(
 
             full_text = "\n".join(all_page_texts)
             if is_dsv_waybill_text(full_text):
-                parsed = parse_dsv_waybill_from_text(full_text)
+                parsed = parse_dsv_waybill_from_text(full_text, consignment=consignment)
                 fields = parsed.get("fields", {}) or {}
                 for key in ("waybill_no", "printed_date", "do_no", "cust_ref", "bol_no", "order_no", "job_no", "po_no", "head_plate", "trailer_plate", "driver_name", "trip_no"):
                     value = fields.get(key)
@@ -211,6 +220,29 @@ def parse_pdf_text_bytes(
                                 doc_kind="DSV_WAYBILL",
                             )
                         )
+
+                # DOMESTIC: add structured waybill lane data as a single evidence candidate
+                wf = {
+                    "origin": lane.get("origin_raw"),
+                    "destination": lane.get("destination_raw"),
+                    "origin_norm": lane.get("origin_norm"),
+                    "destination_norm": lane.get("destination_norm"),
+                    "vehicle": fields.get("req_truck_type"),
+                    "waybill_no": fields.get("waybill_no"),
+                    "trip_no": fields.get("trip_no"),
+                    "confidence": parsed.get("confidence", 0.0),
+                    "flags": parsed.get("flags", []),
+                }
+                evidence.append(
+                    EvidenceCandidate(
+                        source_file_id=file_id,
+                        text_span=json.dumps(wf, default=str)[:2000],
+                        matched_reference="DSV_LANE_STRUCTURED",
+                        confidence=parsed.get("confidence", 0.85),
+                        doc_kind="DSV_WAYBILL",
+                        waybill_fields=wf,
+                    )
+                )
 
     except Exception as e:
         msg = str(e).lower()

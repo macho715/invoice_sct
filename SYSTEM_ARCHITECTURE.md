@@ -35,8 +35,8 @@ The intake decision lives in `apps/web/src/app/api/invoice-audit/run/route.ts`
 |---|---|---|---|
 | **apps/web** | Next.js 15 (App Router) | Vercel | Upload UI, audit workspace, API orchestration, gate + approval, workbook export dispatch, NotebookLM callback receiver. **Final audit authority.** |
 | **apps/worker-py** | FastAPI (Python) | Google Cloud Run (**live in prod**: `dsv-invoice` / `asia-northeast3`, service `hvdc-invoice-parser`) | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill; xlsx supports **DSV summary-matrix → charge-level line decomposition**; native-text **PDF runs the DSV SHPT hybrid parser → real `invoice_lines`**), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
-| **apps/mcp-server** | Hono (TypeScript) | Google Cloud Run | Standalone MCP JSON-RPC server — 14 audit tools for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. |
-| **packages/tools** | TypeScript (ESM) | — | **14 MCP validation tools — single source of truth**, shared by `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC) |
+| **apps/mcp-server** | Hono (TypeScript) | Google Cloud Run | Standalone MCP JSON-RPC server — 15 audit tools for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. |
+| **packages/tools** | TypeScript (ESM) | — | **15 MCP validation tools — single source of truth**, shared by `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC). Includes `domestic_lane_check` for domestic trucking lane/distance/short-run validation. |
 | **packages/database** | TypeScript (ESM) | — | Postgres pool singleton (Neon) — shared by `apps/web` and `apps/mcp-server` |
 | **packages/contracts** | TypeScript | — | Shared invoice, validation, and export Zod schemas |
 | **packages/shared** | TypeScript | — | Hashing and redaction helpers |
@@ -51,27 +51,33 @@ graph LR
     W --> D[(Neon Postgres)]
     W -->|fetch parse| PY["apps/worker-py /v1/parse"]
     PY --> W
-    W -->|in-process dispatch| MCP["MCP tools in-process<br/>@invoice-audit/tools (14)"]
+    W -->|in-process dispatch| MCP["MCP tools in-process<br/>@invoice-audit/tools (15)"]
     MCP --> GB["gate-bridge<br/>PASS/AMBER/ZERO"]
     GB -->|build| WB["workbook-builder"]
     WB -->|fetch export| PY2["apps/worker-py /v1/export"]
     PY2 --> DL["/api/export/download → .xlsx"]
+    W --> D2["rate_cards<br/>(domestic lane rates)"]
 ```
 
 **Key routing decisions:**
 
 - MCP validation for the web audit flow runs **in-process** inside `apps/web` (logic-identical
-  port of the tools the `validate()` flow calls). No network hop to `apps/mcp-server` during audit.
+  port of the 15 tools the `validate()` flow calls). No network hop to `apps/mcp-server` during audit.
 - `apps/mcp-server` is the **standalone** server for external clients (ChatGPT, Claude Desktop,
   Cursor) via JSON-RPC at `/mcp`.
 - Parsing and export are always fetched from the Python worker.
 - NotebookLM runs (flag-gated) call back into `apps/web` with an HMAC-signed summary.
+- **DOMESTIC workflow** (2026-06-16): upload-form toggle sets `workflow_type` → worker parse
+  extracts DSV waybill lane data → `check_rate_card` looks up `rate_cards` by composite lane key
+  (origin||destination||vehicle||unit) → `domestic_lane_check` tool validates distance bands,
+  short-run flags, rate variance → gate-bridge produces Korean action items. SHIPMENT-specific
+  tools (HS/UAE, shipment_match, fx_policy, dem_det) are skipped for domestic.
 
 ## Database
 
 | Store | Engine | Purpose | Binding |
 |---|---|---|---|
-| **Primary** | Neon Postgres | Job store, gate results, invoice lines, audit traces, rate cards, extraction artifacts/comparisons | `DATABASE_URL` |
+| **Primary** | Neon Postgres | Job store, gate results, invoice lines, audit traces, rate cards (SHIPMENT charge codes + DOMESTIC lane keys with 139 ApprovedLaneMap entries), extraction artifacts/comparisons | `DATABASE_URL` |
 | **Blob** | Vercel Blob (private) | Invoice/evidence file storage, export artifacts | `BLOB_READ_WRITE_TOKEN` |
 | **Legacy** | Cloudflare D1 | Ontology WH-status projections — not used by invoice audit | `MCP_AUDIT_DB` |
 

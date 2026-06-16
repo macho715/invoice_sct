@@ -39,7 +39,7 @@ Three apps plus shared packages. Canonical role definition:
 | **`apps/worker-py`** (FastAPI, Google Cloud Run) | Parse (`xlsx/md/txt/pdf/pdf_json` + DSV waybill); **DSV SHPT hybrid PDF parser** extracts real `invoice_lines` (doc-type + charge lines); PDF preflight + Google Vision OCR (flag-gated stub); 13-sheet export; MarkItDown→NotebookLM orchestration. | Produce the final business verdict. |
 | **`apps/mcp-server`** (Hono, Google Cloud Run) | Standalone JSON-RPC MCP server for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. | — |
 
-Shared packages: `packages/tools` (14 validation tools — single source of truth),
+Shared packages: `packages/tools` (15 validation tools — single source of truth),
 `packages/database` (Neon Postgres pool), `packages/contracts` (Zod schemas),
 `packages/shared` (hash/redaction), `packages/telemetry` (OpenTelemetry).
 
@@ -156,6 +156,26 @@ classifies the document, and extracts charge lines into real `invoice_lines` wit
 `DELIVERY_ORDER`. The worker only **parses** — the final PASS/AMBER/ZERO verdict is still computed in
 Vercel (`gate-bridge.ts`). Scanned / line-less PDFs extract 0 lines and fall back to AMBER (Rule #0).
 Scope: native-text only; OCR (Vision) for scanned PDFs is the flag-gated path below.
+
+### DOMESTIC workflow (2026-06-16)
+
+The upload form provides a **SHIPMENT / DOMESTIC** radio toggle that gates the entire pipeline:
+
+| Aspect | SHIPMENT | DOMESTIC |
+|--------|----------|----------|
+| **Currency** | AED/USD (FX normalization) | KRW (fixed) |
+| **Rate lookup** | `charge_code` in `rate_cards` | Composite lane key `origin\|\|destination\|\|vehicle\|\|unit` |
+| **Validation** | All 14 MCP tools | Skips HS/UAE, shipment_match, fx_policy, dem_det |
+| **Lane check** | N/A | `domestic_lane_check` (15th tool): distance bands, short-run (≤10km), fixed-cost suspect (≤2km), rate delta, risk score |
+| **Verdict language** | English | Korean (국내물류팀 승인 필요, 단거리 운행 감지, etc.) |
+| **Parser** | DSV SHPT hybrid | DSV waybill 5-layer lane extraction + xlsx domestic column aliases |
+| **Rate DB** | `rate_cards` by charge_code | `rate_cards` by lane key (139 lanes from ApprovedLaneMap_ENHANCED.json, seed via `scripts/seed_domestic_rates.py`) |
+
+Domestic invoices carry `origin`/`destination`/`vehicle`/`distance_km` fields parsed from
+xlsx columns (Place of Loading, Vehicle Type, etc.) or extracted from DSV domestic waybill PDFs.
+These feed into `check_rate_card` for contracted rate lookup and `domestic_lane_check` for
+distance-band and rate-variance validation. Verdicts and action items are produced in Korean
+for the 국내물류팀 review workflow.
 
 ### Extraction & Vision (flag-gated, default off)
 
