@@ -5,6 +5,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
+from app.schemas import InvoiceLine
 from app.services.v_vision_rules import parse_vision_text
 
 # Reference patterns for evidence extraction (same as pdf_text.py)
@@ -138,3 +139,39 @@ def normalize_vision_output(
                 pass
     
     return result
+
+
+def vision_result_to_invoice_lines(result: VisionNormalizedResult, file_id: str) -> list[InvoiceLine]:
+    """Convert VisionNormalizedResult.dsv_parse_result.line_items to InvoiceLine[].
+
+    Returns empty list when no structured lines can be extracted.
+    Low confidence or zero lines → upstream gate assigns AMBER (never auto-PASS).
+    """
+    dsv = result.dsv_parse_result or {}
+    keys = dsv.get('keys', {}) or {}
+    line_items = dsv.get('line_items', []) or []
+    out: list[InvoiceLine] = []
+    for li in line_items:
+        amount = li.get('total_aed') or li.get('amount_aed')
+        if amount is None:
+            continue
+        currency = li.get('currency', 'AED')
+        if currency not in ('AED', 'USD'):
+            currency = 'AED'
+        out.append(InvoiceLine(
+            line_id=li.get('line_id', f"ocr_{file_id}_{len(out)}"),
+            description=li.get('description') or li.get('source', ''),
+            currency=currency,
+            amount=float(amount),
+            qty=li.get('qty'),
+            rate=li.get('rate'),
+            type_b=li.get('type_b'),
+            source_ref={
+                'source': li.get('source', ''),
+                'page': li.get('page'),
+                'doc_type': keys.get('doc_type'),
+                'extraction': 'vision_ocr',
+                'evidence_status': li.get('evidence_status'),
+            },
+        ))
+    return out

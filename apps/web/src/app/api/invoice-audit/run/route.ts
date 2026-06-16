@@ -358,61 +358,133 @@ export async function POST(req: Request): Promise<Response> {
     })();
   }
 
-  // Phase 2: Google Vision OCR fallback trigger for PDF evidence.
-  // Flag-gated (VISION_FALLBACK_ENABLED, default OFF) and fire-and-forget.
-  // Only triggers for PDF files that have a GCS URI (gs:// protocol).
-  // The worker starts async Vision document text detection and writes
-  // OCR JSON to GCS; collection is deferred to a later phase or polling.
-  // Vision trigger failure is fully isolated — never changes verdict.
-  if (process.env.VISION_FALLBACK_ENABLED === 'true') {
-    const visJobId = body.job_id;
-    const gcsOcrBucket = process.env.GCS_OCR_BUCKET || 'dsv-invoice-ocr';
-    const pdfsToScan = [invoiceFile, ...evidenceFiles].filter(f => f.file_type === 'pdf');
+  // Track ②: Sync Vision OCR for scanned PDFs (invoice + evidence).
+  // Replaces fire-and-forget with bounded sync run so OCR lines/evidence
+  // are merged BEFORE cf.validate in the same audit pass.
+  // Flag-gated (VISION_FALLBACK_ENABLED, default OFF). Only triggers for
+  // PDFs flagged SCANNED_PAGE_DETECTED with gs:// input (GCS upload path).
+  const visionEnabled = process.env.VISION_FALLBACK_ENABLED === 'true';
+  const gcsOcrBucket = process.env.GCS_OCR_BUCKET || 'dsv-invoice-ocr';
+  const scannerActionItems: Array<{ action_id: string; severity: Verdict; line_id: string | null; issue_type: string; required_action: string }> = [];
+  const parsedIssues: string[] = Array.isArray((parseRes as any).parser_issues) ? (parseRes as any).parser_issues : [];
+  const isScannedInvoice = parsedIssues.includes('SCANNED_PAGE_DETECTED');
+  const runJobId = body.job_id;  // non-null capture for closure
 
-    for (const pdfFile of pdfsToScan) {
-      // Only trigger when we have a GCS URI (gs:// protocol). GCS confirm stores
-      // the object URI in blob_ref; older drafts may still carry a gcs_uri field.
-      const gcsUri = String((pdfFile as any).gcs_uri || pdfFile.blob_ref || '');
-      if (!gcsUri || !String(gcsUri).startsWith('gs://')) {
-        await STORE.appendTrace(visJobId, {
-          step: 'VISION_FALLBACK', input_ref: pdfFile.file_id,
-          output_ref: 'VISION_FALLBACK_SKIPPED', attributedTo: 'run-route:no-gcs-uri'
-        }).catch(() => undefined);
-        continue;
+  async function runVisionForPdf(pdfFile: typeof invoiceFile, label: string): Promise<{ lines: any[]; evidence: any[]; sourceData: any[] } | null> {
+    const gcsUri = String((pdfFile as any).gcs_uri || pdfFile.blob_ref || '');
+    if (!gcsUri.startsWith('gs://')) {
+      await STORE.appendTrace(runJobId, {
+        step: 'VISION_RUN', input_ref: pdfFile.file_id,
+        output_ref: 'VISION_SKIPPED_NO_GCS', attributedTo: 'run-route:vision-run'
+      }).catch(() => undefined);
+      return null;
+    }
+    const ocrPrefix = `gs://${gcsOcrBucket}/jobs/${runJobId}/${pdfFile.file_id}/`;
+    try {
+      const vrResult = await parser.runVisionOcr({
+        job_id: runJobId,
+        file_id: pdfFile.file_id,
+        source_gcs_uri: gcsUri,
+        output_gcs_prefix: ocrPrefix,
+        timeout_seconds: 180,
+      });
+      await STORE.appendTrace(runJobId, {
+        step: 'VISION_RUN', input_ref: gcsUri,
+        output_ref: vrResult.status,
+        source_hash: pdfFile.sha256,
+        attributedTo: `run-route:vision-run:${label}`,
+      });
+      if (vrResult.status === 'VISION_RUN_COLLECTED') {
+        return {
+          lines: vrResult.invoice_lines ?? [],
+          evidence: vrResult.evidence_candidates ?? [],
+          sourceData: vrResult.source_data ?? [],
+        };
       }
+      scannerActionItems.push({
+        action_id: `act_vision_${vrResult.status.toLowerCase()}_${runJobId}_${pdfFile.file_id}`,
+        severity: 'AMBER' as const,
+        line_id: '',
+        issue_type: 'SCANNED_PDF_NEEDS_OCR',
+        required_action: `PDF '${pdfFile.original_filename}' OCR ${vrResult.status === 'VISION_TIMEOUT' ? 'timed out' : 'failed'} — review scanned document manually`,
+      });
+    } catch (e) {
+      await STORE.appendTrace(runJobId, {
+        step: 'VISION_RUN', input_ref: pdfFile.file_id,
+        output_ref: 'VISION_RUN_EXCEPTION', attributedTo: 'run-route:vision-run'
+      }).catch(() => undefined);
+      scannerActionItems.push({
+        action_id: `act_vision_exception_${runJobId}`,
+        severity: 'AMBER' as const,
+        line_id: '',
+        issue_type: 'SCANNED_PDF_NEEDS_OCR',
+        required_action: `PDF '${pdfFile.original_filename}' OCR unavailable — review scanned document manually`,
+      });
+    }
+    return null;
+  }
 
-      const ocrPrefix = `gs://${gcsOcrBucket}/jobs/${visJobId}/${pdfFile.file_id}/`;
-      void (async () => {
-        try {
-          const result = await parser.startVisionOcr({
-            job_id: visJobId,
-            file_id: pdfFile.file_id,
-            source_gcs_uri: gcsUri,
-            output_gcs_prefix: ocrPrefix,
-          });
-          await STORE.appendTrace(visJobId, {
-            step: 'VISION_FALLBACK', input_ref: gcsUri,
-            output_ref: result.status === 'STARTED' ? 'VISION_FALLBACK_TRIGGERED' : `VISION_${result.status}`,
-            source_hash: pdfFile.sha256,
-            attributedTo: 'run-route:vision-fallback',
-            ...(result.operation_name ? { calculation_hash: result.operation_name } : {}),
-          });
-        } catch {
-          await STORE.appendTrace(visJobId, {
-            step: 'VISION_FALLBACK', input_ref: pdfFile.file_id,
-            output_ref: 'VISION_FALLBACK_FAILED', attributedTo: 'run-route:vision-fallback'
-          }).catch(() => undefined);
+  // ── Sync Vision for scanned invoice PDF ──
+  if (visionEnabled && isScannedInvoice) {
+    const ocrResult = await runVisionForPdf(invoiceFile, 'invoice');
+    if (ocrResult && ocrResult.lines.length > 0) {
+      const currentNormalized = parseRes.normalized as any;
+      const existingLines = (currentNormalized?.invoice_lines ?? []) as any[];
+      const existingEvidence = (currentNormalized?.evidence_candidates ?? []) as any[];
+      const mergedNormalized = {
+        ...currentNormalized,
+        invoice_lines: [...existingLines, ...ocrResult.lines],
+        evidence_candidates: [...existingEvidence, ...ocrResult.evidence],
+        parser_confidence: Math.max(currentNormalized?.parser_confidence ?? 0, 0.60),
+      };
+      await STORE.setNormalizedInvoice(runJobId, mergedNormalized);
+      parseRes.normalized = mergedNormalized;
+      await appendParseSourceData(runJobId, ocrResult.sourceData);
+    } else if (!ocrResult) {
+      if (parsedIssues.includes('SCANNED_PAGE_DETECTED') && !scannerActionItems.length) {
+        scannerActionItems.push({
+          action_id: `act_scan_no_ocr_${runJobId}`,
+          severity: 'AMBER' as const,
+          line_id: '',
+          issue_type: 'SCANNED_PDF_NEEDS_OCR',
+          required_action: 'Invoice PDF is scanned. Enable Vision OCR (gs:// upload) for automatic extraction, or review manually.',
+        });
+      }
+    }
+  } else if (isScannedInvoice && !visionEnabled) {
+    // Vision OFF + scanned invoice → AMBER (not silent SKIP)
+    scannerActionItems.push({
+      action_id: `act_scan_vision_off_${runJobId}`,
+      severity: 'AMBER' as const,
+      line_id: '',
+      issue_type: 'SCANNED_PDF_NEEDS_OCR',
+      required_action: 'Invoice PDF is scanned and Vision OCR is disabled. Upload a structured invoice (.xlsx) or enable Vision OCR.',
+    });
+  }
+
+  // ── Sync Vision for scanned evidence PDFs ──
+  const visionMergedEvidence: any[] = [];
+  if (visionEnabled) {
+    for (const evFile of evidenceFiles) {
+      const evParsedIssues = parsedIssues;
+      if (evFile.file_type === 'pdf') {
+        const ocrResult = await runVisionForPdf(evFile, 'evidence');
+        if (ocrResult) {
+          visionMergedEvidence.push(...ocrResult.evidence);
+          await appendParseSourceData(runJobId, ocrResult.sourceData);
         }
-      })();
+      }
     }
   }
 
+  // ── Zero-lines guard (after OCR merge) ──
   // P0-4: parser extracted zero invoice lines (empty/unmapped invoice, or PDF text
   // with no structured lines). Validating [] would yield empty COST-GUARD results and
   // a false PASS, so short-circuit to AMBER and route to human review instead.
+  // OCR may have filled the lines, so this guard runs AFTER Vision merge.
   const parsedLines = ((parseRes.normalized as { invoice_lines?: unknown[] })?.invoice_lines) ?? [];
   if (parsedLines.length === 0) {
-    const actionItems = [...sourceHashActionItems, {
+    const actionItems = [...sourceHashActionItems, ...scannerActionItems, {
       action_id: `act_nolines_${body.job_id}`,
       severity: 'AMBER' as const,
       line_id: '',
@@ -426,7 +498,7 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ job_id: body.job_id, status: 'REVIEW_REQUIRED', verdict: zeroLineVerdict, action_items: actionItems }, { status: 202 });
   }
 
-  const mergedEvidence = [...((parseRes.normalized as any)?.evidence_candidates ?? [])];
+  const mergedEvidence = [...((parseRes.normalized as any)?.evidence_candidates ?? []), ...visionMergedEvidence];
   for (const evFile of evidenceFiles) {
     try {
       const evBlobUrl = await getSignedDownloadUrl(evFile.blob_ref);
@@ -518,7 +590,10 @@ export async function POST(req: Request): Promise<Response> {
     : null;
   const recon = checkReconciliation(invoiceTotal, lineAuditTotal, typeBTotal, job.workflow_type);
   let finalVerdict = maxVerdict(gate.verdict as Verdict, sourceHashVerdict);
-  const actionItems = [...sourceHashActionItems, ...(gate.action_items || [])];
+  // Fold scanned-PDF/OCR action items (AMBER) into the verdict so an unread scanned
+  // evidence doc cannot coexist with a PASS verdict (audit-integrity consistency).
+  for (const item of scannerActionItems) finalVerdict = maxVerdict(finalVerdict, item.severity);
+  const actionItems = [...sourceHashActionItems, ...scannerActionItems, ...(gate.action_items || [])];
   if (!recon.ok && recon.verdict !== 'PASS') {
     finalVerdict = maxVerdict(finalVerdict, recon.verdict as Verdict);
     actionItems.push({

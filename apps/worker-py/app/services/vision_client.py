@@ -34,7 +34,7 @@ class VisionClient:
     def __init__(self, project_id: Optional[str] = None):
         self.project_id = project_id or os.environ.get('GOOGLE_CLOUD_PROJECT', '')
         self.enabled = _bool_env("VISION_ENABLED", False)
-        self.feature_type = os.environ.get("VISION_FEATURE_TYPE", "DOCUMENT_TEXT_DETECTION")
+        self.feature_type = 'DOCUMENT_TEXT_DETECTION'  # fixed: PDF/TIFF OCR only
         self.batch_size = _int_env("VISION_BATCH_SIZE", 1)
         self.mime_type = os.environ.get("VISION_MIME_TYPE", "application/pdf")
         self.api_endpoint = os.environ.get("VISION_API_ENDPOINT")

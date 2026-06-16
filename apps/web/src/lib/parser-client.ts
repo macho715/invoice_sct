@@ -14,8 +14,8 @@ export interface ParseResponse {
   file_id: string;
   source_sha256?: string;
   normalized: unknown;
-  // Phase 3 reviewer feedback + domestic fullset port: complete pdf_source_data from spans
   source_data?: any[];
+  parser_issues?: string[];
 }
 
 export interface NotebookLmRunPayload {
@@ -26,8 +26,6 @@ export interface NotebookLmRunPayload {
 
 export interface NotebookLmRunResult {
   job_id?: string;
-  // CALLBACK_SENT | CALLBACK_REJECTED | NOTEBOOKLM_UNAVAILABLE (from worker) |
-  // TRIGGERED (web aborted the long worker call; worker keeps running) | TRIGGER_REJECTED
   status: string;
   notebooklm_source_id?: string | null;
   error_code?: string | null;
@@ -48,16 +46,35 @@ export interface VisionStartResult {
   error_code?: string | null;
 }
 
+export interface VisionRunPayload {
+  job_id: string;
+  file_id: string;
+  source_gcs_uri: string;
+  output_gcs_prefix: string;
+  timeout_seconds?: number;
+}
+
+export interface VisionRunResult {
+  job_id: string;
+  file_id: string;
+  status: 'VISION_DISABLED' | 'VISION_RUN_COLLECTED' | 'VISION_RUN_FAILED' | 'VISION_TIMEOUT';
+  invoice_lines?: any[];
+  evidence_candidates?: any[];
+  source_data?: any[];
+  source_gcs_uri?: string | null;
+  ocr_json_gcs_uris?: string[];
+  page_count?: number;
+  confidence?: number;
+  issues?: string[];
+  error_code?: string | null;
+}
+
 export interface ParserClient {
   parse(req: ParseRequestPayload): Promise<ParseResponse>;
-  parsePdfText(req: ParseRequestPayload): Promise<ParseResponse>;  // P3B dedicated (same endpoint, typed for pdf)
-  // Fire the MarkItDown -> NotebookLM extraction on the worker. The worker runs the
-  // (up to ~300s) orchestrator and POSTs results to /api/notebooklm/ingest-summary,
-  // so this call only triggers it with a short timeout — it does NOT wait for the result.
+  parsePdfText(req: ParseRequestPayload): Promise<ParseResponse>;
   runNotebookLm(req: NotebookLmRunPayload): Promise<NotebookLmRunResult>;
-  // Fire-and-forget Vision OCR trigger on the worker. Does NOT wait for OCR completion.
-  // Returns STARTED/VISION_DISABLED immediately; collect is deferred to a later phase.
   startVisionOcr(req: VisionStartPayload): Promise<VisionStartResult>;
+  runVisionOcr(req: VisionRunPayload): Promise<VisionRunResult>;
 }
 
 export class ParseFailedError extends Error {
@@ -122,10 +139,32 @@ export function createParserClient(opts: { baseUrl: string; token: string }): Pa
       return { job_id: req.job_id, file_id: req.file_id, status: 'VISION_DISABLED', error_code: 'TRIGGER_FAILED' };
     }
   };
+  const runVisionOcr = async (req: VisionRunPayload): Promise<VisionRunResult> => {
+    const timeoutSeconds = (req.timeout_seconds ?? 180) + 30;
+    try {
+      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/vision/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify(req),
+        signal: AbortSignal.timeout((timeoutSeconds + 30) * 1000),
+      });
+      if (!res.ok) {
+        return { job_id: req.job_id, file_id: req.file_id, status: 'VISION_RUN_FAILED', error_code: `HTTP_${res.status}` };
+      }
+      return (await res.json()) as VisionRunResult;
+    } catch (e) {
+      const name = (e as Error)?.name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        return { job_id: req.job_id, file_id: req.file_id, status: 'VISION_TIMEOUT', error_code: 'RUN_TIMEOUT' };
+      }
+      return { job_id: req.job_id, file_id: req.file_id, status: 'VISION_RUN_FAILED', error_code: 'RUN_FAILED' };
+    }
+  };
   return {
     parse: call,
-    parsePdfText: call,  // for now same wire; P3B+ can evolve response shape
+    parsePdfText: call,
     runNotebookLm,
     startVisionOcr,
+    runVisionOcr,
   };
 }
