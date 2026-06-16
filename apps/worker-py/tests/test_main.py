@@ -46,3 +46,18 @@ def test_parse_unsupported_type_422():
     c = TestClient(app)
     r = c.post('/parse', json={'blob_ref':'b','file_id':'f','job_id':'j','file_type':'image','parser_version':'p','blob_url':'u'})
     assert r.status_code == 422
+
+def test_worker_token_required_when_configured(monkeypatch):
+    monkeypatch.setenv('PARSER_WORKER_TOKEN', 'test-token')
+    app = create_app()
+    c = TestClient(app)
+
+    r = c.post('/parse', json={'blob_ref':'b','file_id':'f','job_id':'j','file_type':'image','parser_version':'p','blob_url':'u'})
+    assert r.status_code == 401
+
+    r = c.post(
+        '/parse',
+        json={'blob_ref':'b','file_id':'f','job_id':'j','file_type':'image','parser_version':'p','blob_url':'u'},
+        headers={'authorization': 'Bearer test-token'},
+    )
+    assert r.status_code == 422
