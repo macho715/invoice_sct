@@ -23,6 +23,9 @@ describe('middleware API auth', () => {
     expect(middleware(apiRequest(undefined, '203.0.113.24', '/api/audit/export')).status).toBe(200);
     // dev-stub blob serving (prefix) — the worker fetches it without a bearer token.
     expect(middleware(apiRequest(undefined, '203.0.113.25', '/api/dev/blob/job_x/file.pdf')).status).toBe(200);
+    // PR 3.2: /api/invoices and /api/invoices/upload-url must be public (client-direct upload path).
+    expect(middleware(apiRequest(undefined, '203.0.113.26', '/api/invoices')).status).toBe(200);
+    expect(middleware(apiRequest(undefined, '203.0.113.27', '/api/invoices/upload-url')).status).toBe(200);
   });
 
   it('rejects API requests when API_SECRET_KEY is missing', async () => {
