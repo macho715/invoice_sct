@@ -1,7 +1,7 @@
 import pytest
 import openpyxl
 from io import BytesIO
-from app.schemas import ExportRequest, DecisionRow, ActionItemRow, FinalReconRow, LineViewRow, SourceDataRow, AuditDetailRow, EvidenceIssuesRow, ManifestEntry
+from app.schemas import ExportRequest, DecisionRow, ActionItemRow, FinalReconRow, LineViewRow, RateCheckRow, SourceDataRow, AuditDetailRow, EvidenceIssuesRow, ManifestEntry
 from app.exporters.xlsx import build_xlsx
 import hashlib
 
@@ -176,3 +176,70 @@ def test_xlsx_export_persists_source_hash_verification_in_required_sheets():
     assert manifest["source_hash_status"] == "SOURCE_HASH_MISMATCH"
     assert manifest["source_sha256_expected"] == "a" * 64
     assert manifest["source_sha256_actual"] == "b" * 64
+
+
+def test_xlsx_export_exposes_rate_match_columns():
+    # rate_match_logic.md alignment: 06_Rate_Check + 04_Line_View must surface
+    # the rate_match enrichment fields (rate_type, ai_rate_status, variance, etc.)
+    req = ExportRequest(
+        job_id="job_rm",
+        generated_at="2026-06-16T00:00:00Z",
+        decision_rows=[],
+        action_items_rows=[],
+        final_recon_rows=[],
+        line_view_rows=[
+            LineViewRow(
+                line_id="line_1",
+                description="desc",
+                amount=100.0,
+                currency="AED",
+                risk="MEDIUM",
+                action="Contract owner review",
+            )
+        ],
+        rate_check_rows=[
+            RateCheckRow(
+                line_id="line_1",
+                charge_code="CG-1",
+                lane="JEBEL_ALI-MIRFA",
+                rate_status="MISSING_RATE",
+                severity="ZERO",
+                contract_row_id="CR-1",
+                unit="LS",
+                scope="DOMESTIC",
+                type_b="OTHERS",
+                match_eligible="N",
+                rate_type="MISSING_RATE",
+                ai_rate_status="MISSING_RATE_NO_AUTO_PASS",
+                variance_amount=None,
+                variance_pct=5.0,
+                evidence_status="MISSING",
+            )
+        ],
+        source_data_rows=[],
+        audit_detail_rows=[],
+        evidence_issues_rows=[],
+    )
+    wb = openpyxl.load_workbook(BytesIO(build_xlsx(req)))
+
+    # 06_Rate_Check — new columns present + values mapped to correct cells
+    rate_ws = wb["06_Rate_Check"]
+    rate_headers = [c.value for c in rate_ws[1]]
+    for col in ["contract_row_id", "unit", "scope", "type_b", "match_eligible",
+                "rate_type", "ai_rate_status", "variance_amount", "variance_pct", "evidence_status"]:
+        assert col in rate_headers, f"missing 06_Rate_Check column: {col}"
+    rate_row = {rate_headers[i]: rate_ws.cell(row=2, column=i + 1).value for i in range(len(rate_headers))}
+    assert rate_row["rate_type"] == "MISSING_RATE"
+    assert rate_row["ai_rate_status"] == "MISSING_RATE_NO_AUTO_PASS"
+    assert rate_row["match_eligible"] == "N"
+    assert rate_row["contract_row_id"] == "CR-1"
+    assert rate_row["variance_pct"] == 5.0
+    assert rate_row["evidence_status"] == "MISSING"
+
+    # 04_Line_View — risk / action columns present + values
+    line_ws = wb["04_Line_View"]
+    line_headers = [c.value for c in line_ws[1]]
+    assert "risk" in line_headers and "action" in line_headers
+    line_row = {line_headers[i]: line_ws.cell(row=2, column=i + 1).value for i in range(len(line_headers))}
+    assert line_row["risk"] == "MEDIUM"
+    assert line_row["action"] == "Contract owner review"
