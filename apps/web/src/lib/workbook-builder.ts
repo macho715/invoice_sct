@@ -181,7 +181,8 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
       band: matchedCostGuard?.band ?? null,
       delta_pct: deltaPct,
       numeric_integrity_status: line.numeric_integrity_status ?? null,
-      difference: diff
+      difference: diff,
+      formula_text: line.source_ref?.formula_text ?? null
     };
   });
 
@@ -356,7 +357,9 @@ export async function buildExportRequest(jobId: string, generatedAt?: string): P
   const manifest_entries = [
     { key: 'source_hash_status', value: sourceHashStatus },
     { key: 'source_sha256_expected', value: sourceHashTrace?.source_hash ?? '' },
-    { key: 'source_sha256_actual', value: sourceHashTrace?.calculation_hash ?? '' }
+    { key: 'source_sha256_actual', value: sourceHashTrace?.calculation_hash ?? '' },
+    { key: 'roundup_disclosure', value: '결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다.' },
+    { key: 'formula_text_policy', value: 'Formula_Text is exported as literal text, never as a live workbook formula.' }
   ];
 
   return {

@@ -91,6 +91,29 @@ def test_xlsx_export_sorting():
     assert ws.cell(row=2, column=1).value == "line_a"
     assert ws.cell(row=3, column=1).value == "line_b"
 
+def test_xlsx_export_writes_formula_text_as_literal_text():
+    req = ExportRequest(
+        job_id="job_formula",
+        generated_at="2026-06-09T12:00:00Z",
+        decision_rows=[],
+        action_items_rows=[],
+        final_recon_rows=[],
+        line_view_rows=[
+            LineViewRow(line_id="line_1", description="desc", amount=100.0, currency="USD", formula_text="=ROUNDUP(99.991,2)")
+        ],
+        source_data_rows=[],
+        audit_detail_rows=[],
+        evidence_issues_rows=[]
+    )
+    xlsx_bytes = build_xlsx(req)
+    wb = openpyxl.load_workbook(BytesIO(xlsx_bytes), data_only=False)
+    ws = wb["04_Line_View"]
+    headers = [cell.value for cell in ws[1]]
+    col = headers.index("formula_text") + 1
+    cell = ws.cell(row=2, column=col)
+    assert cell.value == "'=ROUNDUP(99.991,2)"
+    assert cell.data_type == "s"
+
 def test_xlsx_export_missing_fields():
     req = ExportRequest(
         job_id="job_123",

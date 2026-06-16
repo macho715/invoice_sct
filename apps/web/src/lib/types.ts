@@ -188,7 +188,8 @@ export const LineViewRowSchema = z.object({
   band: z.string().nullable(),
   delta_pct: z.number().nullable(),
   numeric_integrity_status: z.string().nullable(),
-  difference: z.number().nullable()
+  difference: z.number().nullable(),
+  formula_text: z.string().nullable().optional()
 });
 export type LineViewRow = z.infer<typeof LineViewRowSchema>;
 

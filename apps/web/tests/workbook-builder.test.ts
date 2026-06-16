@@ -301,7 +301,7 @@ describe('buildExportRequest - shpiment gate fields', () => {
       invoice_id: 'inv_shpiment',
       invoice_header: { invoice_no: null, vendor: null, issue_date: null, currency: 'USD' as const, invoice_total: null },
       invoice_lines: [
-        { line_id: 'l1', shipment_ref: 'HVDC-001', description: 'Document delivery order fee', amount: 100, currency: 'USD' as const, rate: null, rate_basis: null, numeric_integrity_status: null, numeric_delta: null, rate_source_candidate: null, for_charge_component: null, type_b: null, evidence_status: null, rate_status: null, validity_status: null, gate_status: null, band: null, delta_pct: null, normalized_description: null, qty: null, source_ref: null },
+        { line_id: 'l1', shipment_ref: 'HVDC-001', description: 'Document delivery order fee', amount: 100, currency: 'USD' as const, rate: null, rate_basis: null, numeric_integrity_status: null, numeric_delta: null, rate_source_candidate: null, for_charge_component: null, type_b: null, evidence_status: null, rate_status: null, validity_status: null, gate_status: null, band: null, delta_pct: null, normalized_description: null, qty: null, source_ref: { formula_text: '=ROUNDUP(99.991,2)' } },
       ],
       evidence_candidates: [],
       parser_confidence: 1.0,
@@ -336,8 +336,13 @@ describe('buildExportRequest - shpiment gate fields', () => {
       rate_status: 'UNKNOWN',
       gate_status: 'AMBER',
       band: 'WARN',
-      delta_pct: 2
+      delta_pct: 2,
+      formula_text: '=ROUNDUP(99.991,2)'
     });
+    expect(result.manifest_entries).toEqual(expect.arrayContaining([
+      { key: 'roundup_disclosure', value: '결과값은 ROUNDUP(2자리)을 반영하지 않은 값입니다.' },
+      { key: 'formula_text_policy', value: 'Formula_Text is exported as literal text, never as a live workbook formula.' },
+    ]));
   });
 });
 

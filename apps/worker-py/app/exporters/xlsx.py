@@ -11,6 +11,13 @@ from app.schemas import (
     ShipmentMatchRow,
 )
 
+def _literal_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
 
 def build_xlsx(req: ExportRequest) -> bytes:
     wb = openpyxl.Workbook()
@@ -85,7 +92,7 @@ def build_xlsx(req: ExportRequest) -> bytes:
         ])
 
     ws_line = wb.create_sheet("04_Line_View")
-    line_cols = ["line_id", "shipment_ref", "description", "for_charge_component", "type_b", "amount", "currency", "rate_source", "rate_status", "validity_status", "evidence_status", "gate_status", "band", "delta_pct", "numeric_integrity_status", "difference"]
+    line_cols = ["line_id", "shipment_ref", "description", "for_charge_component", "type_b", "amount", "currency", "rate_source", "rate_status", "validity_status", "evidence_status", "gate_status", "band", "delta_pct", "numeric_integrity_status", "difference", "formula_text"]
     ws_line.append(line_cols)
     sorted_lines = sorted(req.line_view_rows, key=lambda x: x.line_id or "")
     for row in sorted_lines:
@@ -106,6 +113,7 @@ def build_xlsx(req: ExportRequest) -> bytes:
             row.delta_pct,
             row.numeric_integrity_status,
             row.difference,
+            _literal_text(row.formula_text),
         ])
 
     ws_dup = wb.create_sheet("05_Duplicate_Check")
