@@ -62,4 +62,15 @@ describe('cf-mcp-client (in-process)', () => {
 
     expect(r.costguard_results[0].fx_policy_id).toBe('pol_test');
   });
+
+  it('uses EvidenceCandidate text spans for customs evidence checks', async () => {
+    const client = createCfMcpClient();
+    const r = await client.validate('job_customs_evidence', {
+      invoice_lines: [{ line_id: 'l1', description: 'customs duty', currency: 'AED', amount: 100 }],
+      evidence_index: [{ source_file_id: 'pdf1', text_span: 'Bill of Entry and customs declaration for shipment', confidence: 0.9 }]
+    });
+
+    expect(r.hs_uae_results[0]).toMatchObject({ line_id: 'l1', boe_found: true, verdict: 'AMBER', reason_code: 'CUSTOMS_HS_CODE_MISSING' });
+    expect(r.doc_guardian_results.some((d) => d.line_id === 'l1')).toBe(false);
+  });
 });

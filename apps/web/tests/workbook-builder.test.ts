@@ -293,6 +293,54 @@ describe('buildExportRequest - band counts', () => {
   });
 });
 
+describe('buildExportRequest - shpiment gate fields', () => {
+  it('backfills TYPE_B and evidence status from validation results for 04_Line_View', async () => {
+    mockGetJob.mockResolvedValue(makeSampleJob());
+    mockGetResult.mockResolvedValue(makeSampleResult({ line_results: [] }));
+    mockGetNormalizedInvoice.mockResolvedValue({
+      invoice_id: 'inv_shpiment',
+      invoice_header: { invoice_no: null, vendor: null, issue_date: null, currency: 'USD' as const, invoice_total: null },
+      invoice_lines: [
+        { line_id: 'l1', shipment_ref: 'HVDC-001', description: 'Document delivery order fee', amount: 100, currency: 'USD' as const, rate: null, rate_basis: null, numeric_integrity_status: null, numeric_delta: null, rate_source_candidate: null, for_charge_component: null, type_b: null, evidence_status: null, rate_status: null, validity_status: null, gate_status: null, band: null, delta_pct: null, normalized_description: null, qty: null, source_ref: null },
+      ],
+      evidence_candidates: [],
+      parser_confidence: 1.0,
+      parser_version: 'parser-0.1.0',
+    });
+    mockGetValidationResult.mockResolvedValue({
+      validation_id: 'val_shpiment',
+      job_id: JOB_ID,
+      sct_trace_id: 'trace_shpiment',
+      cf_mcp_tool_calls: [],
+      type_b_results: [{ line_id: 'l1', type_b: 'DO', confidence: 0.95 }],
+      normalized_lines: [{ line_id: 'l1', charge_code: 'GENERAL', unit: 'LS' }],
+      hs_uae_results: [],
+      rate_checks: [{ line_id: 'l1', rate_status: 'UNKNOWN', validity_status: null }],
+      evidence_requirements: [{ line_id: 'l1', required_evidence: ['DN', 'PO'] }],
+      costguard_results: [{ line_id: 'l1', band: 'WARN' as const, verdict: 'AMBER', delta_pct: 2, prism_kernel_proof_ref: null }],
+      doc_guardian_results: [{ line_id: 'l1', code: 'EVIDENCE_MISSING_DN_PO', severity: 'ZERO' as const }],
+      gate_results: [{ line_id: 'l1', gate_status: 'AMBER' as const, reason_codes: ['COSTGUARD_WARN'] }],
+      confidence: 0.8,
+      reason_codes: [],
+      warnings: [],
+    });
+    mockGetApprovalRecord.mockResolvedValue(null);
+
+    const result = await buildExportRequest(JOB_ID);
+
+    expect(result.line_view_rows[0]).toMatchObject({
+      line_id: 'l1',
+      type_b: 'DO',
+      for_charge_component: 'GENERAL',
+      evidence_status: 'MISSING',
+      rate_status: 'UNKNOWN',
+      gate_status: 'AMBER',
+      band: 'WARN',
+      delta_pct: 2
+    });
+  });
+});
+
 
 describe('buildExportRequest - duplicate checks', () => {
   it('populates duplicate_check_rows from duplicate validation results without raw vendor data', async () => {
