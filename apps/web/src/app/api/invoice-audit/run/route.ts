@@ -437,7 +437,7 @@ export async function POST(req: Request): Promise<Response> {
   // ── Sync Vision for scanned invoice PDF ──
   if (visionEnabled && isScannedInvoice) {
     const ocrResult = await runVisionForPdf(invoiceFile, 'invoice');
-    if (ocrResult && ocrResult.lines.length > 0) {
+    if (ocrResult) {
       const currentNormalized = parseRes.normalized as any;
       const existingLines = (currentNormalized?.invoice_lines ?? []) as any[];
       const existingEvidence = (currentNormalized?.evidence_candidates ?? []) as any[];
@@ -450,6 +450,15 @@ export async function POST(req: Request): Promise<Response> {
       await STORE.setNormalizedInvoice(runJobId, mergedNormalized);
       parseRes.normalized = mergedNormalized;
       await appendParseSourceData(runJobId, ocrResult.sourceData);
+      if (ocrResult.lines.length === 0) {
+        scannerActionItems.push({
+          action_id: `act_scan_ocr_no_lines_${runJobId}`,
+          severity: 'AMBER' as const,
+          line_id: '',
+          issue_type: 'SCANNED_PDF_OCR_NO_INVOICE_LINES',
+          required_action: 'Vision OCR completed, but no invoice lines were structured. Review OCR evidence or upload a structured invoice.',
+        });
+      }
     } else if (!ocrResult) {
       if (parsedIssues.includes('SCANNED_PAGE_DETECTED') && !scannerActionItems.length) {
         scannerActionItems.push({

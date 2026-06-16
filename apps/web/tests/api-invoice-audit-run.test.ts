@@ -395,6 +395,65 @@ describe('POST /api/invoice-audit/run', () => {
     expect(payload.blob_url).toBe(payload.blob_ref);
   });
 
+  it('keeps OCR evidence and AMBER action when Vision collects zero invoice lines', async () => {
+    const job = await STORE.createJob({ created_by: 'u1' });
+    await STORE.updateJob(job.job_id, { status: 'UPLOADED' });
+    await STORE.addSourceFile(job.job_id, {
+      file_id: 'pdf_gcs_invoice',
+      job_id: job.job_id,
+      original_filename: 'delivery-note.pdf',
+      file_type: 'pdf',
+      mime_type: 'application/pdf',
+      size_bytes: 10,
+      sha256: 'f'.repeat(64),
+      blob_ref: `gs://dsv-invoice-source/source/${job.job_id}/pdf_gcs_invoice/delivery-note.pdf`,
+      parser_status: 'PENDING',
+      uploaded_by: 'u1',
+      uploaded_at: new Date().toISOString(),
+    });
+    process.env.VISION_FALLBACK_ENABLED = 'true';
+    process.env.GCS_OCR_BUCKET = 'dsv-invoice-ocr';
+    process.env.PARSER_WORKER_URL = 'http://localhost:8000';
+    process.env.PARSER_WORKER_TOKEN = 't';
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/v1/vision/run')) {
+        return { ok: true, status: 200, json: async () => ({
+          job_id: job.job_id,
+          file_id: 'pdf_gcs_invoice',
+          status: 'VISION_RUN_COLLECTED',
+          invoice_lines: [],
+          evidence_candidates: [{ evidence_id: 'ev_ocr_1', doc_kind: 'DELIVERY_NOTE', file_id: 'pdf_gcs_invoice', confidence: 0.96 }],
+          source_data: [{ file_id: 'pdf_gcs_invoice', source_ref: 'ocr_page_1', original_text: 'redacted', confidence: 0.96 }],
+          page_count: 1,
+          confidence: 0.96,
+          issues: [],
+        }) };
+      }
+      if (u.includes('/v1/parse')) {
+        return { ok: true, status: 200, json: async () => ({
+          parse_result_id: 'pr_scanned',
+          job_id: job.job_id,
+          file_id: 'pdf_gcs_invoice',
+          normalized: { invoice_id: 'inv', invoice_header: { currency: 'AED' }, invoice_lines: [], evidence_candidates: [], parser_confidence: 0.3, parser_version: 'p' },
+          parser_issues: ['SCANNED_PAGE_DETECTED'],
+        }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: {} }) };
+    });
+
+    const r = await POST(new Request('http://test/api/invoice-audit/run', { method: 'POST', body: JSON.stringify({ job_id: job.job_id }), headers: { 'content-type': 'application/json' } }));
+
+    expect(r.status).toBe(202);
+    const body = await r.json();
+    expect(body.action_items.map((a: any) => a.issue_type)).toContain('SCANNED_PDF_OCR_NO_INVOICE_LINES');
+    expect(body.action_items.map((a: any) => a.issue_type)).toContain('NO_INVOICE_LINES_EXTRACTED');
+    await expect(STORE.getNormalizedInvoice(job.job_id)).resolves.toMatchObject({
+      evidence_candidates: [expect.objectContaining({ doc_kind: 'DELIVERY_NOTE' })],
+    });
+    await expect(STORE.getParseSourceData(job.job_id)).resolves.toHaveLength(1);
+  });
+
   it('skips Vision fallback for non-GCS PDF even when flag is enabled', async () => {
     const fd = new FormData();
     fd.set('file', new File(['%PDF-1.4 minimal'], 'local-only.pdf', { type: 'application/pdf' }));
