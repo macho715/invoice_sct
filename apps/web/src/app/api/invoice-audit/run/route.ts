@@ -23,6 +23,11 @@ function classifyPdfParseIssue(message: string): PdfParseIssueType | null {
   return null;
 }
 
+function envFlagEnabled(value: string | undefined): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+}
+
 const PENDING_SHA256_PLACEHOLDER = '0'.repeat(64);
 const VERDICT_RANK: Record<Verdict, number> = { PASS: 0, AMBER: 1, ZERO: 2, FAILED: 3 };
 
@@ -364,7 +369,7 @@ export async function POST(req: Request): Promise<Response> {
   // are merged BEFORE cf.validate in the same audit pass.
   // Flag-gated (VISION_FALLBACK_ENABLED, default OFF). Only triggers for
   // PDFs flagged SCANNED_PAGE_DETECTED with gs:// input (GCS upload path).
-  const visionEnabled = (process.env.VISION_FALLBACK_ENABLED ?? '').trim().toLowerCase() === 'true';
+  const visionEnabled = envFlagEnabled(process.env.VISION_FALLBACK_ENABLED);
   const gcsOcrBucket = process.env.GCS_OCR_BUCKET || 'dsv-invoice-ocr';
   const scannerActionItems: Array<{ action_id: string; severity: Verdict; line_id: string | null; issue_type: string; required_action: string }> = [];
   const parsedIssues: string[] = Array.isArray((parseRes as any).parser_issues) ? (parseRes as any).parser_issues : [];

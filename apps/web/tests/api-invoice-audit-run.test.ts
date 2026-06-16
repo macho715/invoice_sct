@@ -312,7 +312,7 @@ describe('POST /api/invoice-audit/run', () => {
       uploaded_by: 'u1',
       uploaded_at: new Date().toISOString(),
     });
-    process.env.VISION_FALLBACK_ENABLED = 'true';
+    process.env.VISION_FALLBACK_ENABLED = ' 1 ';
     process.env.GCS_OCR_BUCKET = 'dsv-invoice-ocr';
     process.env.CF_MCP_BASE_URL = 'https://cf.example';
     process.env.CF_MCP_TIMEOUT_MS = '1000';
