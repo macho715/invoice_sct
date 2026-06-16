@@ -186,6 +186,62 @@ describe('job-store-pg', () => {
     });
   });
 
+  // ---------- workflow_type column self-heal (migration 0017) ----------
+  describe('createJob self-heals missing workflow_type column (42703)', () => {
+    it('adds the column and retries when jobs.workflow_type is missing', async () => {
+      process.env.DATABASE_URL = TEST_DB_URL;
+
+      const now = '2026-06-16T12:00:00.000Z';
+      const undefinedColumn = Object.assign(
+        new Error('column "workflow_type" of relation "jobs" does not exist'),
+        { code: '42703' }
+      );
+      mockQuery
+        // 1st INSERT fails: column does not exist
+        .mockRejectedValueOnce(undefinedColumn)
+        // self-heal ALTER TABLE
+        .mockResolvedValueOnce({ rows: [] })
+        // retried INSERT succeeds
+        .mockResolvedValueOnce({
+          rows: [{
+            job_id: JOB_ID,
+            status: 'CREATED',
+            verdict: null,
+            workflow_type: 'SHIPMENT',
+            created_by: 'u1',
+            created_at: new Date(now),
+            updated_at: new Date(now),
+            rule_version: 'rule-0.1.0',
+            parser_version: 'parser-0.1.0',
+          }],
+        });
+
+      const { createPgJobStore } = await import('../src/lib/job-store-pg');
+      const store = createPgJobStore()!;
+
+      const job = await store.createJob({ created_by: 'u1', job_id: JOB_ID });
+
+      expect(job.job_id).toBe(JOB_ID);
+      expect(job.workflow_type).toBe('SHIPMENT');
+      // INSERT (fail) → ALTER TABLE → INSERT (retry) = 3 queries
+      expect(mockQuery).toHaveBeenCalledTimes(3);
+      expect(mockQuery.mock.calls[1][0]).toMatch(/ALTER TABLE jobs ADD COLUMN IF NOT EXISTS workflow_type/);
+    });
+
+    it('does not swallow non-42703 errors', async () => {
+      process.env.DATABASE_URL = TEST_DB_URL;
+
+      const otherError = Object.assign(new Error('connection reset'), { code: 'ECONNRESET' });
+      mockQuery.mockRejectedValueOnce(otherError);
+
+      const { createPgJobStore } = await import('../src/lib/job-store-pg');
+      const store = createPgJobStore()!;
+
+      await expect(store.createJob({ created_by: 'u1', job_id: JOB_ID })).rejects.toThrow('connection reset');
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ---------- T17 TEST 4 ----------
   describe('getJob returns undefined for non-existent jobId', () => {
     it('returns undefined when no rows match', async () => {
