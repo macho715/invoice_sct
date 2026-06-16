@@ -1,5 +1,6 @@
 import RunAuditButton from './RunAuditButton';
 import DownloadAuditButton from './DownloadAuditButton';
+import AppendEvidenceUpload from './AppendEvidenceUpload';
 
 async function fetchStatus(jobId: string, jobToken: string | null) {
   const base = process.env.NEXT_PUBLIC_BASE_URL
@@ -32,6 +33,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
     );
   }
   const verdictClass = status.verdict === 'PASS' ? 'alert-pass' : status.verdict === 'AMBER' ? 'alert-warn' : status.verdict === 'ZERO' ? 'alert-error' : '';
+  const canAppendEvidence = status.status === 'UPLOADED' || status.status === 'QUEUED';
   const isComplete = status.status === 'REVIEW_REQUIRED' || status.status === 'COMPLETED' || status.status === 'FAILED';
   return (
     <main className="container">
@@ -50,6 +52,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         )}
         <p style={{ marginTop: 12 }}><a href="/invoice-audit/upload">Upload another invoice</a></p>
       </div>
+      <AppendEvidenceUpload jobId={jobId} jobToken={jobToken ?? null} disabled={!canAppendEvidence} />
     </main>
   );
 }
