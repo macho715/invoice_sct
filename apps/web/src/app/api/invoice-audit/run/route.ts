@@ -7,6 +7,7 @@ import { ErrorCodes, httpForError, type ErrorCode } from '@/lib/error-codes';
 import { getSignedDownloadUrl, streamFromBlob } from '@/lib/blob';
 import { createHash } from 'node:crypto';
 import type { SourceDataRow, SourceFile, Verdict } from '@/lib/types';
+import { requireJobToken } from '@/lib/job-token';
 
 export const runtime = 'nodejs';
 void createJobStore;
@@ -129,13 +130,18 @@ async function verifyAndPersistSourceHashes(jobId: string, files: SourceFile[]):
   return { files: verified };
 }
 
-async function parseBody(req: Request): Promise<{ job_id?: string } | null> {
+async function parseBody(req: Request): Promise<{ job_id?: string; job_token?: string } | null> {
   const ct = req.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
     try { return await req.json(); } catch { return null; }
   }
   if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) {
-    try { const fd = await req.formData(); const jid = fd.get('job_id'); return jid ? { job_id: String(jid) } : null; } catch { return null; }
+    try {
+      const fd = await req.formData();
+      const jid = fd.get('job_id');
+      const token = fd.get('job_token');
+      return jid ? { job_id: String(jid), ...(typeof token === 'string' ? { job_token: token } : {}) } : null;
+    } catch { return null; }
   }
   try { return await req.json(); } catch {}
   return null;
@@ -152,6 +158,8 @@ export async function POST(req: Request): Promise<Response> {
   if (!body.job_id) return err('INVALID_STATE', 'job_id required');
   const job = await STORE.getJob(body.job_id);
   if (!job) return err('JOB_NOT_FOUND', 'unknown job_id');
+  const tokenError = requireJobToken(req, job, body);
+  if (tokenError) return tokenError;
   if (job.status !== 'UPLOADED' && job.status !== 'QUEUED') return err('INVALID_STATE', `cannot run from status ${job.status}`);
   let files = await STORE.listSourceFiles(body.job_id);
   if (files.length === 0) return err('INVALID_STATE', 'no source files');

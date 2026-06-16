@@ -19,6 +19,7 @@ export type ApproverRole =
 
 export interface ApprovalModalProps {
   jobId: string;
+  jobToken?: string | null;
   verdict: ApprovalVerdict;
   /** Variance amount in AED (used for AMBER routing). */
   varianceAed?: number;
@@ -97,6 +98,7 @@ function requiredRoleForAmber(varianceAed: number | undefined): {
 export default function ApprovalModal(props: ApprovalModalProps) {
   const {
     jobId,
+    jobToken,
     verdict,
     varianceAed,
     approverRole,
@@ -252,7 +254,7 @@ export default function ApprovalModal(props: ApprovalModalProps) {
       const res = await fetch('/api/audit/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: jobId }),
+        body: JSON.stringify({ job_id: jobId, job_token: jobToken }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

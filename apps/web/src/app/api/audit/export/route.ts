@@ -6,6 +6,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXPORTS_MAP, isDevStub } from '@/lib/export-store';
 import { evaluateApprovalGate, type ExportType } from '@/lib/approval-gate';
+import { requireJobToken } from '@/lib/job-token';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,7 @@ function err(code: ErrorCode, message: string) {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  let body: { job_id?: string; generated_at?: string; kind?: 'FINAL_APPROVED' | 'REVIEW_PACK' };
+  let body: { job_id?: string; job_token?: string; generated_at?: string; kind?: 'FINAL_APPROVED' | 'REVIEW_PACK' };
   try {
     body = await req.json();
   } catch {
@@ -31,6 +32,8 @@ export async function POST(req: Request): Promise<Response> {
   if (!job) {
     return err('JOB_NOT_FOUND', 'unknown job_id');
   }
+  const tokenError = requireJobToken(req, job, body);
+  if (tokenError) return tokenError;
 
   // Export gate — unified with the download route via evaluateApprovalGate.
   // Per Rule #1 (CLAUDE.md §0) the final Excel deliverable is always produced
