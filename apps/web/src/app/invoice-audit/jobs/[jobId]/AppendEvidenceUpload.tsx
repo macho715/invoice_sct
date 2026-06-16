@@ -116,8 +116,14 @@ export default function AppendEvidenceUpload({ jobId, jobToken, disabled }: { jo
             accept=".pdf,.xlsx,.md,.txt,application/pdf"
             disabled={disabled || busy}
             onChange={e => {
-              setFiles(Array.from(e.target.files ?? []));
+              const picked = Array.from(e.target.files ?? []);
+              setFiles(current => {
+                const seen = new Set(current.map(f => `${f.name}:${f.size}`));
+                return [...current, ...picked.filter(f => !seen.has(`${f.name}:${f.size}`))];
+              });
               setError(null);
+              // Reset native input so re-picking accumulates instead of replacing.
+              if (inputRef.current) inputRef.current.value = '';
             }}
           />
         </label>

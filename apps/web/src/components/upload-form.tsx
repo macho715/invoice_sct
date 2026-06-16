@@ -220,8 +220,15 @@ export default function UploadForm() {
         multiple
         accept=".xlsx,.md,.txt,.pdf,application/pdf"
         onChange={e => {
-          setFiles(Array.from(e.target.files ?? []));
+          const picked = Array.from(e.target.files ?? []);
+          setFiles(current => {
+            const seen = new Set(current.map(f => `${f.name}:${f.size}`));
+            return [...current, ...picked.filter(f => !seen.has(`${f.name}:${f.size}`))];
+          });
           setErr(null);
+          // Reset the native input so picking again (incl. the same file) re-fires onChange,
+          // letting the user accumulate files across multiple selections instead of replacing.
+          if (fileInputRef.current) fileInputRef.current.value = '';
         }}
       />
       </label>
