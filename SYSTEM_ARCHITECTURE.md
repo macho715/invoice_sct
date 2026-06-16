@@ -20,8 +20,10 @@ Uploading an **Excel invoice OR a PDF** — either alone, or both — always pro
 
 - `xlsx`/`md`/`txt` present → it is the invoice source; PDFs are evidence.
 - No structured doc → the first PDF becomes the invoice source; remaining PDFs are evidence.
-- A PDF-only upload yielding 0 lines routes to **AMBER / REVIEW_REQUIRED**
-  (`NO_INVOICE_LINES_EXTRACTED`) and still exports — never rejected with 409.
+- (2026-06-16) A native-text **DSV SHPT PDF** is parsed into **real `invoice_lines`** (doc-type +
+  charge-line extraction), so PDF-only uploads can reach real validation instead of a forced AMBER.
+- A PDF-only upload that still yields 0 lines (scanned / line-less PDF) routes to **AMBER /
+  REVIEW_REQUIRED** (`NO_INVOICE_LINES_EXTRACTED`) and still exports — never rejected with 409.
 - Verdict is always stamped in the workbook; blocked/unverified items are labeled, not withheld.
 
 The intake decision lives in `apps/web/src/app/api/invoice-audit/run/route.ts`
@@ -32,7 +34,7 @@ The intake decision lives in `apps/web/src/app/api/invoice-audit/run/route.ts`
 | Component | Runtime | Host | Role |
 |---|---|---|---|
 | **apps/web** | Next.js 15 (App Router) | Vercel | Upload UI, audit workspace, API orchestration, gate + approval, workbook export dispatch, NotebookLM callback receiver. **Final audit authority.** |
-| **apps/worker-py** | FastAPI (Python) | Google Cloud Run (**live in prod**: `dsv-invoice` / `asia-northeast3`, service `hvdc-invoice-parser`) | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill; xlsx supports **DSV summary-matrix → charge-level line decomposition**), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
+| **apps/worker-py** | FastAPI (Python) | Google Cloud Run (**live in prod**: `dsv-invoice` / `asia-northeast3`, service `hvdc-invoice-parser`) | File parsing (xlsx/md/txt/pdf/pdf_json + DSV waybill; xlsx supports **DSV summary-matrix → charge-level line decomposition**; native-text **PDF runs the DSV SHPT hybrid parser → real `invoice_lines`**), PDF preflight + Google Vision OCR (flag-gated stub), 13-sheet workbook export, MarkItDown→NotebookLM orchestration |
 | **apps/mcp-server** | Hono (TypeScript) | Google Cloud Run | Standalone MCP JSON-RPC server — 14 audit tools for external clients (ChatGPT, Claude Desktop). Not called during the web audit flow. |
 | **packages/tools** | TypeScript (ESM) | — | **14 MCP validation tools — single source of truth**, shared by `apps/web` (in-process) and `apps/mcp-server` (JSON-RPC) |
 | **packages/database** | TypeScript (ESM) | — | Postgres pool singleton (Neon) — shared by `apps/web` and `apps/mcp-server` |
@@ -124,7 +126,7 @@ Browser-facing routes are public via middleware; all others require an `API_SECR
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/parse` | POST | Parse uploaded file (xlsx/md/txt/pdf/pdf_json + DSV waybill). xlsx auto-detects the DSV summary-matrix layout (charge=column, shipment=row) and decomposes each non-empty charge cell into its own line (currency USD, `invoice_total` from the TOTAL AMOUNT (USD) row); falls back to the flat one-charge-per-row parser otherwise. Aliases: `/parse` (deprecated), `/parse/pdf-json`. |
+| `/v1/parse` | POST | Parse uploaded file (xlsx/md/txt/pdf/pdf_json + DSV waybill). xlsx auto-detects the DSV summary-matrix layout (charge=column, shipment=row) and decomposes each non-empty charge cell into its own line (currency USD, `invoice_total` from the TOTAL AMOUNT (USD) row); falls back to the flat one-charge-per-row parser otherwise. **`pdf` runs the DSV SHPT hybrid parser → real `invoice_lines`** (doc-type + charge lines; reuses the pdfplumber text spans + table candidates, no 2nd pass). Aliases: `/parse` (deprecated), `/parse/pdf-json`. |
 | `/v1/export` | POST | Build the 13-sheet audit workbook |
 | `/v1/notebooklm/run` | POST | MarkItDown → NotebookLM first-pass orchestrator (callback to web) |
 | `/v1/preflight` | POST | Classify a PDF (text/scanned/encrypted) → `recommended_route`, `requires_vision`, `requires_markitdown` *(flag-gated)* |
@@ -146,8 +148,12 @@ each path already carries its own `/v1/` segment. Parse/export/notebooklm router
 >   (default **OFF**), **fire-and-forget**, and **isolated** — it never changes the audit verdict.
 
 **Worker = orchestrator only; Vercel = final audit + workbook.** Do not add final-verdict logic to
-worker files. The PDF branch currently returns `invoice_lines=[]` (evidence candidates only), which
-is why PDF-only intake lands in AMBER review until line extraction (Phase 2.5) ships.
+worker files. (2026-06-16, Phase 2.5 shipped via #35/#36) The `pdf` branch now runs the **DSV SHPT
+hybrid parser** (`app/parsers/dsv_pdf_hybrid.py`) and returns **real `invoice_lines`** (doc-type
+classification + charge-line extraction) — PDF-only intake reaches real validation rather than a
+forced AMBER. Only scanned / line-less PDFs (0 lines extracted) still land in AMBER review. Note the
+separate `pdf_json` branch still returns `invoice_lines=[]` (evidence candidates only). Parsing stays
+in the worker; the final verdict remains in Vercel (`gate-bridge.ts`).
 
 ## Extraction & Vision (flag-gated, default off)
 
@@ -274,22 +280,22 @@ sensitive evidence in environment variables.
   `markitdown-mcp`) **or** enforce bearer-token validation in the worker, and constrain `blob_url` to
   the allowed private Blob host.
 
-## Verification Baseline (2026-06-15)
+## Verification Baseline (2026-06-16)
 
 | Component | Tests | Typecheck |
 |---|---|---|
-| apps/web | 167 | 0 errors |
-| apps/worker-py | 165 | py_compile OK |
+| apps/web | 195 | 0 errors |
+| apps/worker-py | 195 | py_compile OK |
 | apps/mcp-server | 186 | 0 errors |
-| **Total** | **518** | **0 errors** |
+| **Total** | **576** | **0 errors** |
 
-> worker count is `pytest -q` from a clean checkout of tracked files (includes the 3 DSV-matrix
-> parser tests). Local working trees with in-progress Vision work may report a higher number.
+> Incl. the DSV SHPT hybrid PDF parser tests (#35/#36) and the Vision OCR fallback tests (#37).
+> Prior baseline (2026-06-15): web 167, worker-py 165, mcp-server 186 = 518.
 
 ## History
 
 The platform originally ran as a single Cloudflare Worker serving the SCT ontology ChatGPT App with
 D1-backed MCP tools, corpus search, and Decision Card widgets. That runtime was decommissioned and
 replaced by the current `apps/web` + `apps/worker-py` + `apps/mcp-server` architecture; legacy D1
-migrations `0001-0007` remain in the repo for reference only (current migrations `0008-0012` target
+migrations `0001-0007` remain in the repo for reference only (current migrations `0008-0013` target
 Neon Postgres). Full change history: [`CHANGELOG.md`](./CHANGELOG.md).
