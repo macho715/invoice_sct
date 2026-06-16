@@ -33,7 +33,8 @@ Samsung C&T HVDC Abu Dhabi project. ADNOC/DSV partnership.
 
 **상태:**
 - ✅ **구현됨 (2026-06-15)**: OR 인테이크(409 제거), PDF-as-invoice 소스, 0-라인 → AMBER 표기, 최종 Excel 경로. (`run/route.ts`, `upload-validation.ts`, `upload-form.tsx`)
-- 🔜 **예정**: ① 워커 `pdf_text.py`의 text_span → `invoice_lines` 실추출 (Phase 2.5) — PDF 단독을 AMBER가 아닌 실검증으로 승격. ② `EXPORT_FAILED` prod 해결 — 워커 `/v1/export` 도달·환경변수 (Rule #0 다운로드 보장의 전제).
+- ✅ **검증됨 (2026-06-16)**: gs:// Google Vision OCR fallback 출시. Rule #0 prod 종단 검증 완료 (ingest→run→export→download → ZERO verdict에서도 유효한 13-sheet xlsx 다운로드).
+- 🔜 **예정**: ① 워커 `pdf_text.py`의 text_span → `invoice_lines` 실추출 (Phase 2.5) — PDF 단독을 AMBER가 아닌 실검증으로 승격. (gs:// Vision OCR fallback 출시로 OCR 경로는 확보, text_span→line 매핑은 잔여.) ② `EXPORT_FAILED` prod 해결 — 워커 `/v1/export` 도달·환경변수. (2026-06-16 종단 검증으로 export→download 경로 확인됨.)
 
 ## DLP 정책 (2026-06-15 추가)
 
@@ -75,6 +76,8 @@ apps/web (Next.js, Vercel)
 apps/worker-py (FastAPI, Google Cloud Run)
   ├── /v1/parse — xlsx/md/txt/pdf/pdf_json + DSV waybill (alias /parse, deprecated)
   ├── /v1/export — 13-sheet audit workbook
+  ├── /v1/vision/start — async Google Vision OCR fallback for gs:// PDF evidence
+  │                      (flag VISION_FALLBACK_ENABLED, fire-and-forget, never changes verdict)
   └── /v1/notebooklm/run — MarkItDown → NotebookLM orchestrator (callback to web)
 
 apps/mcp-server (Hono, Google Cloud Run)
@@ -120,6 +123,7 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 ## Database
 
 - **Neon Postgres** (primary): jobs, gate results, invoices, traces, rate cards — via `DATABASE_URL`
+  - `parse_source_data` table (migration `0013`) stores parser source rows for workbook `90_Source_Data`. `job-store-pg.ts` self-heals if the table is absent (42P01 → read returns [] / write creates table) so the final Excel is never blocked (Rule #0).
 - **Vercel Blob** (private): invoice/evidence files, export artifacts — via `BLOB_READ_WRITE_TOKEN`
 - **Cloudflare D1** (legacy/secondary): ontology WH status — not used by invoice audit
 
@@ -153,12 +157,14 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 | `shpiment/` | DSV shipment reference (gitignored) |
 | `domestic/` | Korean domestic invoice runtime |
 
-## Verification Baseline (2026-06-15)
+## Verification Baseline (2026-06-16)
 
-- apps/web: 167 tests (30 files), `pnpm test` (verified 2026-06-15)
-- apps/worker-py: 162 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; working tree incl. in-progress Vision tests)
+- apps/web: 195 tests, `pnpm test` (verified 2026-06-16)
+- apps/worker-py: 195 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; incl. Vision OCR fallback tests)
 - apps/mcp-server: 186 tests (16 files), `pnpm test`
-- **Total: 515 tests passing**
+- **Total: 576 tests passing**
+
+Prior baseline (2026-06-15): web 167, worker-py 162, mcp-server 186, total 515.
 
 ## Rules
 

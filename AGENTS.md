@@ -23,7 +23,8 @@ Upload (Excel invoice OR PDF, or both)
 ```
 - Never 409 a PDF-only upload; never refuse the deliverable. Unverified/violating items are LABELED inside the workbook, not used to block export.
 - Status: IMPLEMENTED 2026-06-15 (`apps/web/src/app/api/invoice-audit/run/route.ts`, `upload-validation.ts`, `upload-form.tsx`).
-- Planned: (1) worker `pdf_text.py` text_span -> `invoice_lines` real extraction (promotes PDF-only beyond AMBER); (2) resolve prod `EXPORT_FAILED` on worker `/v1/export` (precondition for the download guarantee).
+- VERIFIED 2026-06-16: gs:// Google Vision OCR fallback shipped; Rule #0 verified end-to-end in prod (ingest -> run -> export -> download -> valid 13-sheet xlsx for a ZERO verdict).
+- Planned: (1) worker `pdf_text.py` text_span -> `invoice_lines` real extraction (promotes PDF-only beyond AMBER; OCR path now covered by gs:// Vision fallback, text_span->line mapping remains); (2) resolve prod `EXPORT_FAILED` on worker `/v1/export` (export -> download path confirmed by the 2026-06-16 end-to-end verification).
 # [ASSUMPTION] PDF-only real line extraction and the prod export fix are not yet implemented. Verify worker /v1/export reachability and pdf_text line-mapping before claiming full Rule #0 coverage.
 
 ## Evidence Checked

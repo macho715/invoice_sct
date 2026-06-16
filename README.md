@@ -39,6 +39,10 @@ Shared packages: `packages/tools` (14 validation tools — single source of trut
 `packages/database` (Neon Postgres pool), `packages/contracts` (Zod schemas),
 `packages/shared` (hash/redaction), `packages/telemetry` (OpenTelemetry).
 
+Web app libraries (key): `apps/web/src/lib/upload-validation.ts` (shared client +
+server-side upload validation — MIME / size / extension checks). Server routes
+**must re-execute** the same checks before Blob upload or parser dispatch.
+
 NotebookLM is a **helper/evidence** path, never the source of truth — parser results are
 authoritative; parser-missing + NotebookLM-success is `AMBER` manual review.
 
@@ -97,7 +101,7 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 │   ├── contracts/           # Shared Zod schemas
 │   ├── shared/              # Hash and redaction helpers
 │   └── telemetry/           # OpenTelemetry helpers
-├── migrations/              # Postgres schema migrations (0008–0012)
+├── migrations/              # Postgres schema migrations (0008–0013)
 ├── docs/                    # Architecture, specs, plans, operations, security
 ├── .github/workflows/       # CI and deployment workflows
 └── .env.example             # Local environment variable template
@@ -114,7 +118,12 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 
 - `POST /api/files/ingest` · `POST /api/files/ingest/large` — upload (small / large)
 - `POST /api/files/create-upload-url` · `POST /api/files/confirm` — GCS signed upload + confirm (dev-stub; flag-gated)
-- `POST /api/invoice-audit/run` — parse + validation pipeline
+
+Upload form (`apps/web/src/components/upload-form.tsx`) calls
+`upload-validation.ts` for client-side checks (MIME / size / extension).
+- `POST /api/invoice-audit/run` — parse + validation pipeline *(server re-runs
+  `upload-validation.ts` checks; structured Zod error envelope on validation
+  failure)*
 - `GET /api/audit/status|trace|result?job_id=…` — job state
 - `POST /api/audit/approve` — approval gate action
 - `POST /api/audit/export` — build export artifact *(public — browser-initiated)*
@@ -129,7 +138,7 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 - `POST /v1/export` — generate the 13-sheet workbook
 - `POST /v1/notebooklm/run` — MarkItDown → NotebookLM first-pass orchestrator
 - `POST /v1/preflight` — classify a PDF (text / scanned / encrypted) and recommend a route *(flag-gated)*
-- `POST /v1/vision/start` · `POST /v1/vision/collect` — Google Vision async OCR start/collect *(stub until `VISION_ENABLED`)*
+- `POST /v1/vision/start` · `POST /v1/vision/collect` — Google Vision async OCR start/collect *(stub until `VISION_ENABLED`)*. (2026-06-16) `/v1/vision/start` also backs the `gs://` Vision OCR fallback (web fire-and-forget, flag `VISION_FALLBACK_ENABLED`).
 
 ### Extraction & Vision (flag-gated, default off)
 
@@ -140,6 +149,13 @@ routes return a local dev-stub URL). Extraction runs are tracked in the `extract
 `extraction_comparisons` tables (migration `0012`), storing hashes/confidence only — never raw text.
 Flags: `VISION_ENABLED` (default false), `MARKITDOWN_MCP_URL` (MarkItDown path), `NOTEBOOKLM_ENABLED`
 (default false). With every flag off, the standard parse → validate → export path is unchanged.
+
+(2026-06-16) A `gs://` **Google Vision OCR fallback** (web→worker `/v1/vision/start`) is available for
+`gs://` PDF evidence only. It is flag-gated by `VISION_FALLBACK_ENABLED` (default off), runs
+fire-and-forget, and **never changes the audit verdict**. Signed GCS uploads go through
+`/api/files/create-upload-url` (`gcs-upload.ts`, flag-gated). Parsed source spans are now persisted in
+the `parse_source_data` table (migration `0013`) and feed the workbook's `90_Source_Data` sheet; a
+**self-heal** fallback ensures a missing table never blocks the final Excel (Rule #0).
 
 ## Environment
 
@@ -160,12 +176,19 @@ cp .env.example apps/web/.env.local
 | `WEB_CALLBACK_URL` / `NOTEBOOKLM_CALLBACK_SECRET` | Worker → web callback URL + HMAC secret. |
 | `NOTEBOOKLM_DEFAULT_NOTEBOOK_ID` / `NOTEBOOKLM_ENABLED` | Optional NotebookLM notebook id / trigger flag (default off). |
 | `VISION_ENABLED` / `GOOGLE_CLOUD_PROJECT` | Google Vision OCR path (default off; stub until enabled + `google-cloud-vision` installed). |
+| `VISION_FALLBACK_ENABLED` | (2026-06-16) `gs://` Google Vision OCR fallback (web→worker `/v1/vision/start`). Default off. Fire-and-forget; never changes the audit verdict. For `gs://` PDF evidence only. |
+| `GCS_OCR_BUCKET` | (2026-06-16) GCS bucket used by the `gs://` Vision OCR fallback. |
+| `GCS_UPLOAD_ENABLED` | (2026-06-16) Flag gating the GCS signed upload path (`/api/files/create-upload-url`, `gcs-upload.ts`). Default off. |
 
 Never paste secret values into issues, docs, prompts, or logs.
 
 ## Verification
 
 Baseline (2026-06-15): **515 tests** — apps/web 167, apps/worker-py 162, apps/mcp-server 186.
+
+Baseline (2026-06-16): **576 tests** — apps/web 195, apps/worker-py 195, apps/mcp-server 186.
+Rule #0 verified end-to-end in prod: ingest → run → export → download yields a valid 13-sheet
+xlsx, even for a ZERO verdict.
 
 ```bash
 # Web
@@ -176,7 +199,13 @@ cd apps/worker-py && python -m pytest tests/ -q
 pnpm --dir apps/mcp-server typecheck && pnpm --dir apps/mcp-server test
 # Workbook contract
 python apps/worker-py/scripts/workbook_contract_validate.py <workbook.xlsx>
+# E2E (Playwright, runs from apps/web)
+cd apps/web && pnpm exec playwright test e2e/invoice-audit.spec.ts
 ```
+
+> **E2E scenarios** (current): upload happy path, upload validation reject,
+> job lifecycle (status / trace / result), verdict gating, workbook export &
+> 13-sheet contract assertion.
 
 ## 13-Sheet Workbook Contract
 
@@ -186,7 +215,18 @@ Final exports must keep these sheets in exact order — do not rename, remove, r
 · `05_Duplicate_Check` · `06_Rate_Check` · `07_Tax_FX_Check` · `08_Shipment_Match`
 · `90_Source_Data` · `91_Audit_Detail` · `92_Evidence_Issues` · `99_Manifest`
 
+The workbook's internal `99_Manifest` sheet records `pre_manifest_sha256`: the SHA256 of
+the XLSX bytes before that manifest hash value is inserted. The `/v1/export` response
+`manifest.sha256` remains the SHA256 of the final XLSX bytes returned to the caller. This
+keeps the final API/download integrity hash exact while avoiding a self-referential hash
+inside the OOXML package.
+
 ### Web (`apps/web`) → Vercel
+
+> **CI baseline (app-workspace execution):** all `pnpm` / `playwright` /
+> `build` steps in CI must run from the app directory (e.g. `pnpm --dir apps/web …`
+> or `cd apps/web && pnpm …`). pnpm store cache key is `hashFiles('**/pnpm-lock.yaml')`
+> with `cache-dependency-path: apps/web/pnpm-lock.yaml`.
 
 1. Merge to `main` (PRs gated by CI: TS checks, Python CI, Playwright smoke, CodeQL, gitleaks).
 2. Ensure Vercel env vars are set for Production, Preview, and Development.
@@ -239,3 +279,72 @@ The worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) 
 - [`AGENTS.md`](./AGENTS.md) — agent operating rules
 - [`docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md`](./docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md) — canonical 3-layer role definition
 - [`docs/SYSTEM_ARCHITECTURE.md`](./docs/SYSTEM_ARCHITECTURE.md) · [`docs/LAYOUT.md`](./docs/LAYOUT.md) · [`docs/GUIDE.md`](./docs/GUIDE.md) — mirrored/extended docs
+
+
+## Codex Documentation Update — 2026-06-15T17:51:50.268914+00:00
+
+**Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.
+
+**Purpose:** This section summarizes the repository state for onboarding and operation.
+
+### Evidence inventory
+
+**Source/code files sampled:**
+- `apps\markitdown-mcp\deploy.sh`
+- `apps\mcp-server\db\migrate-rate-cards.sql`
+- `apps\mcp-server\db\seed-rate-cards.sql`
+- `apps\mcp-server\deploy-cloudrun.sh`
+- `apps\mcp-server\src\__tests__\router.test.ts`
+- `apps\mcp-server\src\__tests__\schema-contract.test.ts`
+- `apps\mcp-server\src\db.ts`
+- `apps\mcp-server\src\main.ts`
+- `apps\mcp-server\src\schemas\dlp-guard.ts`
+- `apps\mcp-server\src\telemetry.ts`
+- `apps\mcp-server\src\tools\__tests__\build_validation_explanation.test.ts`
+- `apps\mcp-server\src\tools\__tests__\check_contract_validity.test.ts`
+
+**Documentation files sampled:**
+- `.hermes\plans\auto-20260614-013800.md`
+- `.vercel\README.txt`
+- `20260615_AUTOPILOT_REVIEW_MarkItDown_GoogleVision_통합_v1.md`
+- `20260615_VisionFallback_Orchestration_구현작업서_v1.md`
+- `20260615_google_vision_gcp_auth_worklog.md`
+- `20260615_google_vision_pdf_parser_logic_guide.md`
+- `20260615_구현작업서_MarkItDown_GoogleVision_통합_v1.md`
+- `CHANGELOG.md`
+- `CLAUDE.md`
+- `GUIDE.md`
+- `LAYOUT.md`
+- `README.md`
+
+**Config/build files sampled:**
+- `.claude\settings.local.json`
+- `.codex\root-docs-dryrun-latest.json`
+- `.codex\root-docs-scan.json`
+- `.codex\root-docs-write.json`
+- `.github\dependabot.yml`
+- `.github\workflows\codeql.yml`
+- `.github\workflows\python-worker-ci.yml`
+- `.github\workflows\release-gate.yml`
+- `.github\workflows\reliability.yml`
+- `.github\workflows\secret-scan.yml`
+- `.github\workflows\vercel-prod.yml`
+- `.github\workflows\web-ci.yml`
+
+**Agent profile files sampled:**
+- No agent profile detected; this update records the absence explicitly.
+
+### Mermaid graph
+
+```mermaid
+flowchart LR
+  C[Code inventory] --> D[Root docs]
+  A[Agent profiles] --> D
+  D --> V[Verification report]
+```
+
+### Verification notes
+
+- Append-only update generated by `root-docs-batch-update`.
+- Code/config/doc/agent inventory counts: code=290, docs=193, config=705, agent_profiles=0.
+- Follow-up verification should confirm that newly added text matches actual implementation paths listed above.
