@@ -1,5 +1,47 @@
 # Changelog
 
+## gs:// Vision OCR fallback + source-hash semantics + parse_source_data self-heal - 2026-06-16
+
+> **Scope:** End-to-end Google Vision OCR fallback (web↔worker) plus source-hash cross-check semantics, GCS signed-upload, parse_source_data persistence, and two prod-cascade export hotfixes found via production smoke. Shipped via PR #37 to macho715/invoice_sct:main + direct hotfix push; deployed to prod (Vercel `sct-ontology-invoice-audit.vercel.app` + Cloud Run worker `hvdc-invoice-parser-00007-jtn`).
+
+### Added
+
+- **gs:// Google Vision OCR fallback (web→worker)** — `apps/web/.../invoice-audit/run/route.ts` fires `/v1/vision/start` for PDF evidence with a `gs://` URI, flag-gated by `VISION_FALLBACK_ENABLED` (default OFF), fire-and-forget, fully isolated (never changes verdict). Worker `apps/worker-py/app/routes/vision.py` `/v1/vision/start` + `services/vision_client.py`, `vision_normalizer.py`, `v_vision_rules.py`.
+- **GCS signed-upload helper** — `apps/web/src/lib/gcs-upload.ts` (`createGcsSignedUploadUrl`, `isGcsUploadEnabled`) + `/api/files/create-upload-url`.
+- **`parse_source_data` persistence** — migration `migrations/0013_parse_source_data.sql` + workbook `90_Source_Data` now carries parser source rows (`getParseSourceData`/`setParseSourceData`).
+- **Telemetry span-attribute redaction** — `packages/telemetry/src/redaction.ts` (`redactAttributes`), applied in `startActiveSpan`.
+- **`apps/worker-py/scripts/markitdown_live_smoke.py`** live smoke script.
+
+### Changed
+
+- **`verifyAndPersistSourceHashes`** skips `gs://` objects (GCS objects can't be byte-streamed from the Vercel runtime), trusting the stored client-supplied `sha256` as-is. ⚠ **Known integrity gap (2026-06-16):** `/api/files/confirm` records the client `sha256` without reading or recomputing the GCS object bytes, so a `gs://` upload confirmed with a wrong hash is not byte-verified anywhere and the source-hash guard cannot catch it. Open follow-up: add confirm-time GCS byte verification (or treat `gs://` sources as unverified in the gate) — this is NOT yet a completed integrity handoff.
+- **Source-hash cross-check** — only a POSITIVE parser mismatch (parser echoed a `source_sha256` AND it differs) is ZERO; an absent `source_sha256` stays PASS (byte-level guard already verified).
+- **Worker `ExportRequest`** gained `manifest_entries` (carries `source_hash_status` / expected+actual sha256 into `99_Manifest`).
+
+### Fixed
+
+- **PDF-only AMBER flow** — was incorrectly ZERO when the parser returned no `source_sha256` after a large-upload placeholder re-hash; now AMBER.
+- **Merge-conflict markers** resolved in run route, workbook-builder, and two test files.
+- **parse_source_data self-heal (prod blocker #1)** — `apps/web/src/lib/job-store-pg.ts`: on a DB where migration 0013 is not applied, `getParseSourceData` SELECT threw Postgres `42P01 relation "parse_source_data" does not exist`, breaking export for EVERY job. Now `getParseSourceData` returns `[]` on 42P01 and `setParseSourceData` creates the table+index idempotently and retries (self-heal) — the final Excel is never blocked (Rule #0). Hotfix `cd669cf`.
+- **stale Cloud Run worker (prod blocker #2)** — the deployed worker rejected the new `manifest_entries` field (`extra_forbidden`); fixed by redeploying the worker (`hvdc-invoice-parser-00007-jtn`).
+
+### Verified
+
+- apps/web **195** passed + build OK (23 routes, 0 typecheck errors) · apps/worker-py **195** passed (82% cov) · apps/mcp-server **186** passed · packages/telemetry typecheck 0. Total **576**.
+- Live: new DSV hybrid parser extracted real line items from 6 real BOE PDFs (`doc_type=BOE_CUSTOMS`, 11 lines).
+- **Prod E2E** (`sct-ontology-invoice-audit.vercel.app`): synthetic xlsx → INGEST 201 → RUN 202 (2 real lines, verdict ZERO) → `/api/audit/export` 200 (13-sheet manifest) → `/api/export/download` **HTTP 200, valid xlsx (PK, 14,271 bytes)** = Rule #0 final Excel confirmed even for ZERO (REVIEW_PACK).
+
+### Commits
+
+| SHA | PR | Subject |
+|---|---|---|
+| `9d36077` | #37 | feat: gs:// Vision OCR fallback (web↔worker) + source-hash cross-check semantics (squash) |
+| `cd669cf` | — | fix(web): self-heal parse_source_data + graceful export when migration 0013 unapplied |
+
+### Deploy
+
+- Vercel prod (web, incl. hotfix `cd669cf`) · Cloud Run worker redeployed `hvdc-invoice-parser-00007-jtn` (project `dsv-invoice`, `asia-northeast3`).
+
 ## Cloud Run migration + Fly.io removal - 2026-06-15
 
 > **Scope:** Move the worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) off Fly.io onto **Google Cloud Run** (project `dsv-invoice`), and scaffold a Cloud Run **MarkItDown MCP** service. Billing-independent code/doc prerequisites only — the actual `gcloud run deploy` is gated on connecting billing to `dsv-invoice` (`billingEnabled=False` as of this date). Cloud Run migration prep shipped via PR #20 to `feat/cloud-run-markitdown-prep`.

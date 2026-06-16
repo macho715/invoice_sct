@@ -131,6 +131,12 @@ Latest local verification snapshot:
 
 The callback gate rejects invalid HMAC signatures and source hash mismatches when configured.
 
+2026-06-16: `gs://` Vision OCR fallback added (flag `VISION_FALLBACK_ENABLED`, default off). It runs
+web→worker `/v1/vision/start` fire-and-forget for `gs://` PDF evidence only and never changes the audit
+verdict. Signed GCS uploads use `/api/files/create-upload-url` (`gcs-upload.ts`, flag-gated). Parsed
+source spans persist in the `parse_source_data` table (migration `0013`) feeding workbook
+`90_Source_Data`, with a self-heal fallback so a missing table never blocks the final Excel.
+
 ## Troubleshooting
 
 | Symptom | Check |

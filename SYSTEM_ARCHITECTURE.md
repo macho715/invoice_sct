@@ -76,6 +76,13 @@ graph LR
 In Vercel (`VERCEL=1`), `DATABASE_URL` is required — there is no in-memory job-store fallback in
 production.
 
+> **Updated: 2026-06-16** — New Postgres table `parse_source_data` (migration `0013`) holds the
+> parser source rows that feed workbook sheet `90_Source_Data`. It is accessed via
+> `getParseSourceData` / `setParseSourceData` in `apps/web/src/lib/job-store-pg.ts`.
+> **Self-heal:** if the table is absent (`42P01`), the store degrades gracefully — reads return `[]`
+> and writes create the table idempotently — so export and the Rule #0 download guarantee are never
+> blocked by a missing table.
+
 ## Web / API Surface
 
 ### Pages (`apps/web/src/app/`)
@@ -129,6 +136,15 @@ Browser-facing routes are public via middleware; all others require an `API_SECR
 Vision routes register on the worker with no router prefix (`include_router(vision_router, prefix="")`);
 each path already carries its own `/v1/` segment. Parse/export/notebooklm routers mount under `/v1`.
 
+> **Updated: 2026-06-16** — Vision OCR fallback wired end-to-end (already on `main`, deployed to prod):
+> - **Worker** (`app/routes/vision.py`) now serves `/v1/vision/start` (+ `/v1/vision/collect`) as an
+>   **async Google Vision document-text-detection OCR fallback for `gs://` PDF evidence; OCR JSON is
+>   written to GCS**, backed by `app/services/vision_client.py`, `vision_normalizer.py`, and
+>   `v_vision_rules.py`.
+> - **Web run route** (`apps/web/src/app/api/invoice-audit/run/route.ts`) triggers `/v1/vision/start`
+>   for PDF evidence whose `blob_ref` is a `gs://` URI. It is flag-gated by `VISION_FALLBACK_ENABLED`
+>   (default **OFF**), **fire-and-forget**, and **isolated** — it never changes the audit verdict.
+
 **Worker = orchestrator only; Vercel = final audit + workbook.** Do not add final-verdict logic to
 worker files. The PDF branch currently returns `invoice_lines=[]` (evidence candidates only), which
 is why PDF-only intake lands in AMBER review until line extraction (Phase 2.5) ships.
@@ -150,6 +166,11 @@ parse → validate → export path is unchanged.
 **Flags (real env names):** `VISION_ENABLED` (default false), `GOOGLE_CLOUD_PROJECT`,
 `MARKITDOWN_MCP_URL` (MarkItDown path), `NOTEBOOKLM_ENABLED` (default false). New worker deps:
 `google-cloud-vision>=3.7`, `google-cloud-storage>=2.16`, `google-auth>=2.32`.
+
+> **Updated: 2026-06-16** — GCS signed upload path: `apps/web/src/lib/gcs-upload.ts` plus the
+> `/api/files/create-upload-url` route provide a **signed GCS upload target**, flag-gated by
+> `isGcsUploadEnabled`. This feeds `gs://` evidence refs that the run route can hand to the Vision
+> OCR fallback above. The web→worker Vision trigger is gated separately by `VISION_FALLBACK_ENABLED`.
 
 ## MCP Validation Tools
 
@@ -189,6 +210,10 @@ Exact order — do not rename, remove, reorder, or hide:
 
 Assembled by `apps/web/src/lib/workbook-builder.ts`; rendered to xlsx by the worker `/v1/export`.
 
+> **Updated: 2026-06-16** — The worker `ExportRequest` now carries `manifest_entries`
+> (`source_hash_status` → workbook sheet `99_Manifest`), so source-hash cross-check status is
+> surfaced in the final manifest.
+
 ## Deployment
 
 | App | Host | Status | Workflow |
@@ -199,6 +224,10 @@ Assembled by `apps/web/src/lib/workbook-builder.ts`; rendered to xlsx by the wor
 
 > Worker deploy detail (URL, public-auth caveat, the BuildKit Dockerfile fix):
 > [`docs/20260615_cloud-run-migration-runbook.md`](./docs/20260615_cloud-run-migration-runbook.md) §11.
+
+> **Updated: 2026-06-16** — Cloud Run worker revision context is current: service
+> `hvdc-invoice-parser`, project `dsv-invoice`, region `asia-northeast3` (now also serving the Vision
+> OCR fallback routes above).
 
 CI: `web-ci.yml`, `python-worker-ci.yml`, `release-gate.yml`, `vercel-preview.yml`, `codeql.yml`,
 `reliability.yml`, `secret-scan.yml`.
@@ -227,6 +256,8 @@ sensitive evidence in environment variables.
 - All invoice/evidence files → **private** Vercel Blob only. The worker fetches private files via
   signed/server-side download; exports stream through `/api/export/download`.
 - Raw file content is never sent to LLM prompts.
+- **Updated: 2026-06-16** — `packages/telemetry` now redacts span attributes via `src/redaction.ts`,
+  so sensitive values are masked before OpenTelemetry export.
 - Approval gates remain for AMBER and ZERO findings.
 - **Content-Security-Policy** is set in `apps/web/next.config.js`:
   `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';
