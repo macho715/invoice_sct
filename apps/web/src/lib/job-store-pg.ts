@@ -64,6 +64,20 @@ export async function closePgPool(): Promise<void> {
 const nowIso = () => new Date().toISOString();
 const newId = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
+// Self-heal for databases provisioned from migration 0009, where the `jobs`
+// table predates the workflow_type column (added in migration 0017). When a
+// query hits `column "workflow_type" of relation "jobs" does not exist`
+// (Postgres 42703 = undefined_column), add the column idempotently and let the
+// caller retry once — so ingest is never blocked on a pending migration
+// (Rule #0). Mirrors the 42P01 table self-heal used elsewhere in this file.
+async function healJobsWorkflowType(pool: PgPool, e: unknown): Promise<boolean> {
+  if ((e as { code?: string }).code !== '42703') return false;
+  await pool.query(
+    `ALTER TABLE jobs ADD COLUMN IF NOT EXISTS workflow_type TEXT NOT NULL DEFAULT 'SHIPMENT'`
+  );
+  return true;
+}
+
 export function createPgJobStore(): JobStore | null {
   const pool = getPool();
   if (!pool) return null;
@@ -72,12 +86,19 @@ export function createPgJobStore(): JobStore | null {
     async createJob({ created_by, workflow_type = 'SHIPMENT', rule_version = 'rule-0.1.0', parser_version = 'parser-0.1.0', job_id }) {
       const jid = job_id ?? newId('job');
       const now = nowIso();
-      const result = await pool.query(
+      const insert = () => pool.query(
         `INSERT INTO jobs (job_id, status, verdict, workflow_type, created_by, created_at, updated_at, rule_version, parser_version)
          VALUES ($1, 'CREATED', NULL, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [jid, workflow_type, created_by, now, now, rule_version, parser_version]
       );
+      let result;
+      try {
+        result = await insert();
+      } catch (e) {
+        if (!(await healJobsWorkflowType(pool, e))) throw e;
+        result = await insert();
+      }
       return mapJobRow(result.rows[0]);
     },
 
@@ -100,7 +121,7 @@ export function createPgJobStore(): JobStore | null {
         }
       }
       const now = nowIso();
-      const result = await pool.query(
+      const update = () => pool.query(
         `UPDATE jobs SET
            status = COALESCE($1, status),
            verdict = COALESCE($2, verdict),
@@ -110,6 +131,13 @@ export function createPgJobStore(): JobStore | null {
          RETURNING *`,
         [patch.status ?? null, patch.verdict ?? null, patch.workflow_type ?? null, now, jobId]
       );
+      let result;
+      try {
+        result = await update();
+      } catch (e) {
+        if (!(await healJobsWorkflowType(pool, e))) throw e;
+        result = await update();
+      }
       return result.rows[0] ? mapJobRow(result.rows[0]) : undefined;
     },
 
