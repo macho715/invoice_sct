@@ -39,6 +39,22 @@ function err(code: ErrorCode, message: string, extra: Record<string, unknown> = 
   return NextResponse.json({ code, message, ...extra }, { status: httpForError(code) });
 }
 
+function normalizeAndValidateBlobUrl(input: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== 'https:') return null;
+  if (url.username || url.password) return null;
+  if (!(url.hostname === 'blob.vercel-storage.com' || url.hostname.endsWith('.blob.vercel-storage.com'))) return null;
+  if (!url.pathname.startsWith('/')) return null;
+
+  return url.toString();
+}
+
 async function verifyBlobBytes(blobUrl: string, expectedSize: number, expectedSha256: string): Promise<void> {
   const res = await fetch(blobUrl);
   if (!res.ok) throw new Error(`blob fetch failed: HTTP ${res.status}`);
@@ -71,7 +87,8 @@ export async function POST(req: Request): Promise<Response> {
   const workflowTypeRaw = typeof body.workflow_type === 'string' ? body.workflow_type : 'SHIPMENT';
   const workflowType = (workflowTypeRaw === 'SHIPMENT' || workflowTypeRaw === 'DOMESTIC') ? workflowTypeRaw : 'SHIPMENT';
 
-  if (!blobUrl || !/^https:\/\/[^ ]+\.(public\.)?blob\.vercel-storage\.com\//.test(blobUrl)) {
+  const normalizedBlobUrl = normalizeAndValidateBlobUrl(blobUrl);
+  if (!normalizedBlobUrl) {
     return err('INVALID_REQUEST', 'valid Vercel Blob blob_url is required');
   }
   if (!filename) return err('INVALID_REQUEST', 'filename is required');
@@ -98,7 +115,7 @@ export async function POST(req: Request): Promise<Response> {
     job = await STORE.createJob({ created_by: userId, workflow_type: workflowType as 'SHIPMENT' | 'DOMESTIC' });
   }
 
-  try { await verifyBlobBytes(blobUrl, sizeBytes, sha256); }
+  try { await verifyBlobBytes(normalizedBlobUrl, sizeBytes, sha256); }
   catch (e) { return err('INVALID_REQUEST', (e as Error).message); }
 
   // sha256 dedup (PR 3.2). Rule #0: respond with existing job_id, don't 409 silently.
