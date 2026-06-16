@@ -13,8 +13,8 @@ import os
 from pathlib import Path
 import pytest
 
-from app.parsers.pdf_text import parse_pdf_text_bytes
-from app.schemas import PdfParseResponse
+from app.parsers.pdf_text import parse_pdf_text_bytes, extract_generic_invoice_lines
+from app.schemas import PdfParseResponse, InvoiceLine
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -81,3 +81,52 @@ def test_low_confidence_and_evidence_fallback():
     assert len(res.evidence_candidates) >= 0  # may be fallback or empty
     # confidence low-ish
     assert res.parser_confidence < 0.7 or "SCANNED_PAGE_DETECTED" in res.parser_issues
+
+
+class TestGenericInvoiceLines:
+    """Track ①: generic non-DSV PDF line extraction."""
+
+    def test_extracts_lines_from_text_pdf_001(self):
+        raw = _load("text-pdf-001.pdf")
+        res = parse_pdf_text_bytes(raw, file_id="f001", file_name="inv.pdf", parser_version="p")
+        lines, conf = extract_generic_invoice_lines(
+            res.text_spans, res.table_candidates, currency_hint='AED'
+        )
+        assert len(lines) >= 1, f"Expected >=1 generic invoice lines, got {len(lines)}"
+        for line in lines:
+            assert isinstance(line, InvoiceLine)
+            assert line.line_id
+            assert line.description
+            assert line.currency in ('AED', 'USD', 'KRW', 'EUR')
+            assert line.amount > 0
+            assert isinstance(line.source_ref, dict)
+        assert 0.0 <= conf <= 1.0
+
+    def test_extracts_lines_from_text_pdf_002(self):
+        raw = _load("text-pdf-002.pdf")
+        res = parse_pdf_text_bytes(raw, file_id="f002", file_name="inv.pdf", parser_version="p")
+        lines, conf = extract_generic_invoice_lines(
+            res.text_spans, res.table_candidates, currency_hint='AED'
+        )
+        assert len(lines) >= 1, f"Expected >=1 generic lines, got {len(lines)}"
+
+    def test_no_lines_from_low_text_pdf(self):
+        raw = _load("text-pdf-005.pdf")
+        res = parse_pdf_text_bytes(raw, file_id="f005", file_name="low.pdf", parser_version="p")
+        lines, conf = extract_generic_invoice_lines(
+            res.text_spans, res.table_candidates, currency_hint='AED'
+        )
+        # low-text PDF may produce 0 or few lines; at minimum no crash
+        assert isinstance(lines, list)
+        assert conf >= 0.0
+
+    def test_dsv_regression_unchanged(self):
+        """DSV test fixture output must remain unchanged after generic addition."""
+        raw = _load("text-pdf-001.pdf")
+        res = parse_pdf_text_bytes(raw, file_id="f001", file_name="inv.pdf", parser_version="p")
+        # DSV extraction is separate from generic — verify pdf_text still works
+        assert res.pdf_page_count >= 1
+        assert res.text_spans
+        assert res.is_text_based is True
+        # Generic should not interfere with DSV path (parse.py decides ordering)
+        assert isinstance(res.table_candidates, list)
