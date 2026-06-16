@@ -21,19 +21,21 @@ async function handleCreateUploadUrl(req: NextRequest) {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return err('INVALID_REQUEST', 'invalid JSON body'); }
 
-  const { filename, mime_type, size_bytes, file_role } = body as {
+  const { filename, mime_type, size_bytes, file_role, job_id } = body as {
     filename?: string;
     mime_type?: string;
     size_bytes?: number;
     file_role?: 'INVOICE' | 'EVIDENCE' | 'UNKNOWN';
+    job_id?: string;
   };
 
   if (!filename || !mime_type) {
     return err('INVALID_REQUEST', 'filename and mime_type are required');
   }
 
-  // Dev stub: return local upload URL
-  const jobId = `job_${Date.now().toString(36)}`;
+  // Reuse the caller-supplied job_id so multiple files land in the same job;
+  // generate a fresh one only for the first file of a new upload.
+  const jobId = (typeof job_id === 'string' && job_id.trim()) ? job_id.trim() : `job_${Date.now().toString(36)}`;
   const fileId = `file_${Math.random().toString(36).slice(2, 10)}`;
   const safeFilename = filename.replace(/[^\w.\-가-힣()[\], ]+/g, '_');
 

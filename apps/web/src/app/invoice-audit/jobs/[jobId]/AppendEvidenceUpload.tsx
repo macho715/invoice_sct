@@ -4,13 +4,75 @@ import { useRef, useState, FormEvent } from 'react';
 
 const LARGE_FILE_THRESHOLD = 4.5 * 1024 * 1024;
 
+// Flag-gated GCS upload path (Track ② prerequisite). Default OFF — when unset the
+// component keeps the existing Vercel Blob / ingest behaviour (no regression).
+// When ON, PDF evidence is uploaded directly to a gs:// bucket via a signed PUT URL,
+// so the run-route Vision OCR fallback can trigger on it (it only fires for gs:// PDFs).
+const GCS_UPLOAD_ENABLED = process.env.NEXT_PUBLIC_GCS_UPLOAD_ENABLED === 'true';
+const GCS_PUT_HOST = 'https://storage.googleapis.com';
+
 function formatKb(bytes: number) {
   return `${Math.ceil(bytes / 1024).toLocaleString()} KB`;
+}
+
+function isPdf(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
 
 async function sha256Hex(file: File): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Upload one PDF evidence file to GCS via signed PUT, then confirm it onto the job.
+// Returns true when the file was handled via GCS, false when the server returned a
+// dev fallback (signed_upload_url not a real GCS URL) so the caller can use ingest.
+async function appendEvidenceViaGcs(
+  file: File,
+  jobId: string,
+  onProgress: (pct: number) => void,
+): Promise<boolean> {
+  const mimeType = file.type || 'application/pdf';
+  const createRes = await fetch('/api/files/create-upload-url', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-user-id': 'dev-user' },
+    body: JSON.stringify({
+      filename: file.name,
+      mime_type: mimeType,
+      size_bytes: file.size,
+      file_role: 'EVIDENCE',
+      job_id: jobId,
+    }),
+  });
+  const created = await createRes.json().catch(() => ({ message: `HTTP ${createRes.status}` }));
+  if (!createRes.ok) throw new Error(`${file.name}: ${created.code ?? 'STORAGE_AUTH_FAILED'} — ${created.message ?? 'unknown'}`);
+
+  const signedUrl = String(created.signed_upload_url ?? '');
+  // Dev fallback (GCS disabled server-side) returns a non-GCS URL → let caller use ingest.
+  if (!signedUrl.startsWith(GCS_PUT_HOST)) return false;
+
+  onProgress(40);
+  const requiredHeaders = (created.required_headers as Record<string, string> | undefined) ?? { 'content-type': mimeType };
+  const putRes = await fetch(signedUrl, { method: 'PUT', headers: requiredHeaders, body: file });
+  if (!putRes.ok) throw new Error(`${file.name}: GCS_PUT_FAILED — HTTP ${putRes.status}`);
+
+  onProgress(80);
+  const sha256 = await sha256Hex(file);
+  const confirmRes = await fetch('/api/files/confirm', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-user-id': 'dev-user' },
+    body: JSON.stringify({
+      job_id: jobId,
+      file_id: created.file_id,
+      sha256,
+      size_bytes: file.size,
+      gcs_uri: created.gcs_uri,
+    }),
+  });
+  const confirmed = await confirmRes.json().catch(() => ({ message: `HTTP ${confirmRes.status}` }));
+  if (!confirmRes.ok) throw new Error(`${file.name}: ${confirmed.code ?? 'CONFIRM_FAILED'} — ${confirmed.message ?? 'unknown'}`);
+  onProgress(100);
+  return true;
 }
 
 async function appendLargeFile(
@@ -68,6 +130,14 @@ export default function AppendEvidenceUpload({ jobId, jobToken, disabled }: { jo
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        // GCS path (flag-gated): PDF evidence → gs:// so Vision OCR fallback can trigger.
+        // Falls through to the existing path when the server returns a dev fallback.
+        if (GCS_UPLOAD_ENABLED && isPdf(file)) {
+          const handled = await appendEvidenceViaGcs(file, jobId, pct => {
+            setProgress(`증빙 업로드 중 ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`);
+          });
+          if (handled) continue;
+        }
         if (file.size > LARGE_FILE_THRESHOLD) {
           await appendLargeFile(file, jobId, jobToken, pct => {
             setProgress(`증빙 업로드 중 ${i + 1}/${files.length}: ${file.name} (${Math.round(pct)}%)`);
