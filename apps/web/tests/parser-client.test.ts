@@ -157,4 +157,80 @@ describe('parser-client', () => {
       expect(failed.error_code).toBe('TRIGGER_FAILED');
     });
   });
+
+  // 2026-06-17 — collectVisionOcr is the polling half of the approval-gated
+  // Vision OCR flow. It POSTs the operation_name to /v1/vision/collect and
+  // returns the worker's current status. Non-2xx / timeouts / fetch failures
+  // degrade to terminal `COLLECT_FAILED` / `COLLECT_TIMEOUT` shapes (no throw).
+  describe('collectVisionOcr', () => {
+    it('POSTs to /v1/vision/collect with bearer + operation_name and returns COLLECTED', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({
+          job_id: 'j1', file_id: 'pdf1',
+          operation_name: 'operations/op1',
+          status: 'COLLECTED',
+          ocr_json_gcs_uri: 'gs://ocr/out/result.json',
+          ocr_json_gcs_uris: ['gs://ocr/out/result.json'],
+          page_count: 2, confidence: 0.93,
+          evidence_candidate_count: 1,
+          issues: []
+        })
+      });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000/', token: 'tok' });
+
+      const r = await c.collectVisionOcr({
+        job_id: 'j1', file_id: 'pdf1',
+        operation_name: 'operations/op1',
+        output_gcs_prefix: 'gs://ocr/out/'
+      });
+
+      expect(r.status).toBe('COLLECTED');
+      expect(r.page_count).toBe(2);
+      expect(r.confidence).toBe(0.93);
+      const [url, opts] = fetchMock.mock.calls[0];
+      expect(String(url)).toBe('http://localhost:8000/v1/vision/collect');
+      expect((opts as any).headers.authorization).toBe('Bearer tok');
+      expect(JSON.parse((opts as any).body)).toEqual({
+        job_id: 'j1', file_id: 'pdf1',
+        operation_name: 'operations/op1',
+        output_gcs_prefix: 'gs://ocr/out/'
+      });
+    });
+
+    it('returns RUNNING shape when the operation is not yet DONE', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({
+          job_id: 'j1', file_id: 'pdf1', operation_name: 'operations/op1',
+          status: 'RUNNING'
+        })
+      });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      const r = await c.collectVisionOcr({
+        job_id: 'j1', file_id: 'pdf1', operation_name: 'operations/op1'
+      });
+      expect(r.status).toBe('RUNNING');
+    });
+
+    it('returns COLLECT_FAILED on non-2xx without throwing', async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'down' });
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      const r = await c.collectVisionOcr({
+        job_id: 'j1', file_id: 'pdf1', operation_name: 'operations/op1'
+      });
+      expect(r.status).toBe('COLLECT_FAILED');
+      expect(r.error_code).toBe('HTTP_503');
+    });
+
+    it('returns COLLECT_TIMEOUT on fetch timeout', async () => {
+      fetchMock.mockRejectedValueOnce(Object.assign(new Error('timed out'), { name: 'TimeoutError' }));
+      const c = createParserClient({ baseUrl: 'http://localhost:8000', token: 'tok' });
+      const r = await c.collectVisionOcr({
+        job_id: 'j1', file_id: 'pdf1', operation_name: 'operations/op1'
+      });
+      expect(r.status).toBe('COLLECT_TIMEOUT');
+      expect(r.error_code).toBe('COLLECT_TIMEOUT');
+    });
+  });
 });

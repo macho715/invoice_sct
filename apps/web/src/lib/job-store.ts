@@ -3,7 +3,8 @@ import { createPgJobStore } from './job-store-pg';
 import type {
   JobStatus, Verdict, SourceFile, AuditTraceStep, AuditTraceEntry,
   NormalizedInvoice, SctValidationResult, ApprovalRecord, FxPolicy,
-  SourceDataRow, WorkflowType
+  SourceDataRow, WorkflowType,
+  VisionStatus, VisionStatusRecord
 } from './types';
 import {
   mapLegacyStatus,
@@ -80,6 +81,13 @@ export interface JobStore {
   getValidationResult(jobId: string): Promise<SctValidationResult | undefined>;
   setApprovalRecord(jobId: string, record: ApprovalRecord): Promise<void>;
   getApprovalRecord(jobId: string): Promise<ApprovalRecord | undefined>;
+
+  // 2026-06-17: approval-gated Vision OCR state. Stored per-job.
+  // Idempotent on (job_id, pdf_sha256): re-approving with enable_vision: true
+  // for the same PDF returns the cached status without re-triggering the worker.
+  setVisionStatus(jobId: string, status: VisionStatusRecord): Promise<void>;
+  getVisionStatus(jobId: string): Promise<VisionStatusRecord | undefined>;
+
   createFxPolicy(policy: FxPolicy): Promise<void>;
   getFxPolicy(policyId: string): Promise<FxPolicy | undefined>;
   listFxPolicies(): Promise<FxPolicy[]>;
@@ -171,6 +179,7 @@ export function createJobStore(): JobStore {
   const parseSourceData = new Map<string, SourceDataRow[]>();
   const validationResults = new Map<string, SctValidationResult>();
   const approvalRecords = new Map<string, ApprovalRecord>();
+  const visionStatus = new Map<string, VisionStatusRecord>();
   const fxPolicies = new Map<string, FxPolicy>();
   const invoiceAuditLogs = new Map<string, {
     invoice_id: string;
@@ -287,6 +296,8 @@ export function createJobStore(): JobStore {
     async getValidationResult(jobId) { return validationResults.get(jobId); },
     async setApprovalRecord(jobId, record) { approvalRecords.set(jobId, record); },
     async getApprovalRecord(jobId) { return approvalRecords.get(jobId); },
+    async setVisionStatus(jobId, status) { visionStatus.set(jobId, status); },
+    async getVisionStatus(jobId) { return visionStatus.get(jobId); },
     async createFxPolicy(policy) { fxPolicies.set(policy.fx_policy_id, policy); },
     async getFxPolicy(policyId) { return fxPolicies.get(policyId); },
     async listFxPolicies() { return Array.from(fxPolicies.values()); },

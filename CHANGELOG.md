@@ -1,5 +1,74 @@
 # Changelog
 
+## Vision OCR — approval-gated flow (web polling, idempotent triggers) - 2026-06-17
+
+> **Scope:** Move Vision OCR from a default-on side effect to an **explicit
+> reviewer opt-in** invoked at approval time, with a polling endpoint so the
+> UI can show progress. Default behavior (no opt-in) is unchanged: no Vision
+> state, no worker call, no field in the response.
+
+### Added
+
+- **`/api/audit/approve` `enable_vision` field** (`apps/web/src/app/api/audit/approve/route.ts`).
+  When `true` and the job has a scanned PDF, the route kicks off the worker
+  `/v1/vision/start` (fire-and-forget) and returns `vision: { vision_status, … }`
+  in the response. Skipped, failed, and idempotent paths all write Vision state
+  into the job. Approval record carries `enable_vision`, `vision_requested_at`,
+  `vision_requested_by` for audit.
+- **New `POST /api/audit/vision-status`** (`apps/web/src/app/api/audit/vision-status/route.ts`,
+  NEW). Polls the worker `/v1/vision/collect` for any `running` record and
+  returns a stable `VisionStatusResponse` shape. Terminal states (`done` /
+  `failed` / `skipped`) are returned from cache without a worker call. The
+  `re_run_required: true` hint tells the UI to re-call `/api/audit/export` so
+  the 13-sheet workbook picks up the new lines/evidence. Optional `GET
+  ?job_id=…` is provided for clients that prefer query-string polling.
+- **Vision state in job store** — `apps/web/src/lib/types.ts` adds
+  `VisionStatusEnum`, `VisionOcrResultSchema`, `VisionStatusRecordSchema`;
+  `apps/web/src/lib/job-store.ts` adds `setVisionStatus` / `getVisionStatus`;
+  `apps/web/src/lib/job-store-pg.ts` adds the same with **42703 self-heal** so
+  a missing `vision_*` column doesn't block the audit. Migration `0018_jobs_vision_status.sql`
+  creates 12 columns + 2 indexes.
+- **`collectVisionOcr` parser client** — `apps/web/src/lib/parser-client.ts` adds
+  the polling half of the Vision flow. POSTs to `/v1/vision/collect` with bearer
+  + `operation_name`, returns the worker's current status. Non-2xx / timeouts /
+  fetch failures degrade to terminal `COLLECT_FAILED` / `COLLECT_TIMEOUT` shapes
+  (no throw — callers cache the result).
+
+### Idempotency
+
+Vision triggers are keyed on `(job_id, pdf_sha256)`:
+- `done` for the same PDF → return cached record, **no worker call**.
+- `running` for the same PDF → return cached record, **no worker call**.
+- Different PDF (or no record) → fresh `/v1/vision/start` trigger.
+
+### Failure modes (all written to vision_status, never block approval — Rule #0)
+
+| Code | Meaning |
+|---|---|
+| `VISION_NO_PDF` | No PDF source file on the job |
+| `VISION_NON_GCS_SOURCE` | PDF uploaded via Vercel Blob (not gs://) — re-upload via `/api/files/create-upload-url` to enable |
+| `WORKER_CONFIG_MISSING` | `PARSER_WORKER_URL` / `PARSER_WORKER_TOKEN` not set |
+| `VISION_DISABLED` / `HTTP_*` | Worker rejected the start call |
+| `VISION_OPERATION_NAME_MISSING` | `running` record without `operation_name` — previous trigger never produced a usable handle |
+| `COLLECT_FAILED` / `COLLECT_TIMEOUT` | Worker collect call failed or timed out |
+
+In all of these the approval still goes through and the AMBER/ZERO verdict
+flow is unchanged.
+
+### Tests
+
+- `apps/web/tests/api-audit-approve.test.ts` — 6 new tests covering
+  enable_vision=true: omitted (default), no-PDF, non-GCS, missing worker config,
+  happy path with mocked `/v1/vision/start`, idempotent re-approval on same PDF.
+- `apps/web/tests/api-audit-vision-status.test.ts` (NEW, 8 tests) — 400/404
+  error shapes, null state, terminal `done` cache, `running` → `done` poll,
+  `running` → `failed` poll, in-flight `RUNNING` shape, GET query-string
+  equivalent.
+- `apps/web/tests/parser-client.test.ts` — 4 new tests for `collectVisionOcr`:
+  POST + bearer, RUNNING shape, COLLECT_FAILED, COLLECT_TIMEOUT.
+
+**Total: 352/352 web tests passing** (44 test files, all green; typecheck 0 errors).
+
 ## Worker schema-drift fix — parse/export web↔Cloud Run sync - 2026-06-16
 
 > **Scope:** Production upload→13-sheet Excel was broken by a two-layer schema

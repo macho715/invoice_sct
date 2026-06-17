@@ -159,9 +159,56 @@ export const ApprovalRecordSchema = z.object({
   approval_scope: z.enum(['AMBER_ACK', 'ZERO_APPROVED']),
   acknowledgement_reason: z.string().nullable(),
   prism_kernel_proof_ref: z.string(),
+  // 2026-06-17: approval-gated Vision OCR — only set when the reviewer
+  // explicitly opted in. Drives POST /api/audit/vision-status polling.
+  enable_vision: z.boolean().optional(),
+  vision_requested_at: z.string().datetime().optional(),
+  vision_requested_by: z.string().optional(),
   triggers: z.array(HumanGateTriggerSchema)
 });
 export type ApprovalRecord = z.infer<typeof ApprovalRecordSchema>;
+
+// 2026-06-17: Vision OCR is approval-gated. The reviewer triggers it via
+// `POST /api/audit/approve { enable_vision: true }` and the web app stores
+// the operation handle on the job. `POST /api/audit/vision-status` polls
+// the worker `/v1/vision/collect` until the operation completes, then
+// returns the OCR summary. Idempotent on (job_id, pdf_sha256).
+export const VisionStatusEnum = z.enum([
+  'pending',     // approve received, kickoff not yet attempted
+  'queued',      // worker /v1/vision/start accepted the operation
+  'running',     // worker /v1/vision/collect reports operation not yet DONE
+  'done',        // OCR collected; invoice_lines / evidence ready
+  'failed',      // worker returned VISION_DISABLED or VISION_RUN_FAILED
+  'skipped'      // not a scanned PDF / no gs:// source / not requested
+]);
+export type VisionStatus = z.infer<typeof VisionStatusEnum>;
+
+export const VisionOcrResultSchema = z.object({
+  page_count: z.number().int().nonnegative(),
+  confidence: z.number().min(0).max(1),
+  ocr_json_gcs_uri: z.string().nullable(),
+  ocr_json_gcs_uris: z.array(z.string()).default([]),
+  invoice_lines: z.array(z.unknown()).default([]),
+  evidence_candidates: z.array(z.unknown()).default([]),
+  issues: z.array(z.string()).default([])
+});
+export type VisionOcrResult = z.infer<typeof VisionOcrResultSchema>;
+
+export const VisionStatusRecordSchema = z.object({
+  vision_status: VisionStatusEnum.nullable(),
+  vision_operation_name: z.string().nullable(),
+  vision_pdf_file_id: z.string().nullable(),
+  vision_pdf_sha256: z.string().nullable(),
+  vision_source_gcs_uri: z.string().nullable(),
+  vision_output_gcs_prefix: z.string().nullable(),
+  vision_started_at: z.string().datetime().nullable(),
+  vision_completed_at: z.string().datetime().nullable(),
+  vision_updated_at: z.string().datetime().nullable(),
+  vision_error_code: z.string().nullable(),
+  vision_error_message: z.string().nullable(),
+  vision_ocr_result: VisionOcrResultSchema.nullable()
+});
+export type VisionStatusRecord = z.infer<typeof VisionStatusRecordSchema>;
 
 export const DecisionRowSchema = z.object({
   job_id: z.string(),
