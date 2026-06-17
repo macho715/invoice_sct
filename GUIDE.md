@@ -109,17 +109,17 @@ Latest pushed evidence:
 | `c674724` | Refreshed root docs for the NotebookLM worker gate. |
 | `fb16a92` | Removed DLP references from the AGENTS patch. |
 
-Latest local verification snapshot:
+Latest local verification snapshot (updated 2026-06-17):
 
 | Check | Result |
 | --- | --- |
-| Current full worker tests | `python -m pytest tests/ -q` -> 123 passed |
-| Current NotebookLM worker tests | `python -m pytest -q -o addopts='' tests/test_notebooklm_extractor.py tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py` -> 25 passed |
-| Current NotebookLM worker route tests | `python -m pytest -q -o addopts='' tests/test_notebooklm_route.py` -> 3 passed |
-| Live smoke helper without env | `python scripts/notebooklm_live_smoke.py --job-id test_job --blob-url http://test/blob.pdf` -> `ENV_MISSING` with required env list |
-| NotebookLM web callback tests | `npx vitest run tests/api-notebooklm-ingest-summary.test.ts` -> 12 passed |
-| Web typecheck | `pnpm --filter @invoice-audit/web typecheck` -> pass |
-| Root docs verify | `root_docs_batch_update.py verify` -> passed, score 100.0 |
+| Current full web tests | `pnpm --dir apps/web test` -> 367 passed |
+| Current full worker tests | `cd apps/worker-py && python -m pytest tests/ -q` -> 211 passed |
+| Current MCP server tests | `pnpm --dir apps/mcp-server test` -> 186 passed |
+| NotebookLM worker tests | `python -m pytest -q -o addopts='' tests/test_notebooklm_extractor.py tests/test_notebooklm_mcp_client.py tests/test_notebooklm_orchestrator.py` -> 25 passed |
+| NotebookLM worker route tests | `python -m pytest -q -o addopts='' tests/test_notebooklm_route.py` -> 3 passed |
+| Re-run pipeline tests | `pnpm --dir apps/web exec vitest run tests/re-run-pipeline.test.ts tests/api-audit-re-run.test.ts tests/api-audit-re-run-status.test.ts` -> 14 passed |
+| Web typecheck | `pnpm --dir apps/web typecheck` -> pass |
 
 ## Web Audit Workflow
 
@@ -136,6 +136,15 @@ web→worker `/v1/vision/start` fire-and-forget for `gs://` PDF evidence only an
 verdict. Signed GCS uploads use `/api/files/create-upload-url` (`gcs-upload.ts`, flag-gated). Parsed
 source spans persist in the `parse_source_data` table (migration `0013`) feeding workbook
 `90_Source_Data`, with a self-heal fallback so a missing table never blocks the final Excel.
+
+2026-06-17: Vision OCR approval-gated flow (`POST /api/audit/approve { enable_vision: true }`,
+per-job, default OFF) + `POST /api/audit/vision-status` polling. On COLLECTED with new
+content, the route auto-triggers a re-run. Manual 1-click re-run is `POST /api/audit/re-run`;
+polling is `POST /api/audit/re-run-status`. The re-run pipeline
+(`apps/web/src/lib/re-run-pipeline.ts`) is fire-and-forget: re-validate via Cf MCP, then
+re-export the 13-sheet workbook via worker `/v1/export`. Idempotent on
+`(job_id, trigger, pdf_sha256)`. Migration `0018` (Vision state) and `0019` (re-run state) added
+to `migrations/`.
 
 ## Troubleshooting
 

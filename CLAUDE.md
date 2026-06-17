@@ -164,9 +164,9 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 ## Verification Baseline (2026-06-17)
 
 - apps/web: 367 tests (47 files), `pnpm test` (verified 2026-06-17; incl. approval-gated Vision OCR + re-run pipeline tests)
-- apps/worker-py: 195 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; incl. Vision OCR fallback tests)
+- apps/worker-py: 211 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; incl. Vision OCR fallback tests)
 - apps/mcp-server: 186 tests (16 files), `pnpm test`
-- **Total: 748 tests passing**
+- **Total: 764 tests passing**
 
 Prior baselines:
 - 2026-06-16: web 195, worker-py 195, mcp-server 186, total 576.

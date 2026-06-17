@@ -82,7 +82,7 @@ Every upload flows through the gate; PASS/AMBER/ZERO all yield a downloadable
 ```mermaid
 flowchart TD
   RUN["/api/invoice-audit/run"] --> PARSE["worker /v1/parse"]
-  PARSE --> VAL["MCP validation<br/>(15 tools)"]
+  PARSE --> VAL["MCP validation<br/>(14 tools)"]
   VAL --> GATE{"Gate verdict"}
   GATE -->|PASS| FA["Final Approved Workbook"]
   GATE -->|AMBER| REV["Reviewer approval"]
@@ -98,7 +98,7 @@ flowchart TD
 ```bash
 pnpm install
 pnpm --dir apps/web typecheck    # 0 errors
-pnpm --dir apps/web test         # 331 tests
+pnpm --dir apps/web test         # 367 tests
 pnpm --dir apps/web build
 ```
 
@@ -127,7 +127,7 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 │   ├── worker-py/           # FastAPI parser + 13-sheet workbook exporter
 │   └── mcp-server/          # Hono JSON-RPC MCP server (external clients)
 ├── packages/
-│   ├── tools/               # 15 MCP validation tools (single source of truth)
+│   ├── tools/               # 14 MCP validation tools (single source of truth)
 │   ├── database/            # Neon/Postgres pool singleton
 │   ├── contracts/           # Shared Zod schemas
 │   ├── shared/              # Hash and redaction helpers
@@ -259,7 +259,7 @@ Never paste secret values into issues, docs, prompts, or logs.
 
 Baseline (2026-06-15): **515 tests** — apps/web 167, apps/worker-py 162, apps/mcp-server 186.
 
-Baseline (2026-06-17): **540 tests** — apps/web 331, apps/worker-py 209.
+Baseline (2026-06-17): **764 tests** — apps/web 367, apps/worker-py 211, apps/mcp-server 186.
 Rule #0 verified end-to-end in prod: ingest → run → export → download yields a valid 13-sheet
 xlsx, even for a ZERO verdict.
 
@@ -375,7 +375,7 @@ credential/quota usage under explicit human sign-off (결재후 ON).
 ```mermaid
 flowchart TD
   U[Upload Excel OR PDF] --> P["worker /v1/parse<br/>(pdfplumber, no Vision)"]
-  P -->|text lines found| VAL["MCP validation (15 tools)"]
+  P -->|text lines found| VAL["MCP validation (14 tools)"]
   P -->|"0 lines<br/>SCANNED_PAGE_DETECTED"| AMBER["AMBER<br/>NO_INVOICE_LINES_EXTRACTED"]
   AMBER --> EX["Export Review Pack<br/>(Rule #0: always downloadable)"]
   EX --> DEC{Reviewer decision}
