@@ -162,7 +162,9 @@ describe('POST /api/audit/vision-status', () => {
       expect(body.vision_status).toBe('done');
       expect(body.page_count).toBe(3);
       expect(body.ocr_json_gcs_uri).toBe('gs://ocr/j/pdf_inflight/result.json');
-      expect(body.re_run_required).toBe(false); // no lines/evidence returned by /collect
+      // /collect returns page_count=3 (no line arrays) — page_count > 0
+      // signals "OCR produced new content" and triggers the re-run hint.
+      expect(body.re_run_required).toBe(true);
 
       // Worker call shape
       const [calledUrl, calledOpts] = fetchMock.mock.calls[0];
@@ -280,6 +282,88 @@ describe('POST /api/audit/vision-status', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.vision_status).toBe('running');
+    } finally {
+      (globalThis as { fetch?: unknown }).fetch = originalFetch;
+      if (prevUrl !== undefined) process.env.PARSER_WORKER_URL = prevUrl;
+      if (prevToken !== undefined) process.env.PARSER_WORKER_TOKEN = prevToken;
+    }
+  });
+
+  it('auto-triggers a re-run when COLLECTED brings back new lines/evidence', async () => {
+    const prevUrl = process.env.PARSER_WORKER_URL;
+    const prevToken = process.env.PARSER_WORKER_TOKEN;
+    process.env.PARSER_WORKER_URL = 'http://worker.test';
+    process.env.PARSER_WORKER_TOKEN = 'tok';
+
+    const job = await makeJob();
+    const now = new Date().toISOString();
+    await STORE.setVisionStatus(job.job_id, {
+      vision_status: 'running',
+      vision_operation_name: 'operations/op_auto',
+      vision_pdf_file_id: 'pdf_auto',
+      vision_pdf_sha256: '7'.repeat(64),
+      vision_source_gcs_uri: 'gs://src/j/pdf_auto/in.pdf',
+      vision_output_gcs_prefix: 'gs://ocr/j/pdf_auto/',
+      vision_started_at: now, vision_completed_at: null, vision_updated_at: now,
+      vision_error_code: null, vision_error_message: null, vision_ocr_result: null
+    });
+
+    const fetchMock = vi.fn();
+    const originalFetch = (globalThis as { fetch?: unknown }).fetch;
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+    // The vision-status route uses the first call for /v1/vision/collect;
+    // re-run-pipeline is fire-and-forget and may also try to call /v1/export
+    // — give it a noop ok response so the pipeline records a `failed` outcome
+    // (no PARSER worker here) without throwing.
+    fetchMock.mockImplementation((url: unknown) => {
+      const s = String(url);
+      if (s.includes('/v1/vision/collect')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({
+            job_id: job.job_id, file_id: 'pdf_auto',
+            operation_name: 'operations/op_auto',
+            status: 'COLLECTED',
+            ocr_json_gcs_uri: 'gs://ocr/j/pdf_auto/result.json',
+            ocr_json_gcs_uris: ['gs://ocr/j/pdf_auto/result.json'],
+            page_count: 1, confidence: 0.9,
+            invoice_lines: [{ line_id: 'la1', description: 'auto line' }],
+            evidence_candidates: [{ source_file_id: 'pdf_auto' }],
+            issues: []
+          })
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    });
+
+    try {
+      const res = await VISION_STATUS_POST(
+        new Request('http://test/api/audit/vision-status', {
+          method: 'POST',
+          body: JSON.stringify({ job_id: job.job_id }),
+          headers: { 'content-type': 'application/json', 'x-job-token': JOB_TOKEN }
+        })
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.vision_status).toBe('done');
+      expect(body.re_run_required).toBe(true);
+      // /collect returns counts, not the full line arrays — invoice_lines_count
+      // and evidence_candidates_count on the public response are sourced from
+      // the (empty) stored arrays. The re-run signal uses page_count +
+      // evidence_candidate_count instead.
+      expect(body.page_count).toBe(1);
+
+      // The auto-trigger is fire-and-forget: give the event loop one tick
+      // so the initial `pending` record lands in the store.
+      await new Promise((r) => setTimeout(r, 5));
+      const reRun = await STORE.getReRunRecord(job.job_id);
+      expect(reRun).toBeTruthy();
+      expect(reRun?.re_run_trigger).toBe('vision_ocr_done');
+      expect(reRun?.re_run_pdf_sha256).toBe('7'.repeat(64));
+      // Status will be pending/running/exported/failed depending on the async
+      // pipeline's progress — the contract is "a re-run record was created".
+      expect(['pending', 'running', 'exported', 'failed']).toContain(reRun?.re_run_status);
     } finally {
       (globalThis as { fetch?: unknown }).fetch = originalFetch;
       if (prevUrl !== undefined) process.env.PARSER_WORKER_URL = prevUrl;

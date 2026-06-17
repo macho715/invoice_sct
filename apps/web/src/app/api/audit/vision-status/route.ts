@@ -3,6 +3,7 @@ import { STORE } from '@/lib/job-store';
 import { createParserClient } from '@/lib/parser-client';
 import { requireJobToken } from '@/lib/job-token';
 import { httpForError, type ErrorCode } from '@/lib/error-codes';
+import { triggerReRun } from '@/lib/re-run-pipeline';
 import type {
   VisionOcrResult, VisionStatusRecord
 } from '@/lib/types';
@@ -84,7 +85,7 @@ function publicShape(jobId: string, rec: VisionStatusRecord | undefined): Vision
     evidence_candidates_count: ocr?.evidence_candidates?.length ?? 0,
     issues: ocr?.issues ?? [],
     re_run_required: rec.vision_status === 'done'
-      && Boolean(ocr) && ((ocr?.invoice_lines?.length ?? 0) > 0 || (ocr?.evidence_candidates?.length ?? 0) > 0)
+      && Boolean(ocr) && ((ocr?.page_count ?? 0) > 0 || (ocr?.evidence_candidate_count ?? 0) > 0)
   };
 }
 
@@ -199,15 +200,9 @@ export async function POST(req: Request): Promise<Response> {
         ocr_json_gcs_uris: collect.ocr_json_gcs_uris ?? [],
         invoice_lines: [],          // worker does not return full lines on /collect
         evidence_candidates: [],    // worker does not return evidence on /collect
+        evidence_candidate_count: collect.evidence_candidate_count,
         issues: collect.issues ?? []
       };
-      // /v1/vision/collect returns evidence_candidate_count; surface it.
-      if (typeof collect.evidence_candidate_count === 'number') {
-        ocrResult.issues = [
-          ...(ocrResult.issues ?? []),
-          `evidence_candidate_count=${collect.evidence_candidate_count}`
-        ];
-      }
       const done = buildVisionStatus({
         ...current,
         vision_status: 'done',
@@ -222,6 +217,52 @@ export async function POST(req: Request): Promise<Response> {
         source_hash: current.vision_pdf_sha256 ?? undefined,
         attributedTo: 'vision-status:collect'
       });
+
+      // 2026-06-17: when OCR returned new content (pages or evidence
+      // candidates), auto-trigger the re-run pipeline (re-parse →
+      // re-validate → re-export). The pipeline is idempotent on
+      // (job_id, trigger, pdf_sha256) so polling again after the re-run
+      // completes returns the cached record. The response shape still
+      // surfaces the original `re_run_required: true` hint so the client
+      // can either trigger manually or wait for the auto run.
+      const ocrLineCount = ocrResult.invoice_lines?.length ?? 0;
+      const ocrEvidenceCount = ocrResult.evidence_candidates?.length ?? 0;
+      const evidenceCount = ocrResult.evidence_candidate_count ?? 0;
+      const reRunRequired = ocrLineCount > 0
+        || ocrEvidenceCount > 0
+        || (ocrResult.page_count ?? 0) > 0
+        || evidenceCount > 0;
+      if (reRunRequired) {
+        try {
+          const { triggered } = await triggerReRun({
+            jobId,
+            triggeredBy: 'auto:vision-status',
+            trigger: 'vision_ocr_done',
+            visionRecord: done
+          });
+          if (triggered) {
+            await STORE.appendTrace(jobId, {
+              step: 'RE_RUN_AUTO',
+              input_ref: current.vision_operation_name,
+              output_ref: 'RE_RUN_AUTO_TRIGGERED',
+              source_hash: current.vision_pdf_sha256 ?? undefined,
+              attributedTo: 'vision-status:auto-re-run'
+            });
+          }
+        } catch (e) {
+          // Re-run trigger is best-effort; never block the vision-status
+          // response. The audit can still be re-triggered manually via
+          // POST /api/audit/re-run.
+          await STORE.appendTrace(jobId, {
+            step: 'RE_RUN_AUTO',
+            input_ref: current.vision_operation_name,
+            output_ref: `RE_RUN_AUTO_TRIGGER_FAILED:${(e as Error)?.message ?? 'unknown'}`,
+            source_hash: current.vision_pdf_sha256 ?? undefined,
+            attributedTo: 'vision-status:auto-re-run'
+          }).catch(() => undefined);
+        }
+      }
+
       return NextResponse.json(publicShape(jobId, done));
     }
 

@@ -109,7 +109,7 @@ export const GateResultSchema = z.object({
 export type GateResult = z.infer<typeof GateResultSchema>;
 
 export const AuditTraceStepSchema = z.enum([
-  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM','VISION_FALLBACK','VISION_RUN'
+  'UPLOAD','PARSE','SOURCE_DATA','VALIDATE','COSTGUARD','MOSB_GATE','DOC_GUARDIAN','DECISION','APPROVAL','EXPORT','AMBER_OVERRIDE','EVIDENCE_PARSE','NOTEBOOKLM','VISION_FALLBACK','VISION_RUN','RE_RUN_TRIGGER','RE_RUN_START','RE_RUN_EXPORT','RE_RUN_FAIL','RE_RUN_AUTO'
 ]);
 export type AuditTraceStep = z.infer<typeof AuditTraceStepSchema>;
 
@@ -190,6 +190,11 @@ export const VisionOcrResultSchema = z.object({
   ocr_json_gcs_uris: z.array(z.string()).default([]),
   invoice_lines: z.array(z.unknown()).default([]),
   evidence_candidates: z.array(z.unknown()).default([]),
+  // Worker /v1/vision/collect returns counts, not the full arrays. Surface
+  // the counts on the stored record so downstream consumers (re-run signal,
+  // public re_run_required flag) can decide whether OCR produced new content
+  // worth refreshing the workbook for. Optional for backward compatibility.
+  evidence_candidate_count: z.number().int().nonnegative().optional(),
   issues: z.array(z.string()).default([])
 });
 export type VisionOcrResult = z.infer<typeof VisionOcrResultSchema>;
@@ -209,6 +214,39 @@ export const VisionStatusRecordSchema = z.object({
   vision_ocr_result: VisionOcrResultSchema.nullable()
 });
 export type VisionStatusRecord = z.infer<typeof VisionStatusRecordSchema>;
+
+// 2026-06-17: Re-run pipeline. When Vision OCR completes with new
+// lines/evidence, the audit pipeline replays parse → validate → export so
+// the 13-sheet workbook reflects the OCR-augmented data without manual
+// re-approval. The re-run is fire-and-forget; clients poll
+// /api/audit/re-run-status for completion.
+export const ReRunStatusEnum = z.enum([
+  'pending', 'running', 'exported', 'failed'
+]);
+export type ReRunStatus = z.infer<typeof ReRunStatusEnum>;
+
+export const ReRunRecordSchema = z.object({
+  re_run_id: z.string().min(1),
+  re_run_status: ReRunStatusEnum,
+  re_run_triggered_by: z.string().min(1),  // user id or 'auto:vision-status'
+  re_run_trigger: z.enum(['manual', 'vision_ocr_done']),
+  re_run_pdf_sha256: z.string().nullable(),
+  re_run_vision_operation_name: z.string().nullable(),
+  re_run_started_at: z.string().datetime().nullable(),
+  re_run_completed_at: z.string().datetime().nullable(),
+  re_run_error_code: z.string().nullable(),
+  re_run_error_message: z.string().nullable(),
+  // 13-sheet workbook produced by this re-run (link to Vercel Blob).
+  re_run_workbook_sha256: z.string().nullable(),
+  re_run_workbook_size_bytes: z.number().int().nonnegative().nullable(),
+  re_run_workbook_blob_url: z.string().nullable(),
+  // Verdict deltas vs. the prior run (for the 02_Final_Recon sheet).
+  re_run_prior_variance_aed: z.number().nullable(),
+  re_run_new_variance_aed: z.number().nullable(),
+  re_run_prior_verdict: z.string().nullable(),
+  re_run_new_verdict: z.string().nullable()
+});
+export type ReRunRecord = z.infer<typeof ReRunRecordSchema>;
 
 export const DecisionRowSchema = z.object({
   job_id: z.string(),

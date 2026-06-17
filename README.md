@@ -448,6 +448,107 @@ x-user-id: <user-id>
   Vision enrichment.
 
 
+## OCR → Variance Re-Compute + 1-Click Export Re-Run (2026-06-17)
+
+When Google Vision OCR completes with new content (`page_count > 0` or
+`evidence_candidate_count > 0`), the audit pipeline **automatically
+re-runs** so the 13-sheet workbook reflects the OCR-augmented data
+without manual re-approval. Reviewers can also trigger the same flow
+manually.
+
+### Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/audit/re-run` | 1-click manual trigger. Body: `{ job_id, triggered_by? }`. Returns the initial `ReRunRecord` immediately. |
+| `POST` | `/api/audit/re-run-status` | Polling. Body: `{ job_id }`. Returns the full `ReRunRecord` + `ready_to_download: true` when `exported`. |
+| `GET` | `/api/audit/re-run-status?job_id=…` | Same as POST, query-string form. |
+
+### ReRunRecord shape
+
+```jsonc
+{
+  "re_run_id": "rerun_abc123",
+  "re_run_status": "pending | running | exported | failed",
+  "re_run_trigger": "manual | vision_ocr_done",
+  "re_run_triggered_by": "user@x | auto:vision-status",
+  "re_run_pdf_sha256": "<sha256>",
+  "re_run_vision_operation_name": "operations/op_xxx",
+  "re_run_started_at": "ISO-8601 | null",
+  "re_run_completed_at": "ISO-8601 | null",
+  "re_run_error_code": "WORKER_CONFIG_MISSING | ... | null",
+  "re_run_error_message": "<string> | null",
+  "re_run_workbook_sha256": "<sha256> | null",
+  "re_run_workbook_size_bytes": 12345 | null,
+  "re_run_workbook_blob_url": "https://blob.vercel-storage.com/... | null",
+  "re_run_prior_variance_aed": 100.00,
+  "re_run_new_variance_aed": 25.00,
+  "re_run_prior_verdict": "AMBER",
+  "re_run_new_verdict": "PASS"
+}
+```
+
+### Flow
+
+```
+[1] POST /api/audit/approve { enable_vision: true }       ← reviewer opts in
+   └─► /v1/vision/start (worker, fire-and-forget)
+[2] GET  /api/audit/vision-status                          ← poll until done
+   └─► /v1/vision/collect (worker)
+   └─► on COLLECTED + page_count|evidence_candidate_count > 0:
+         triggerReRun({ trigger: 'vision_ocr_done' })     ← AUTO
+[3] GET  /api/audit/re-run-status                          ← poll for export
+   └─► pending → running → exported
+   └─► ready_to_download: true when exported
+[4] Download workbook at re_run_workbook_blob_url
+```
+
+Manual re-run is the same flow minus step 1+2: `POST /api/audit/re-run
+{ job_id }` is sufficient when vision is already done.
+
+### Idempotency
+
+The re-run dedupe key is `(job_id, re_run_trigger, pdf_sha256)`:
+
+| Existing record | Behavior |
+|---|---|
+| `exported` for same key | Return cached record, **no worker call** |
+| `running` for same key | Return cached record, **no worker call** |
+| Different `trigger` | Fresh record (auto + manual coexist) |
+| Different `pdf_sha256` | Fresh record |
+
+### Failure modes (Rule #0 — never block audit)
+
+| Code | Meaning |
+|---|---|
+| `WORKER_CONFIG_MISSING` | `PARSER_WORKER_URL` / `PARSER_WORKER_TOKEN` not set |
+| `RE_RUN_VALIDATE_FAILED` | Cf MCP `validate()` threw |
+| `EXPORT_REQUEST_FAILED` | Worker `/v1/export` fetch threw |
+| `EXPORT_FAILED` | Worker `/v1/export` returned non-2xx |
+| `RE_RUN_UNEXPECTED` | Orchestrator unexpected throw (safety net) |
+
+The original (pre-OCR) 13-sheet workbook remains the deliverable. The
+`failed` record surfaces `re_run_error_code` / `re_run_error_message`
+for the UI to display.
+
+### Storage
+
+Postgres: 17 new columns on `jobs` table via
+`migrations/0019_jobs_re_run.sql` + 2 indexes
+(`idx_jobs_re_run_status`, `idx_jobs_re_run_pdf_sha256`).
+The PG adapter self-heals `undefined_column` (42703) by running
+`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS` for any missing column.
+In-memory adapter keeps a parallel `Map` for tests / local dev.
+
+### Why this matters
+
+검수 → export 무결성 마감. Before: a reviewer who approved before OCR
+had to re-approve after OCR to see the augmented workbook. After:
+OCR completion kicks off the re-run automatically, the workbook
+self-heals, and the reviewer's download reflects OCR-augmented data
+without any extra click. Manual `/api/audit/re-run` is provided for
+the "I changed something in the job" case.
+
 ## Codex Documentation Update — 2026-06-15T17:51:50.268914+00:00
 
 **Update policy:** existing content above this section is preserved. This section was appended after scanning code, documentation, config, and agent profile files.

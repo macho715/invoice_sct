@@ -4,7 +4,7 @@ import type {
   JobStatus, Verdict, SourceFile, AuditTraceStep, AuditTraceEntry,
   NormalizedInvoice, SctValidationResult, ApprovalRecord, FxPolicy,
   SourceDataRow, WorkflowType,
-  VisionStatus, VisionStatusRecord
+  VisionStatus, VisionStatusRecord, ReRunRecord
 } from './types';
 import {
   mapLegacyStatus,
@@ -87,6 +87,13 @@ export interface JobStore {
   // for the same PDF returns the cached status without re-triggering the worker.
   setVisionStatus(jobId: string, status: VisionStatusRecord): Promise<void>;
   getVisionStatus(jobId: string): Promise<VisionStatusRecord | undefined>;
+
+  // 2026-06-17: re-run pipeline. After Vision OCR completes with new
+  // lines/evidence, a re-run replays parse → validate → export and produces
+  // a fresh 13-sheet workbook. Idempotent on (job_id, re_run_trigger,
+  // pdf_sha256) so polling a finished re-run never re-triggers the pipeline.
+  setReRunRecord(jobId: string, record: ReRunRecord): Promise<void>;
+  getReRunRecord(jobId: string): Promise<ReRunRecord | undefined>;
 
   createFxPolicy(policy: FxPolicy): Promise<void>;
   getFxPolicy(policyId: string): Promise<FxPolicy | undefined>;
@@ -180,6 +187,7 @@ export function createJobStore(): JobStore {
   const validationResults = new Map<string, SctValidationResult>();
   const approvalRecords = new Map<string, ApprovalRecord>();
   const visionStatus = new Map<string, VisionStatusRecord>();
+  const reRunRecords = new Map<string, ReRunRecord>();
   const fxPolicies = new Map<string, FxPolicy>();
   const invoiceAuditLogs = new Map<string, {
     invoice_id: string;
@@ -298,6 +306,8 @@ export function createJobStore(): JobStore {
     async getApprovalRecord(jobId) { return approvalRecords.get(jobId); },
     async setVisionStatus(jobId, status) { visionStatus.set(jobId, status); },
     async getVisionStatus(jobId) { return visionStatus.get(jobId); },
+    async setReRunRecord(jobId, record) { reRunRecords.set(jobId, record); },
+    async getReRunRecord(jobId) { return reRunRecords.get(jobId); },
     async createFxPolicy(policy) { fxPolicies.set(policy.fx_policy_id, policy); },
     async getFxPolicy(policyId) { return fxPolicies.get(policyId); },
     async listFxPolicies() { return Array.from(fxPolicies.values()); },

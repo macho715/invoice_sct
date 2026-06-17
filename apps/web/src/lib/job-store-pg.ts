@@ -4,7 +4,7 @@ import type { JobStore, Job, GateResultLite, TraceInput } from './job-store';
 import type {
   SourceFile, AuditTraceEntry, NormalizedInvoice,
   SctValidationResult, ApprovalRecord, FxPolicy, SourceDataRow,
-  VisionStatusRecord, VisionOcrResult
+  VisionStatusRecord, VisionOcrResult, ReRunRecord
 } from './types';
 import {
   mapLegacyStatus,
@@ -528,6 +528,106 @@ export function createPgJobStore(): JobStore | null {
       return mapVisionStatusRow(row);
     },
 
+    // 2026-06-17: re-run pipeline. Stores the post-OCR re-run state per
+    // job. Self-heals 42703 (undefined column) by applying migration 0019
+    // idempotently — Rule #0: never block the audit on DDL drift.
+    async setReRunRecord(jobId: string, record: ReRunRecord) {
+      const write = () => pool.query(
+        `UPDATE jobs SET
+           re_run_status                  = $1,
+           re_run_id                      = $2,
+           re_run_triggered_by            = $3,
+           re_run_trigger                 = $4,
+           re_run_pdf_sha256              = $5,
+           re_run_vision_operation_name   = $6,
+           re_run_started_at              = $7,
+           re_run_completed_at            = $8,
+           re_run_error_code              = $9,
+           re_run_error_message           = $10,
+           re_run_workbook_sha256         = $11,
+           re_run_workbook_size_bytes     = $12,
+           re_run_workbook_blob_url       = $13,
+           re_run_prior_variance_aed      = $14,
+           re_run_new_variance_aed        = $15,
+           re_run_prior_verdict           = $16,
+           re_run_new_verdict             = $17
+         WHERE job_id = $18`,
+        [
+          record.re_run_status,
+          record.re_run_id,
+          record.re_run_triggered_by,
+          record.re_run_trigger,
+          record.re_run_pdf_sha256,
+          record.re_run_vision_operation_name,
+          record.re_run_started_at,
+          record.re_run_completed_at,
+          record.re_run_error_code,
+          record.re_run_error_message,
+          record.re_run_workbook_sha256,
+          record.re_run_workbook_size_bytes,
+          record.re_run_workbook_blob_url,
+          record.re_run_prior_variance_aed,
+          record.re_run_new_variance_aed,
+          record.re_run_prior_verdict,
+          record.re_run_new_verdict,
+          jobId
+        ]
+      );
+      try {
+        await write();
+      } catch (e) {
+        // 42703 = undefined_column (migration 0019 not applied yet).
+        // Apply the migration idempotently and retry once.
+        if ((e as { code?: string }).code !== '42703') throw e;
+        await pool.query(
+          `ALTER TABLE jobs
+             ADD COLUMN IF NOT EXISTS re_run_status                TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_id                    TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_triggered_by          TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_trigger               TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_pdf_sha256            TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_vision_operation_name TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_started_at            TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS re_run_completed_at          TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS re_run_error_code            TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_error_message         TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_workbook_sha256       TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_workbook_size_bytes   INTEGER,
+             ADD COLUMN IF NOT EXISTS re_run_workbook_blob_url     TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_prior_variance_aed    NUMERIC,
+             ADD COLUMN IF NOT EXISTS re_run_new_variance_aed      NUMERIC,
+             ADD COLUMN IF NOT EXISTS re_run_prior_verdict         TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_new_verdict           TEXT`
+        );
+        await write();
+      }
+    },
+
+    async getReRunRecord(jobId: string) {
+      let result;
+      try {
+        result = await pool.query(
+          `SELECT re_run_status, re_run_id, re_run_triggered_by, re_run_trigger,
+                  re_run_pdf_sha256, re_run_vision_operation_name,
+                  re_run_started_at, re_run_completed_at,
+                  re_run_error_code, re_run_error_message,
+                  re_run_workbook_sha256, re_run_workbook_size_bytes, re_run_workbook_blob_url,
+                  re_run_prior_variance_aed, re_run_new_variance_aed,
+                  re_run_prior_verdict, re_run_new_verdict
+             FROM jobs WHERE job_id = $1`,
+          [jobId]
+        );
+      } catch (e) {
+        // 42703 = columns missing (migration 0019 not applied yet). Degrade
+        // to "no re-run state" so callers behave as if Vision was never run.
+        if ((e as { code?: string }).code === '42703') return undefined;
+        throw e;
+      }
+      const row = result.rows[0];
+      if (!row || !row.re_run_status) return undefined;
+      return mapReRunRow(row);
+    },
+
     async createFxPolicy(policy: FxPolicy) {
       await pool.query(
         `INSERT INTO fx_policies (fx_policy_id, from_currency, to_currency, fx_rate, rate_date, valid_from, valid_to, approved_by, proof_hash)
@@ -647,5 +747,29 @@ function mapVisionStatusRow(row: Record<string, unknown>): VisionStatusRecord {
     vision_error_code: (row.vision_error_code as string) ?? null,
     vision_error_message: (row.vision_error_message as string) ?? null,
     vision_ocr_result: ocrJson
+  };
+}
+
+function mapReRunRow(row: Record<string, unknown>): ReRunRecord {
+  const toIso = (v: unknown) => v ? (v as Date).toISOString() : null;
+  const toNum = (v: unknown) => v == null ? null : Number(v);
+  return {
+    re_run_status: row.re_run_status as ReRunRecord['re_run_status'],
+    re_run_id: (row.re_run_id as string) ?? '',
+    re_run_triggered_by: (row.re_run_triggered_by as string) ?? '',
+    re_run_trigger: (row.re_run_trigger as ReRunRecord['re_run_trigger']) ?? 'manual',
+    re_run_pdf_sha256: (row.re_run_pdf_sha256 as string) ?? null,
+    re_run_vision_operation_name: (row.re_run_vision_operation_name as string) ?? null,
+    re_run_started_at: toIso(row.re_run_started_at),
+    re_run_completed_at: toIso(row.re_run_completed_at),
+    re_run_error_code: (row.re_run_error_code as string) ?? null,
+    re_run_error_message: (row.re_run_error_message as string) ?? null,
+    re_run_workbook_sha256: (row.re_run_workbook_sha256 as string) ?? null,
+    re_run_workbook_size_bytes: toNum(row.re_run_workbook_size_bytes) as number | null,
+    re_run_workbook_blob_url: (row.re_run_workbook_blob_url as string) ?? null,
+    re_run_prior_variance_aed: toNum(row.re_run_prior_variance_aed),
+    re_run_new_variance_aed: toNum(row.re_run_new_variance_aed),
+    re_run_prior_verdict: (row.re_run_prior_verdict as string) ?? null,
+    re_run_new_verdict: (row.re_run_new_verdict as string) ?? null
   };
 }
