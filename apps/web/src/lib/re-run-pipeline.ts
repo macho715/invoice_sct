@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { STORE } from './job-store';
-import { createParserClient } from './parser-client';
 import { createCfMcpClient } from './cf-mcp-client';
 import { buildExportRequest } from './workbook-builder';
 import { mergeValidationIntoNormalizedInvoice } from './validation-merge';
@@ -39,7 +38,16 @@ export interface ReRunResult {
   triggered: boolean;              // false if a terminal/in-flight record was returned
 }
 
-const TERMINAL_STATUSES = new Set<ReRunRecord['re_run_status']>(['exported', 'failed']);
+// 2026-06-17: PR #68 review fix #2. `failed` is intentionally NOT terminal.
+// A failed re-run (e.g. transient WORKER_CONFIG_MISSING, network 5xx,
+// EXPORT_REQUEST_FAILED) must be retryable for the same (trigger,
+// pdf_sha256) tuple after the operator fixes the underlying cause. Caching
+// a failure as terminal means a manual retry returns the cached record with
+// triggered=false and never re-fires the pipeline.
+//
+// Only `exported` (success — workbook is the deliverable) and `running`
+// (in-flight — duplicate-trigger guard) are terminal.
+const TERMINAL_STATUSES = new Set<ReRunRecord['re_run_status']>(['exported', 'running']);
 
 function makeId(): string {
   return `rerun_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
@@ -216,7 +224,9 @@ async function runPipeline(opts: InternalOpts): Promise<void> {
     await failReRun(jobId, reRunId, 'WORKER_CONFIG_MISSING', 'PARSER_WORKER_URL or PARSER_WORKER_TOKEN not configured.');
     return;
   }
-  const parser = createParserClient({ baseUrl: workerUrl, token: workerToken });
+  // 2026-06-17: PR #68 review fix #3. The parser client has no /v1/export
+  // method, so export routes through raw fetch below. The unused
+  // `createParserClient(...)` call (and its import) were dead code; removed.
   let exportResult;
   try {
     const exportReq = await buildExportRequest(jobId);
