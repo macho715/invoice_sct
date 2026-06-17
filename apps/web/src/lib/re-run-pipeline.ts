@@ -141,20 +141,58 @@ async function runPipeline(opts: InternalOpts): Promise<void> {
   const priorVariance = (priorResult as { variance_aed?: number } | null | undefined)?.variance_aed ?? null;
   const priorVerdict = job?.verdict ?? null;
 
-  // 3) Re-validate using the OCR-augmented line set. Pull the latest
-  //    normalized invoice + evidence from the store and feed them back into
-  //    Cf MCP. The OCR merge step is owned by the worker when the original
-  //    parse re-runs against the OCR JSON; this orchestrator just re-validates
-  //    whatever the store currently has.
-  const currentNormalized = await STORE.getNormalizedInvoice(jobId);
-  const lines = (currentNormalized as { invoice_lines?: unknown[] } | null)?.invoice_lines ?? [];
-  const evidence = (currentNormalized as { evidence_candidates?: unknown[] } | null)?.evidence_candidates ?? [];
+  // 3) Merge OCR-derived content into the normalized invoice. /v1/vision/collect
+  //    only returns counts (page_count, evidence_candidate_count) at the API
+  //    edge, but the stored vision_ocr_result can carry the OCR-augmented
+  //    invoice_lines/evidence_candidates when the worker re-parses the OCR
+  //    JSON. We must surface those into the re-validation input AND the
+  //    export request body — otherwise the workbook that ships after a
+  //    re-run still reflects the pre-OCR normalized invoice.
+  const visionRec = opts.visionRecord
+    ?? (await STORE.getVisionStatus(jobId) as VisionStatusRecord | null);
+  const ocrResult = visionRec?.vision_ocr_result ?? null;
+  const ocrLines = (ocrResult?.invoice_lines ?? []) as Array<{ line_id?: string }>;
+  const ocrEvidence = (ocrResult?.evidence_candidates ?? []) as Array<{ source_file_id?: string; page?: number }>;
+
+  const priorNormalized = await STORE.getNormalizedInvoice(jobId);
+  const priorLines = ((priorNormalized as { invoice_lines?: Array<{ line_id?: string }> } | null)?.invoice_lines ?? []);
+  const priorEvidence = ((priorNormalized as { evidence_candidates?: Array<{ source_file_id?: string; page?: number }> } | null)?.evidence_candidates ?? []);
+
+  // OCR lines (matched by line_id) REPLACE the pre-OCR versions. Pre-OCR lines
+  // without a line_id match are preserved so header totals stay anchored.
+  const ocrLineIds = new Set(
+    ocrLines.map((l) => l?.line_id).filter((id): id is string => typeof id === 'string')
+  );
+  const mergedLines = [
+    ...priorLines.filter((l) => !l?.line_id || !ocrLineIds.has(l.line_id)),
+    ...ocrLines
+  ];
+
+  // OCR-derived evidence is added to the existing list, deduped on
+  // (source_file_id, page) so repeated OCR runs do not stack duplicates.
+  const evidenceKey = (e: { source_file_id?: string; page?: number }): string =>
+    `${e?.source_file_id ?? ''}::${e?.page ?? ''}`;
+  const existingEvidenceKeys = new Set(priorEvidence.map(evidenceKey));
+  const mergedEvidence = [
+    ...priorEvidence,
+    ...ocrEvidence.filter((e) => !existingEvidenceKeys.has(evidenceKey(e)))
+  ];
+
+  // Persist the merged normalized invoice so buildExportRequest sees the
+  // OCR-augmented set instead of the pre-OCR snapshot.
+  await STORE.setNormalizedInvoice(jobId, {
+    ...(priorNormalized as Record<string, unknown>),
+    invoice_lines: mergedLines,
+    evidence_candidates: mergedEvidence
+  } as never);
+
+  // 4) Re-validate against the OCR-augmented line set.
   const cf = createCfMcpClient();
   let sct;
   try {
     sct = await cf.validate(jobId, {
-      invoice_lines: lines,
-      evidence_index: evidence,
+      invoice_lines: mergedLines,
+      evidence_index: mergedEvidence,
       rule_version: job?.rule_version ?? 'rule-0.1.0',
       workflow_type: job?.workflow_type ?? 'SHIPMENT'
     });
