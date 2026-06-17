@@ -5,7 +5,7 @@ vi.stubGlobal('fetch', fetchMock);
 
 import { STORE } from '../src/lib/job-store';
 import { triggerReRun } from '../src/lib/re-run-pipeline';
-import type { VisionStatusRecord } from '../src/lib/types';
+import type { ReRunRecord, VisionStatusRecord } from '../src/lib/types';
 
 const JOB_TOKEN = 'job_token_test';
 
@@ -218,5 +218,57 @@ describe('re-run-pipeline.triggerReRun', () => {
       if (prevToken === undefined) delete process.env.PARSER_WORKER_TOKEN;
       else process.env.PARSER_WORKER_TOKEN = prevToken;
     }
+  });
+
+  // 2026-06-17: PR #68 review fix #2. A failed re-run (e.g. transient
+  // WORKER_CONFIG_MISSING, network 5xx) must NOT lock the same (trigger,
+  // pdf_sha256) tuple from being retried. Caching failed records as
+  // terminal means a manual retry after the operator fixes the config
+  // returns the cached failure and never re-fires the pipeline.
+  //
+  // RED today: TERMINAL_STATUSES includes 'failed', so a failed record
+  // is returned with triggered=false and no new pipeline run.
+  it('a previously-failed record for the same (trigger, pdf_sha256) does NOT block re-trigger', async () => {
+    const job = await makeJob({ withVision: true });
+    const visionRec = (await STORE.getVisionStatus(job.job_id)) as VisionStatusRecord;
+
+    // Seed a previously-failed re-run record for the same trigger + pdf_sha256.
+    const now = new Date().toISOString();
+    const failed: ReRunRecord = {
+      re_run_id: 'rerun_failed_seed',
+      re_run_status: 'failed',
+      re_run_triggered_by: 'auto:vision-status',
+      re_run_trigger: 'vision_ocr_done',
+      re_run_pdf_sha256: visionRec.vision_pdf_sha256,
+      re_run_vision_operation_name: visionRec.vision_operation_name,
+      re_run_started_at: now,
+      re_run_completed_at: now,
+      re_run_error_code: 'WORKER_CONFIG_MISSING',
+      re_run_error_message: 'PARSER_WORKER_URL not configured',
+      re_run_workbook_sha256: null,
+      re_run_workbook_size_bytes: null,
+      re_run_workbook_blob_url: null,
+      re_run_prior_variance_aed: null,
+      re_run_new_variance_aed: null,
+      re_run_prior_verdict: null,
+      re_run_new_verdict: null
+    };
+    await STORE.setReRunRecord(job.job_id, failed);
+
+    // Re-trigger the same (trigger, pdf_sha256).
+    const result = await triggerReRun({
+      jobId: job.job_id,
+      triggeredBy: 'auto:vision-status',
+      trigger: 'vision_ocr_done',
+      visionRecord: visionRec
+    });
+
+    // RED assertion: today the cached failed record is returned with
+    // triggered=false. The fix should make 'failed' non-terminal so a
+    // retry creates a fresh pending record.
+    expect(result.triggered).toBe(true);
+    expect(result.reRun.re_run_id).not.toBe('rerun_failed_seed');
+    expect(result.reRun.re_run_status).toBe('pending');
+    expect(result.reRun.re_run_error_code).toBeNull();
   });
 });
