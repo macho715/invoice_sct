@@ -20,7 +20,7 @@ downloadable final Excel (13-sheet audit pack). OR semantics, never AND:
 
 - `xlsx` / `md` / `txt` present → it is the invoice source; PDFs are evidence.
 - No structured doc → the first PDF becomes the invoice source; remaining PDFs are evidence.
-- (2026-06-17) **Vision OCR operational**: scanned PDFs (pdfplumber 0-extract) are processed by Google Cloud Vision OCR via GCS upload → sync `/v1/vision/run` → evidence/line extraction → merged before validation. Flag-gated (`VISION_FALLBACK_ENABLED`).
+- (2026-06-17) **Vision OCR — approval-gated (default OFF)**: scanned PDFs (pdfplumber 0-extract) are **not** auto-routed to Google Vision OCR. The first parse emits AMBER / `NO_INVOICE_LINES_EXTRACTED`; Vision is invoked **only after explicit reviewer approval** via `POST /api/audit/approve { enable_vision: true }` (per-job, not env flag). See [Vision OCR — Approval-Gated Flow](#vision-ocr--approval-gated-flow-2026-06-17).
 - (2026-06-16) **Generic PDF line extraction**: non-DSV text-based PDFs now produce `invoice_lines` via table-row-first / text-line-fallback extraction (`extract_generic_invoice_lines`), so PDF-only uploads can reach real validation instead of a forced AMBER.
 - (2026-06-16) A native-text **DSV SHPT PDF** is also parsed into **real `invoice_lines`**
 - A PDF-only upload that still yields 0 structured lines (scanned / line-less PDF) is routed to
@@ -82,7 +82,7 @@ Every upload flows through the gate; PASS/AMBER/ZERO all yield a downloadable
 ```mermaid
 flowchart TD
   RUN["/api/invoice-audit/run"] --> PARSE["worker /v1/parse"]
-  PARSE --> VAL["MCP validation<br/>(15 tools)"]
+  PARSE --> VAL["MCP validation<br/>(14 tools)"]
   VAL --> GATE{"Gate verdict"}
   GATE -->|PASS| FA["Final Approved Workbook"]
   GATE -->|AMBER| REV["Reviewer approval"]
@@ -98,7 +98,7 @@ flowchart TD
 ```bash
 pnpm install
 pnpm --dir apps/web typecheck    # 0 errors
-pnpm --dir apps/web test         # 331 tests
+pnpm --dir apps/web test         # 367 tests
 pnpm --dir apps/web build
 ```
 
@@ -127,7 +127,7 @@ cd apps/mcp-server && pnpm dev   # http://localhost:8080
 │   ├── worker-py/           # FastAPI parser + 13-sheet workbook exporter
 │   └── mcp-server/          # Hono JSON-RPC MCP server (external clients)
 ├── packages/
-│   ├── tools/               # 15 MCP validation tools (single source of truth)
+│   ├── tools/               # 14 MCP validation tools (single source of truth)
 │   ├── database/            # Neon/Postgres pool singleton
 │   ├── contracts/           # Shared Zod schemas
 │   ├── shared/              # Hash and redaction helpers
@@ -204,7 +204,7 @@ These feed into `check_rate_card` for contracted rate lookup and `domestic_lane_
 distance-band and rate-variance validation. Verdicts and action items are produced in Korean
 for the 국내물류팀 review workflow.
 
-### Extraction & Vision (flag-gated, default off)
+### Extraction & Vision (approval-gated, default off)
 
 A scaffolded extraction path lets scanned/low-text PDFs be routed through Google Vision OCR and
 MarkItDown before validation. It is **off by default** and ships as stubs (the Vision client returns
@@ -214,10 +214,17 @@ routes return a local dev-stub URL). Extraction runs are tracked in the `extract
 Flags: `VISION_ENABLED` (default false), `MARKITDOWN_MCP_URL` (MarkItDown path), `NOTEBOOKLM_ENABLED`
 (default false). With every flag off, the standard parse → validate → export path is unchanged.
 
+(2026-06-17) **Vision OCR is now approval-gated, not flag-gated.** The web app **does not** call
+`/v1/vision/start` automatically on first parse. After first parse returns
+`NO_INVOICE_LINES_EXTRACTED` (scanned / line-less PDF), the reviewer decides whether to enable
+Vision OCR for that specific job. Trigger: `POST /api/audit/approve { job_id, approval_scope: "AMBER_ACK" | "ZERO_APPROVED", acknowledgement_reason?: "...", enable_vision: true }` (auth via `x-user-role` / `x-user-id` headers). The previous `VISION_FALLBACK_ENABLED` env flag is **deprecated for
+first-parse** and is retained only as a kill-switch. See [Vision OCR — Approval-Gated Flow
+(2026-06-17)](#vision-ocr--approval-gated-flow-2026-06-17) for the full flow.
+
 (2026-06-16) A `gs://` **Google Vision OCR fallback** (web→worker `/v1/vision/start`) is available for
-`gs://` PDF evidence only. It is flag-gated by `VISION_FALLBACK_ENABLED` (default off), runs
-fire-and-forget, and **never changes the audit verdict**. Signed GCS uploads go through
-`/api/files/create-upload-url` (`gcs-upload.ts`, flag-gated). Parsed source spans are now persisted in
+`gs://` PDF evidence only. It is invoked **only** after reviewer approval (see above); the
+fire-and-forget auto-trigger is removed. Signed GCS uploads go through
+`/api/files/create-upload-url` (`gcs-upload.ts`, flag-gated). Parsed source spans are persisted in
 the `parse_source_data` table (migration `0013`) and feed the workbook's `90_Source_Data` sheet; a
 **self-heal** fallback ensures a missing table never blocks the final Excel (Rule #0).
 
@@ -252,7 +259,7 @@ Never paste secret values into issues, docs, prompts, or logs.
 
 Baseline (2026-06-15): **515 tests** — apps/web 167, apps/worker-py 162, apps/mcp-server 186.
 
-Baseline (2026-06-17): **540 tests** — apps/web 331, apps/worker-py 209.
+Baseline (2026-06-17): **764 tests** — apps/web 367, apps/worker-py 211, apps/mcp-server 186.
 Rule #0 verified end-to-end in prod: ingest → run → export → download yields a valid 13-sheet
 xlsx, even for a ZERO verdict.
 
@@ -356,6 +363,191 @@ The worker (`apps/worker-py`) and the standalone MCP server (`apps/mcp-server`) 
 - [`docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md`](./docs/superpowers/specs/2026-06-14-final-role-definition-and-flow.md) — canonical 3-layer role definition
 - [`docs/SYSTEM_ARCHITECTURE.md`](./docs/SYSTEM_ARCHITECTURE.md) · [`docs/LAYOUT.md`](./docs/LAYOUT.md) · [`docs/GUIDE.md`](./docs/GUIDE.md) — mirrored/extended docs
 
+## Vision OCR — Approval-Gated Flow (2026-06-17)
+
+**Default: Vision OFF.** Google Cloud Vision OCR is **never** invoked automatically on first
+parse. The reviewer/approver must explicitly enable Vision OCR for a job after reviewing the
+AMBER / `NO_INVOICE_LINES_EXTRACTED` outcome. This keeps Vision costs and Google API
+credential/quota usage under explicit human sign-off (결재후 ON).
+
+### Flow
+
+```mermaid
+flowchart TD
+  U[Upload Excel OR PDF] --> P["worker /v1/parse<br/>(pdfplumber, no Vision)"]
+  P -->|text lines found| VAL["MCP validation (14 tools)"]
+  P -->|"0 lines<br/>SCANNED_PAGE_DETECTED"| AMBER["AMBER<br/>NO_INVOICE_LINES_EXTRACTED"]
+  AMBER --> EX["Export Review Pack<br/>(Rule #0: always downloadable)"]
+  EX --> DEC{Reviewer decision}
+  DEC -->|Reject / skip| DONE[Done — manual review]
+  DEC -->|"Approve<br/>+ enable_vision: true"| VEN["Per-job Vision trigger"]
+  VEN --> GCS["gs:// upload<br/>(/api/files/create-upload-url)"]
+  GCS --> VST["/v1/vision/start<br/>(Google Cloud Vision OCR)"]
+  VST --> RPL["Re-parse with OCR lines"]
+  RPL --> VAL2["MCP validation"]
+  VAL2 --> FA["Final Approved Workbook"]
+  VAL --> GATE{Gate}
+  GATE --> FA
+```
+
+### Trigger
+
+```http
+POST /api/audit/approve
+Content-Type: application/json
+x-user-role: COST_CONTROL_LEAD | FINANCE_APPROVER | …
+x-user-id: <user-id>
+
+{
+  "job_id": "<job-uuid>",
+  "approval_scope": "AMBER_ACK",          // AMBER_ACK | ZERO_APPROVED
+  "acknowledgement_reason": "scanned PDF — request OCR enrichment",  // required for AMBER_ACK
+  "enable_vision": true                   // ← only true triggers Vision OCR for THIS job
+}
+```
+
+- `enable_vision: false` (default) → standard AMBER Review Pack, **no Vision call**.
+- `enable_vision: true` → enqueue Vision OCR for that job; poll
+  `POST /api/audit/vision-status { job_id }` (or `GET ?job_id=…`) for
+  `pending | queued | running | done | failed | skipped`.
+- On `done` → re-parse with OCR lines → re-run validation gate → emit final 13-sheet Excel.
+
+### What changed (2026-06-17)
+
+| Area | Before | After |
+|---|---|---|
+| Vision trigger | env flag `VISION_FALLBACK_ENABLED` (default OFF) | per-job reviewer approval `enable_vision: true` |
+| First parse | pdfplumber + auto Vision fallback (fire-and-forget) | pdfplumber only — Vision **never** auto-invoked |
+| Cost / quota | billed whenever `VISION_FALLBACK_ENABLED=true` | billed only on explicit reviewer opt-in |
+| Credential blast radius | any flip of the env flag | per-job, audit-logged via `01_Action_Items` |
+| Rule #0 | AMBER exports valid; Vision enrichment async | unchanged — every job still produces a downloadable 13-sheet Excel |
+
+### Operational notes
+
+- The `VISION_FALLBACK_ENABLED` env flag is **deprecated for first-parse**. It is retained
+  only as a kill-switch (set `false` to hard-disable the worker `/v1/vision/start` route).
+- The `gs://` upload path (`/api/files/create-upload-url`) remains flag-gated by
+  `GCS_UPLOAD_ENABLED` and required by `GCS_SOURCE_BUCKET` / `GCS_EVIDENCE_BUCKET` /
+  `GCS_CLIENT_EMAIL` / `GCS_PRIVATE_KEY` — missing any of these returns
+  `STORAGE_AUTH_FAILED` / `GCS_CONFIG_MISSING`.
+- Vision OCR results are written to GCS (`GCS_OCR_BUCKET`) and re-ingested by the worker
+  on `/v1/vision/collect`; `parse_source_data` row is upserted into the workbook
+  `90_Source_Data` sheet with `provenance = "vision_ocr"`.
+- Vision-triggered re-parse is **idempotent**: re-approving with `enable_vision: true`
+  is a no-op when an OCR artifact already exists for the same `job_id + pdf_sha256`.
+
+### Rationale
+
+- Vision OCR uses billable Google Cloud Vision API quota + GCS storage — must be opt-in.
+- Credential / quota issues (e.g. Google Vision API 결재/승인 지연) are isolated: pdfplumber
+  path keeps working, and Vision is held until the credential is approved and a reviewer
+  signs off.
+- Reviewer can decide whether a scanned PDF is worth the cost, or whether to request a
+  re-upload as a structured `.xlsx`.
+- Rule #0 still holds: every job produces a downloadable 13-sheet Excel — with or without
+  Vision enrichment.
+
+
+## OCR → Variance Re-Compute + 1-Click Export Re-Run (2026-06-17)
+
+When Google Vision OCR completes with new content (`page_count > 0` or
+`evidence_candidate_count > 0`), the audit pipeline **automatically
+re-runs** so the 13-sheet workbook reflects the OCR-augmented data
+without manual re-approval. Reviewers can also trigger the same flow
+manually.
+
+### Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/audit/re-run` | 1-click manual trigger. Body: `{ job_id, triggered_by? }`. Returns the initial `ReRunRecord` immediately. |
+| `POST` | `/api/audit/re-run-status` | Polling. Body: `{ job_id }`. Returns the full `ReRunRecord` + `ready_to_download: true` when `exported`. |
+| `GET` | `/api/audit/re-run-status?job_id=…` | Same as POST, query-string form. |
+
+### ReRunRecord shape
+
+```jsonc
+{
+  "re_run_id": "rerun_abc123",
+  "re_run_status": "pending | running | exported | failed",
+  "re_run_trigger": "manual | vision_ocr_done",
+  "re_run_triggered_by": "user@x | auto:vision-status",
+  "re_run_pdf_sha256": "<sha256>",
+  "re_run_vision_operation_name": "operations/op_xxx",
+  "re_run_started_at": "ISO-8601 | null",
+  "re_run_completed_at": "ISO-8601 | null",
+  "re_run_error_code": "WORKER_CONFIG_MISSING | ... | null",
+  "re_run_error_message": "<string> | null",
+  "re_run_workbook_sha256": "<sha256> | null",
+  "re_run_workbook_size_bytes": 12345 | null,
+  "re_run_workbook_blob_url": "https://blob.vercel-storage.com/... | null",
+  "re_run_prior_variance_aed": 100.00,
+  "re_run_new_variance_aed": 25.00,
+  "re_run_prior_verdict": "AMBER",
+  "re_run_new_verdict": "PASS"
+}
+```
+
+### Flow
+
+```
+[1] POST /api/audit/approve { enable_vision: true }       ← reviewer opts in
+   └─► /v1/vision/start (worker, fire-and-forget)
+[2] GET  /api/audit/vision-status                          ← poll until done
+   └─► /v1/vision/collect (worker)
+   └─► on COLLECTED + page_count|evidence_candidate_count > 0:
+         triggerReRun({ trigger: 'vision_ocr_done' })     ← AUTO
+[3] GET  /api/audit/re-run-status                          ← poll for export
+   └─► pending → running → exported
+   └─► ready_to_download: true when exported
+[4] Download workbook at re_run_workbook_blob_url
+```
+
+Manual re-run is the same flow minus step 1+2: `POST /api/audit/re-run
+{ job_id }` is sufficient when vision is already done.
+
+### Idempotency
+
+The re-run dedupe key is `(job_id, re_run_trigger, pdf_sha256)`:
+
+| Existing record | Behavior |
+|---|---|
+| `exported` for same key | Return cached record, **no worker call** |
+| `running` for same key | Return cached record, **no worker call** |
+| Different `trigger` | Fresh record (auto + manual coexist) |
+| Different `pdf_sha256` | Fresh record |
+
+### Failure modes (Rule #0 — never block audit)
+
+| Code | Meaning |
+|---|---|
+| `WORKER_CONFIG_MISSING` | `PARSER_WORKER_URL` / `PARSER_WORKER_TOKEN` not set |
+| `RE_RUN_VALIDATE_FAILED` | Cf MCP `validate()` threw |
+| `EXPORT_REQUEST_FAILED` | Worker `/v1/export` fetch threw |
+| `EXPORT_FAILED` | Worker `/v1/export` returned non-2xx |
+| `RE_RUN_UNEXPECTED` | Orchestrator unexpected throw (safety net) |
+
+The original (pre-OCR) 13-sheet workbook remains the deliverable. The
+`failed` record surfaces `re_run_error_code` / `re_run_error_message`
+for the UI to display.
+
+### Storage
+
+Postgres: 17 new columns on `jobs` table via
+`migrations/0019_jobs_re_run.sql` + 2 indexes
+(`idx_jobs_re_run_status`, `idx_jobs_re_run_pdf_sha256`).
+The PG adapter self-heals `undefined_column` (42703) by running
+`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS` for any missing column.
+In-memory adapter keeps a parallel `Map` for tests / local dev.
+
+### Why this matters
+
+검수 → export 무결성 마감. Before: a reviewer who approved before OCR
+had to re-approve after OCR to see the augmented workbook. After:
+OCR completion kicks off the re-run automatically, the workbook
+self-heals, and the reviewer's download reflects OCR-augmented data
+without any extra click. Manual `/api/audit/re-run` is provided for
+the "I changed something in the job" case.
 
 ## Codex Documentation Update — 2026-06-15T17:51:50.268914+00:00
 

@@ -5,10 +5,10 @@ SCT_ONTOLOGY-main/
 ├── apps/
 │   ├── web/                    # Next.js 15 frontend + API (Vercel)
 │   │   ├── src/app/            # App Router pages + API route handlers
-│   │   ├── src/app/api/        # 13 API routes (upload, GCS upload, audit, export, fx, mcp)
-│   │   ├── src/lib/            # Job store, gate-bridge, cf-mcp-client, parser client, blob, error codes
+│   │   ├── src/app/api/        # 15 API routes (upload, GCS upload, audit incl. vision-status/re-run/re-run-status, export, fx, mcp)
+│   │   ├── src/lib/            # Job store, gate-bridge, cf-mcp-client, parser client, blob, error codes, re-run-pipeline
 │   │   │   └── mcp/            # In-process MCP validation tools port
-│   │   ├── tests/              # Vitest (30 files, 195 tests)
+│   │   ├── tests/              # Vitest (47 files, 367 tests, verified 2026-06-17)
 │   │   └── e2e/                # Playwright smoke tests
 │   │
 │   ├── worker-py/              # Python FastAPI parser/exporter (Google Cloud Run)
@@ -18,8 +18,8 @@ SCT_ONTOLOGY-main/
 │   │   ├── app/validators/     # numeric_integrity (PASS/AMBER)
 │   │   ├── app/middleware/     # Audit log middleware (FR-025)
 │   │   ├── app/notebooklm/     # MarkItDown → NotebookLM orchestrator + MCP client
-│   │   ├── app/exporters/      # 13-sheet workbook export logic
-│   │   └── tests/              # Pytest (195 tests)
+│   │   ├── app/exporters/      # 13-sheet workbook export logic (xlsx.py: rate_match enrichment on 04_Line_View + 06_Rate_Check)
+│   │   └── tests/              # Pytest (211 tests, verified 2026-06-17)
 │   │
 │   └── mcp-server/             # Hono MCP validation server (Google Cloud Run, standalone)
 │       ├── src/tools/          # Re-exports 14 validation tools from @invoice-audit/tools
@@ -46,7 +46,9 @@ SCT_ONTOLOGY-main/
 │   ├── 0010_invoices.sql
 │   ├── 0011_notebooklm_audit_trace.sql
 │   ├── 0012_extraction_artifacts.sql
-│   └── 0013_parse_source_data.sql
+│   ├── 0013_parse_source_data.sql
+│   ├── 0018_jobs_vision_status.sql      # 2026-06-17 — Vision OCR state (12 cols + 2 idx)
+│   └── 0019_jobs_re_run.sql             # 2026-06-17 — Re-run pipeline state (17 cols + 2 idx)
 │
 ├── docs/                       # Architecture, layout, plan, security, QA, specs
 ├── scripts/                    # Utility scripts (audit, seed, graph, scans, deployment)
@@ -86,7 +88,7 @@ flowchart TD
     MCP["apps/mcp-server<br/>Hono · Cloud Run"]
   end
   subgraph packages
-    TOOLS["packages/tools<br/>15 MCP tools"]
+    TOOLS["packages/tools<br/>14 MCP tools"]
     DB["packages/database<br/>Neon pool"]
     CONTRACTS["packages/contracts<br/>Zod schemas"]
     SHARED["packages/shared<br/>hash / redaction"]
@@ -110,7 +112,9 @@ flowchart TD
 | `apps/web/` | Next.js web UI + API orchestration — upload, audit job lifecycle, approval gates, export dispatch, NotebookLM callback |
 | `apps/web/src/app/` | App Router pages and API route handlers |
 | `apps/web/src/lib/` | Runtime logic: job store, gate-bridge, cf-mcp-client (14-tool in-process orchestration), parser client, blob, FX check, approval gate, export store, error codes, types |
-| `apps/web/tests/` | Vitest coverage for API routes, gate logic, and runtime helpers |
+| `apps/web/src/lib/re-run-pipeline.ts` | Fire-and-forget orchestrator — re-validate (Cf MCP) + re-export (worker `/v1/export`) on Vision OCR done |
+| `apps/web/src/lib/validation-merge.ts` | `mergeValidationIntoNormalizedInvoice` shared helper (extracted from `run/route.ts`) |
+| `apps/web/tests/` | Vitest coverage for API routes, gate logic, re-run pipeline, and runtime helpers (47 files, 367 tests) |
 | `apps/web/e2e/` | Playwright smoke tests |
 | `apps/worker-py/app/routes/` | FastAPI route handlers: parse, export, notebooklm, vision/preflight, health |
 | `apps/worker-py/app/parsers/` | File parsers: xlsx (auto-detects DSV summary-matrix layout → charge-level line decomposition), md, txt, pdf (**DSV SHPT hybrid parser** `dsv_pdf_hybrid.py` → real `invoice_lines` for native-text PDFs: doc-type + charge lines), pdf_json (OpenDataLoader), DSV waybill |
@@ -127,7 +131,7 @@ flowchart TD
 | `packages/contracts/` | Shared invoice, validation, and export Zod schemas |
 | `packages/shared/` | Hashing and redaction helpers shared across TypeScript runtimes |
 | `packages/telemetry/` | OpenTelemetry helpers used by web + mcp-server |
-| `migrations/` | Neon Postgres schema migrations (`0008`–`0013`; `0013_parse_source_data` feeds workbook `90_Source_Data`) |
+| `migrations/` | Neon Postgres schema migrations (`0008`–`0019`; `0013_parse_source_data` feeds workbook `90_Source_Data`, `0018_jobs_vision_status` stores Vision OCR state, `0019_jobs_re_run` stores re-run pipeline state) |
 | `scripts/` | Audit graphs, source/PII scans, seed/reconcile, deployment, smoke tests, graph build, index drift checks |
 | `docs/` | Architecture, layout, plan, security, QA, operations, specs |
 | `.github/workflows/` | CI/CD workflows covering web, worker, mcp-server, release gates, code scanning |
@@ -142,7 +146,7 @@ flowchart TD
 | `/invoice-audit/jobs/[jobId]` | `invoice-audit/jobs/[jobId]/page.tsx` | Job detail + review |
 | `/fx-policies` | `fx-policies/page.tsx` | FX policy reference |
 
-## API Routes (apps/web/src/app/api/) — 13 routes
+## API Routes (apps/web/src/app/api/) — 15 routes
 
 | Route | Source | Method |
 |---|---|---|
@@ -155,6 +159,9 @@ flowchart TD
 | `/api/audit/trace` | `audit/trace/route.ts` | GET |
 | `/api/audit/result` | `audit/result/route.ts` | GET |
 | `/api/audit/approve` | `audit/approve/route.ts` | POST |
+| `/api/audit/vision-status` | `audit/vision-status/route.ts` | POST (+ GET) |
+| `/api/audit/re-run` | `audit/re-run/route.ts` | POST |
+| `/api/audit/re-run-status` | `audit/re-run-status/route.ts` | POST (+ GET) |
 | `/api/audit/export` | `audit/export/route.ts` | POST |
 | `/api/export/download` | `export/download/route.ts` | GET |
 | `/api/fx-policy` | `fx-policy/route.ts` | POST |
@@ -174,6 +181,9 @@ flowchart TD
 `check_contract_validity`, `check_evidence_required`, `check_tax_vat`, `check_fx_policy`,
 `check_cost_guard`, `build_validation_explanation`, `classify_type_b`, `check_hs_uae_compliance`,
 `check_dem_det`.
+
+> Updated 2026-06-16: `domestic_lane_check` was removed from the canonical 14-tool set
+> (reverted from 15). The 15-tool count in some older doc sections is stale.
 
 ## Worker Routes (apps/worker-py/app/routes/)
 
@@ -215,9 +225,9 @@ Do not copy generated invoice text, signed URLs, blob keys, or sensitive evidenc
 | Area | Command |
 |---|---|
 | Web typecheck | `pnpm --dir apps/web typecheck` |
-| Web tests | `pnpm --dir apps/web test` (195) |
+| Web tests | `pnpm --dir apps/web test` (367 tests, verified 2026-06-17) |
 | Web build | `pnpm --dir apps/web build` |
-| Worker tests | `cd apps/worker-py && pytest -q` (195) |
+| Worker tests | `cd apps/worker-py && pytest -q` (211 tests, verified 2026-06-17) |
 | Worker syntax | `python -m py_compile apps/worker-py/app/routes/parse.py` |
 | MCP typecheck | `cd apps/mcp-server && pnpm typecheck` |
 | MCP tests | `cd apps/mcp-server && pnpm test` (186) |

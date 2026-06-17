@@ -24,8 +24,9 @@ Upload (Excel invoice OR PDF, or both)
 - Never 409 a PDF-only upload; never refuse the deliverable. Unverified/violating items are LABELED inside the workbook, not used to block export.
 - Status: IMPLEMENTED 2026-06-15 (`apps/web/src/app/api/invoice-audit/run/route.ts`, `upload-validation.ts`, `upload-form.tsx`).
 - VERIFIED 2026-06-16: gs:// Google Vision OCR fallback shipped; Rule #0 verified end-to-end in prod (ingest -> run -> export -> download -> valid 13-sheet xlsx for a ZERO verdict).
-- Planned: (1) worker `pdf_text.py` text_span -> `invoice_lines` real extraction (promotes PDF-only beyond AMBER; OCR path now covered by gs:// Vision fallback, text_span->line mapping remains); (2) resolve prod `EXPORT_FAILED` on worker `/v1/export` (export -> download path confirmed by the 2026-06-16 end-to-end verification).
-# [ASSUMPTION] PDF-only real line extraction and the prod export fix are not yet implemented. Verify worker /v1/export reachability and pdf_text line-mapping before claiming full Rule #0 coverage.
+- SHIPPED 2026-06-17: Vision OCR approval-gated flow — `POST /api/audit/approve { enable_vision: true }` (per-job, default OFF) + `POST /api/audit/vision-status` polling. 6 failure modes written to vision_status, approval never blocked (Rule #0).
+- SHIPPED 2026-06-17: OCR → variance re-compute + 1-click export re-run. `POST /api/audit/re-run` (manual) + `POST /api/audit/re-run-status` (polling). Fire-and-forget orchestrator `re-run-pipeline.ts` (pending → running → exported). 5 failure modes written to re_run_status, original workbook remains deliverable (Rule #0). Idempotency: `(job_id, trigger, pdf_sha256)`.
+- Planned: worker `pdf_text.py` text_span -> `invoice_lines` real extraction (promotes PDF-only beyond AMBER; OCR path now covered by gs:// Vision fallback, text_span->line mapping remains).
 
 ## Evidence Checked
 - Repo evidence: `README.md`, `CLAUDE.md`, `package.json`, `pnpm-workspace.yaml`, `apps/web/package.json`, `apps/mcp-server/package.json`, `apps/worker-py/pyproject.toml`.
@@ -36,7 +37,7 @@ Upload (Excel invoice OR PDF, or both)
 - `apps/web`: Next.js 15 / React 19 app, upload UI, API routes, audit orchestration, approval, final gate, workbook handoff.
 - `apps/worker-py`: FastAPI parser/export worker for xlsx/md/txt/pdf/pdf_json, DSV waybill extraction, NotebookLM helper orchestration.
 - `apps/mcp-server`: Hono TypeScript JSON-RPC MCP server for external clients.
-- `packages/tools`: 15 validation tools; treat as the audit tool SSOT.
+- `packages/tools`: 14 validation tools; treat as the audit tool SSOT. (15-tool count in some older doc sections is stale; `domestic_lane_check` was reverted.)
 - `packages/contracts`: shared Zod schemas and API contracts.
 - `packages/database`: Neon/Postgres pool singleton.
 - `packages/shared`: hash and redaction helpers.
@@ -46,7 +47,7 @@ Upload (Excel invoice OR PDF, or both)
 ## Architecture Boundaries
 - Web app owns final audit orchestration, `Gate Bridge`, approval, and user-facing result/export flow.
 - Parser worker may parse, normalize, OCR-orchestrate, and format exports, but must not become the final business verdict authority.
-- **DOMESTIC workflow** (2026-06-16): upload-form `workflow_type` (`SHIPMENT`|`DOMESTIC`) gates the entire pipeline — domestic skips HS/UAE, shipment_match, fx_policy, dem_det; uses `domestic_lane_check` (15th tool) for lane/distance/short-run validation; `check_rate_card` queries `rate_cards` by composite lane key; gate-bridge produces Korean action items. Domestic invoices carry `origin`/`destination`/`vehicle`/`distance_km` fields from xlsx headers or DSV waybill extraction.
+- **DOMESTIC workflow** (2026-06-16): upload-form `workflow_type` (`SHIPMENT`|`DOMESTIC`) gates the entire pipeline — domestic skips HS/UAE, shipment_match, fx_policy, dem_det; `check_rate_card` queries `rate_cards` by composite lane key (origin||destination||vehicle||unit) for distance/short-run validation; gate-bridge produces Korean action items. Domestic invoices carry `origin`/`destination`/`vehicle`/`distance_km` fields from xlsx headers or DSV waybill extraction.
 - MCP tools own rate/evidence/cost/HS/duplicate/contract/shipment/tax/FX/DEM-DET validation functions.
 - NotebookLM/NoteLM is extraction evidence only. It must never produce the final audit verdict.
 - MarkItDown MCP is a markdown/evidence conversion layer only. It must never decide PASS/AMBER/ZERO.
@@ -84,7 +85,7 @@ Use repository root for workspace commands unless noted.
 - Run the smallest relevant checks first.
 - For web/API changes, run web typecheck and targeted Vitest before build.
 - For worker changes, run targeted pytest first, then worker test suite if parser/export behavior changed.
-- For MCP tool changes, run typecheck and tests for `apps/mcp-server`; preserve 14-tool cardinality.
+- For MCP tool changes, run typecheck and tests for `apps/mcp-server`; preserve 14-tool cardinality (15-tool count in older doc sections is stale).
 - For workbook changes, validate the 13-sheet order and sidecar manifest behavior.
 - If GitHub Actions cannot run because of billing, record local commands and pass/fail output in the handoff.
 - Do not report success until commands run or the unverified area is explicitly stated.

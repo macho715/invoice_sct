@@ -46,6 +46,36 @@ export interface VisionStartResult {
   error_code?: string | null;
 }
 
+// 2026-06-17: approval-gated Vision OCR — poll worker `/v1/vision/collect`
+// with the operation_name returned by `/v1/vision/start`.
+export interface VisionCollectPayload {
+  job_id: string;
+  file_id: string;
+  operation_name: string;
+  output_gcs_prefix?: string;
+}
+
+export interface VisionCollectResult {
+  job_id: string;
+  file_id: string;
+  operation_name: string;
+  status:
+    | 'VISION_DISABLED'
+    | 'RUNNING'
+    | 'COLLECTED'
+    | 'VISION_OUTPUT_NOT_FOUND'
+    | 'COLLECT_FAILED'
+    | 'COLLECT_TIMEOUT';
+  ocr_json_gcs_uri?: string | null;
+  ocr_json_gcs_uris?: string[];
+  page_count?: number;
+  confidence?: number;
+  evidence_candidate_count?: number;
+  issues?: string[];
+  error_code?: string | null;
+  output_gcs_prefix?: string | null;
+}
+
 export interface VisionRunPayload {
   job_id: string;
   file_id: string;
@@ -74,6 +104,7 @@ export interface ParserClient {
   parsePdfText(req: ParseRequestPayload): Promise<ParseResponse>;
   runNotebookLm(req: NotebookLmRunPayload): Promise<NotebookLmRunResult>;
   startVisionOcr(req: VisionStartPayload): Promise<VisionStartResult>;
+  collectVisionOcr(req: VisionCollectPayload): Promise<VisionCollectResult>;
   runVisionOcr(req: VisionRunPayload): Promise<VisionRunResult>;
 }
 
@@ -139,6 +170,36 @@ export function createParserClient(opts: { baseUrl: string; token: string }): Pa
       return { job_id: req.job_id, file_id: req.file_id, status: 'VISION_DISABLED', error_code: 'TRIGGER_FAILED' };
     }
   };
+  const collectVisionOcr = async (req: VisionCollectPayload): Promise<VisionCollectResult> => {
+    const timeoutMs = Number(process.env.VISION_COLLECT_TIMEOUT_MS ?? 8000);
+    try {
+      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/vision/collect`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify(req),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        return {
+          job_id: req.job_id, file_id: req.file_id, operation_name: req.operation_name,
+          status: 'COLLECT_FAILED', error_code: `HTTP_${res.status}`,
+        };
+      }
+      return (await res.json()) as VisionCollectResult;
+    } catch (e) {
+      const name = (e as Error)?.name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        return {
+          job_id: req.job_id, file_id: req.file_id, operation_name: req.operation_name,
+          status: 'COLLECT_TIMEOUT', error_code: 'COLLECT_TIMEOUT',
+        };
+      }
+      return {
+        job_id: req.job_id, file_id: req.file_id, operation_name: req.operation_name,
+        status: 'COLLECT_FAILED', error_code: 'COLLECT_FAILED',
+      };
+    }
+  };
   const runVisionOcr = async (req: VisionRunPayload): Promise<VisionRunResult> => {
     const timeoutSeconds = (req.timeout_seconds ?? 180) + 30;
     try {
@@ -165,6 +226,7 @@ export function createParserClient(opts: { baseUrl: string; token: string }): Pa
     parsePdfText: call,
     runNotebookLm,
     startVisionOcr,
+    collectVisionOcr,
     runVisionOcr,
   };
 }

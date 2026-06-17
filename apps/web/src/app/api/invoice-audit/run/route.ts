@@ -8,6 +8,7 @@ import { getSignedDownloadUrl, streamFromBlob } from '@/lib/blob';
 import { createHash } from 'node:crypto';
 import type { SourceDataRow, SourceFile, Verdict } from '@/lib/types';
 import { requireJobToken } from '@/lib/job-token';
+import { mergeValidationIntoNormalizedInvoice } from '@/lib/validation-merge';
 
 export const runtime = 'nodejs';
 void createJobStore;
@@ -63,44 +64,9 @@ function normalizeSourceDataRows(rows: unknown): SourceDataRow[] {
   }).filter((row) => row.file_id);
 }
 
-function mergeValidationIntoNormalizedInvoice(normalized: any, sct: any) {
-  const typeBByLine = new Map((sct.type_b_results ?? []).map((r: any) => [r.line_id, r]));
-  const normalizedByLine = new Map((sct.normalized_lines ?? []).map((r: any) => [r.line_id, r]));
-  const rateByLine = new Map((sct.rate_checks ?? []).map((r: any) => [r.line_id, r]));
-  const gateByLine = new Map((sct.gate_results ?? []).map((r: any) => [r.line_id, r]));
-  const costByLine = new Map((sct.costguard_results ?? []).map((r: any) => [r.line_id, r]));
-  const evidenceByLine = new Map<string, 'MATCHED' | 'PARTIAL' | 'MISSING'>();
-
-  for (const req of sct.evidence_requirements ?? []) {
-    if (req?.line_id) evidenceByLine.set(String(req.line_id), 'MATCHED');
-  }
-  for (const finding of sct.doc_guardian_results ?? []) {
-    if (!finding?.line_id) continue;
-    evidenceByLine.set(String(finding.line_id), finding.severity === 'ZERO' ? 'MISSING' : 'PARTIAL');
-  }
-
-  return {
-    ...normalized,
-    invoice_lines: ((normalized?.invoice_lines ?? []) as any[]).map((line) => {
-      const typeB = typeBByLine.get(line.line_id) as any;
-      const norm = normalizedByLine.get(line.line_id) as any;
-      const rate = rateByLine.get(line.line_id) as any;
-      const gate = gateByLine.get(line.line_id) as any;
-      const cost = costByLine.get(line.line_id) as any;
-      return {
-        ...line,
-        type_b: line.type_b ?? typeB?.type_b ?? null,
-        for_charge_component: line.for_charge_component ?? norm?.charge_code ?? typeB?.type_b ?? null,
-        evidence_status: line.evidence_status ?? evidenceByLine.get(line.line_id) ?? null,
-        rate_status: line.rate_status ?? rate?.rate_status ?? null,
-        validity_status: line.validity_status ?? rate?.validity_status ?? null,
-        gate_status: line.gate_status ?? gate?.gate_status ?? null,
-        band: line.band ?? cost?.band ?? null,
-        delta_pct: line.delta_pct ?? cost?.delta_pct ?? null
-      };
-    })
-  };
-}
+// 2026-06-17: helper extracted to lib/validation-merge.ts so the re-run
+// pipeline can reuse it. Imported statically above; call sites below use
+// the import directly. No local wrapper needed.
 
 async function appendParseSourceData(jobId: string, rows: unknown): Promise<void> {
   const normalized = normalizeSourceDataRows(rows);
@@ -569,7 +535,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await STORE.setValidationResult(body.job_id, sct as any);
-  const normalized = mergeValidationIntoNormalizedInvoice(parseRes.normalized as any, sct);
+  const normalized = mergeValidationIntoNormalizedInvoice(parseRes.normalized as any, sct) as any;
   await STORE.setNormalizedInvoice(body.job_id, normalized as any);
 
   for (const tc of sct.cf_mcp_tool_calls) {

@@ -35,7 +35,10 @@ Samsung C&T HVDC Abu Dhabi project. ADNOC/DSV partnership.
 - ✅ **구현됨 (2026-06-15)**: OR 인테이크(409 제거), PDF-as-invoice 소스, 0-라인 → AMBER 표기, 최종 Excel 경로. (`run/route.ts`, `upload-validation.ts`, `upload-form.tsx`)
 - ✅ **검증됨 (2026-06-16)**: gs:// Google Vision OCR fallback 출시. Rule #0 prod 종단 검증 완료 (ingest→run→export→download → ZERO verdict에서도 유효한 13-sheet xlsx 다운로드).
 - ✅ **해결됨 (2026-06-16)**: 웹↔워커(Cloud Run) 스키마 드리프트 2겹 해소 — ① 워커 재배포로 `ParseRequest.workflow_type` 동기화(parse `422 extra_forbidden` 해결), ② export row 모델(`LineViewRow`/`RateCheckRow`)을 `extra='ignore'`로 전환해 rate_match enrichment 필드 수용(export `500`/`EXPORT_FAILED` 해결), ③ Cloud Run `--allow-unauthenticated` 복원 — 웹은 앱 토큰(`PARSER_WORKER_TOKEN`)으로 호출하므로 `allUsers` invoker 필요(`--no-allow-unauthenticated` 배포 시 401 회귀). prod 종단 재검증 통과. 커밋 `e51f924`·`f8cb95b`, 워커 rev `00012`.
-- 🔜 **예정**: ① 워커 `pdf_text.py`의 text_span → `invoice_lines` 실추출 (Phase 2.5) — PDF 단독을 AMBER가 아닌 실검증으로 승격. (gs:// Vision OCR fallback 출시로 OCR 경로는 확보, text_span→line 매핑은 잔여.) ② `06_Rate_Check`/`04_Line_View`에 rate_match 신규 컬럼 노출 — 워커 익스포터(`xlsx.py`)에 컬럼 추가 필요 (현재는 필드 수용만 하고 셀에는 미기재).
+- ✅ **출시됨 (2026-06-16)**: `06_Rate_Check`/`04_Line_View`에 rate_match enrichment 컬럼 노출. `RateCheckRow`(schemas.py:347-358)에 10개 필드(contract_row_id, unit, scope, type_b, match_eligible, rate_type, ai_rate_status, variance_amount, variance_pct, evidence_status) + `LineViewRow`에 risk/action/formula_text 추가. `xlsx.py` writer가 양 시트 모두 enrichment 컬럼 매핑. `test_xlsx_export_exposes_rate_match_columns` 1 passed, worker-py 211/211 회귀 0.
+- ✅ **출시됨 (2026-06-17)**: Vision OCR — 결재 게이트(approval-gated) 플로우. `POST /api/audit/approve { enable_vision: true }` (per-job, default OFF). 신규 `POST /api/audit/vision-status` 폴링 라우트. (job_id, pdf_sha256) 멱등성. 6종 실패 모드(VISION_NO_PDF / VISION_NON_GCS_SOURCE / WORKER_CONFIG_MISSING / VISION_DISABLED / VISION_OPERATION_NAME_MISSING / COLLECT_FAILED) 모두 Vision status에 기록, 결재는 막지 않음(Rule #0). 352/352 web 테스트 PASS, typecheck 0 errors.
+- ✅ **출시됨 (2026-06-17)**: OCR 후 variance 재계산 + 1-click `/api/audit/export` 트리거(검수→export 무결성 마감). 신규 `POST /api/audit/re-run` (수동) + `POST /api/audit/re-run-status` (폴링). 비동기 fire-and-forget 파이프라인: `re-run-pipeline.ts` (pending → running → exported). (job_id, trigger, pdf_sha256) 멱등성. `vision-status` COLLECTED 시 `triggerReRun({ trigger: 'vision_ocr_done' })` 자동 호출. 5종 실패 모드(WORKER_CONFIG_MISSING / RE_RUN_VALIDATE_FAILED / EXPORT_REQUEST_FAILED / EXPORT_FAILED / RE_RUN_UNEXPECTED) 모두 re_run_status에 기록, 결재는 막지 않음(Rule #0). 367/367 web 테스트 PASS, typecheck 0 errors.
+- 🔜 **예정**: ① 워커 `pdf_text.py`의 text_span → `invoice_lines` 실추출 (Phase 2.5) — PDF 단독을 AMBER가 아닌 실검증으로 승격.
 
 ## DLP 정책 (2026-06-15 추가)
 
@@ -143,7 +146,7 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 |---|---|
 | `apps/web/src/lib/` | Core logic: job-store, gate-bridge, MCP tools, parser-client, blob, types |
 | `apps/web/src/lib/types.ts` | Zod schemas — JobStatus, Verdict, InvoiceLine, SourceFile, etc. |
-| `apps/web/src/app/api/` | 12 API route handlers |
+| `apps/web/src/app/api/` | 15 API route handlers (incl. `/api/audit/vision-status` + `/api/audit/re-run` + `/api/audit/re-run-status`) |
 | `apps/web/tests/` | 30 Vitest test files |
 | `apps/worker-py/app/parsers/` | xlsx, md, txt, pdf, pdf_json, dsv_waybill parsers |
 | `apps/worker-py/app/exporters/` | 13-sheet workbook export |
@@ -158,14 +161,16 @@ When making changes, respect: `Worker = orchestrator only, Vercel = final audit 
 | `shpiment/` | DSV shipment reference (gitignored) |
 | `domestic/` | Korean domestic invoice runtime |
 
-## Verification Baseline (2026-06-16)
+## Verification Baseline (2026-06-17)
 
-- apps/web: 195 tests, `pnpm test` (verified 2026-06-16)
-- apps/worker-py: 195 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; incl. Vision OCR fallback tests)
+- apps/web: 367 tests (47 files), `pnpm test` (verified 2026-06-17; incl. approval-gated Vision OCR + re-run pipeline tests)
+- apps/worker-py: 211 tests, `pytest -q` (needs openpyxl, pdfplumber, pytest-cov; incl. Vision OCR fallback tests)
 - apps/mcp-server: 186 tests (16 files), `pnpm test`
-- **Total: 576 tests passing**
+- **Total: 764 tests passing**
 
-Prior baseline (2026-06-15): web 167, worker-py 162, mcp-server 186, total 515.
+Prior baselines:
+- 2026-06-16: web 195, worker-py 195, mcp-server 186, total 576.
+- 2026-06-15: web 167, worker-py 162, mcp-server 186, total 515.
 
 ## Rules
 

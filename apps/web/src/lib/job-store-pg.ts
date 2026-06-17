@@ -3,7 +3,8 @@ import pg from 'pg';
 import type { JobStore, Job, GateResultLite, TraceInput } from './job-store';
 import type {
   SourceFile, AuditTraceEntry, NormalizedInvoice,
-  SctValidationResult, ApprovalRecord, FxPolicy, SourceDataRow
+  SctValidationResult, ApprovalRecord, FxPolicy, SourceDataRow,
+  VisionStatusRecord, VisionOcrResult, ReRunRecord
 } from './types';
 import {
   mapLegacyStatus,
@@ -445,6 +446,188 @@ export function createPgJobStore(): JobStore | null {
       return (typeof row.approval_json === 'string' ? JSON.parse(row.approval_json) : row.approval_json) as ApprovalRecord;
     },
 
+    // 2026-06-17: approval-gated Vision OCR state. Persisted on jobs
+    // (migration 0018). Self-heals missing columns / missing migration
+    // like 0017 — Rule #0: never block the audit deliverable on DDL drift.
+    async setVisionStatus(jobId: string, status: VisionStatusRecord) {
+      const write = () => pool.query(
+        `UPDATE jobs SET
+           vision_status              = $1,
+           vision_operation_name      = $2,
+           vision_pdf_file_id         = $3,
+           vision_pdf_sha256          = $4,
+           vision_source_gcs_uri      = $5,
+           vision_output_gcs_prefix   = $6,
+           vision_started_at          = $7,
+           vision_completed_at        = $8,
+           vision_updated_at          = $9,
+           vision_error_code          = $10,
+           vision_error_message       = $11,
+           vision_ocr_result_json     = $12
+         WHERE job_id = $13`,
+        [
+          status.vision_status,
+          status.vision_operation_name,
+          status.vision_pdf_file_id,
+          status.vision_pdf_sha256,
+          status.vision_source_gcs_uri,
+          status.vision_output_gcs_prefix,
+          status.vision_started_at,
+          status.vision_completed_at,
+          status.vision_updated_at,
+          status.vision_error_code,
+          status.vision_error_message,
+          status.vision_ocr_result ? JSON.stringify(status.vision_ocr_result) : null,
+          jobId
+        ]
+      );
+      try {
+        await write();
+      } catch (e) {
+        // 42703 = undefined_column (migration 0018 not applied yet).
+        // Apply the migration idempotently and retry once.
+        if ((e as { code?: string }).code !== '42703') throw e;
+        await pool.query(
+          `ALTER TABLE jobs
+             ADD COLUMN IF NOT EXISTS vision_status                 TEXT,
+             ADD COLUMN IF NOT EXISTS vision_operation_name        TEXT,
+             ADD COLUMN IF NOT EXISTS vision_pdf_file_id           TEXT,
+             ADD COLUMN IF NOT EXISTS vision_pdf_sha256            TEXT,
+             ADD COLUMN IF NOT EXISTS vision_source_gcs_uri        TEXT,
+             ADD COLUMN IF NOT EXISTS vision_output_gcs_prefix     TEXT,
+             ADD COLUMN IF NOT EXISTS vision_started_at            TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS vision_completed_at          TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS vision_updated_at            TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS vision_error_code            TEXT,
+             ADD COLUMN IF NOT EXISTS vision_error_message         TEXT,
+             ADD COLUMN IF NOT EXISTS vision_ocr_result_json       JSONB`
+        );
+        await write();
+      }
+    },
+
+    async getVisionStatus(jobId: string) {
+      let result;
+      try {
+        result = await pool.query(
+          `SELECT vision_status, vision_operation_name, vision_pdf_file_id,
+                  vision_pdf_sha256, vision_source_gcs_uri, vision_output_gcs_prefix,
+                  vision_started_at, vision_completed_at, vision_updated_at,
+                  vision_error_code, vision_error_message, vision_ocr_result_json
+             FROM jobs WHERE job_id = $1`,
+          [jobId]
+        );
+      } catch (e) {
+        // 42703 = columns missing (migration 0018 not applied yet). Degrade to
+        // "no Vision state" so callers behave as if Vision was never requested.
+        if ((e as { code?: string }).code === '42703') return undefined;
+        throw e;
+      }
+      const row = result.rows[0];
+      if (!row || !row.vision_status) return undefined;
+      return mapVisionStatusRow(row);
+    },
+
+    // 2026-06-17: re-run pipeline. Stores the post-OCR re-run state per
+    // job. Self-heals 42703 (undefined column) by applying migration 0019
+    // idempotently — Rule #0: never block the audit on DDL drift.
+    async setReRunRecord(jobId: string, record: ReRunRecord) {
+      const write = () => pool.query(
+        `UPDATE jobs SET
+           re_run_status                  = $1,
+           re_run_id                      = $2,
+           re_run_triggered_by            = $3,
+           re_run_trigger                 = $4,
+           re_run_pdf_sha256              = $5,
+           re_run_vision_operation_name   = $6,
+           re_run_started_at              = $7,
+           re_run_completed_at            = $8,
+           re_run_error_code              = $9,
+           re_run_error_message           = $10,
+           re_run_workbook_sha256         = $11,
+           re_run_workbook_size_bytes     = $12,
+           re_run_workbook_blob_url       = $13,
+           re_run_prior_variance_aed      = $14,
+           re_run_new_variance_aed        = $15,
+           re_run_prior_verdict           = $16,
+           re_run_new_verdict             = $17
+         WHERE job_id = $18`,
+        [
+          record.re_run_status,
+          record.re_run_id,
+          record.re_run_triggered_by,
+          record.re_run_trigger,
+          record.re_run_pdf_sha256,
+          record.re_run_vision_operation_name,
+          record.re_run_started_at,
+          record.re_run_completed_at,
+          record.re_run_error_code,
+          record.re_run_error_message,
+          record.re_run_workbook_sha256,
+          record.re_run_workbook_size_bytes,
+          record.re_run_workbook_blob_url,
+          record.re_run_prior_variance_aed,
+          record.re_run_new_variance_aed,
+          record.re_run_prior_verdict,
+          record.re_run_new_verdict,
+          jobId
+        ]
+      );
+      try {
+        await write();
+      } catch (e) {
+        // 42703 = undefined_column (migration 0019 not applied yet).
+        // Apply the migration idempotently and retry once.
+        if ((e as { code?: string }).code !== '42703') throw e;
+        await pool.query(
+          `ALTER TABLE jobs
+             ADD COLUMN IF NOT EXISTS re_run_status                TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_id                    TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_triggered_by          TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_trigger               TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_pdf_sha256            TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_vision_operation_name TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_started_at            TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS re_run_completed_at          TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS re_run_error_code            TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_error_message         TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_workbook_sha256       TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_workbook_size_bytes   INTEGER,
+             ADD COLUMN IF NOT EXISTS re_run_workbook_blob_url     TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_prior_variance_aed    NUMERIC,
+             ADD COLUMN IF NOT EXISTS re_run_new_variance_aed      NUMERIC,
+             ADD COLUMN IF NOT EXISTS re_run_prior_verdict         TEXT,
+             ADD COLUMN IF NOT EXISTS re_run_new_verdict           TEXT`
+        );
+        await write();
+      }
+    },
+
+    async getReRunRecord(jobId: string) {
+      let result;
+      try {
+        result = await pool.query(
+          `SELECT re_run_status, re_run_id, re_run_triggered_by, re_run_trigger,
+                  re_run_pdf_sha256, re_run_vision_operation_name,
+                  re_run_started_at, re_run_completed_at,
+                  re_run_error_code, re_run_error_message,
+                  re_run_workbook_sha256, re_run_workbook_size_bytes, re_run_workbook_blob_url,
+                  re_run_prior_variance_aed, re_run_new_variance_aed,
+                  re_run_prior_verdict, re_run_new_verdict
+             FROM jobs WHERE job_id = $1`,
+          [jobId]
+        );
+      } catch (e) {
+        // 42703 = columns missing (migration 0019 not applied yet). Degrade
+        // to "no re-run state" so callers behave as if Vision was never run.
+        if ((e as { code?: string }).code === '42703') return undefined;
+        throw e;
+      }
+      const row = result.rows[0];
+      if (!row || !row.re_run_status) return undefined;
+      return mapReRunRow(row);
+    },
+
     async createFxPolicy(policy: FxPolicy) {
       await pool.query(
         `INSERT INTO fx_policies (fx_policy_id, from_currency, to_currency, fx_rate, rate_date, valid_from, valid_to, approved_by, proof_hash)
@@ -545,5 +728,48 @@ function mapFxPolicyRow(row: Record<string, unknown>): FxPolicy {
     valid_to: (row.valid_to as Date).toISOString().split('T')[0],
     approved_by: row.approved_by as string,
     proof_hash: row.proof_hash as string
+  };
+}
+
+function mapVisionStatusRow(row: Record<string, unknown>): VisionStatusRecord {
+  const toIso = (v: unknown) => v ? (v as Date).toISOString() : null;
+  const ocrJson = parseJsonField<VisionOcrResult>(row.vision_ocr_result_json) ?? null;
+  return {
+    vision_status: (row.vision_status as VisionStatusRecord['vision_status']) ?? null,
+    vision_operation_name: (row.vision_operation_name as string) ?? null,
+    vision_pdf_file_id: (row.vision_pdf_file_id as string) ?? null,
+    vision_pdf_sha256: (row.vision_pdf_sha256 as string) ?? null,
+    vision_source_gcs_uri: (row.vision_source_gcs_uri as string) ?? null,
+    vision_output_gcs_prefix: (row.vision_output_gcs_prefix as string) ?? null,
+    vision_started_at: toIso(row.vision_started_at),
+    vision_completed_at: toIso(row.vision_completed_at),
+    vision_updated_at: toIso(row.vision_updated_at),
+    vision_error_code: (row.vision_error_code as string) ?? null,
+    vision_error_message: (row.vision_error_message as string) ?? null,
+    vision_ocr_result: ocrJson
+  };
+}
+
+function mapReRunRow(row: Record<string, unknown>): ReRunRecord {
+  const toIso = (v: unknown) => v ? (v as Date).toISOString() : null;
+  const toNum = (v: unknown) => v == null ? null : Number(v);
+  return {
+    re_run_status: row.re_run_status as ReRunRecord['re_run_status'],
+    re_run_id: (row.re_run_id as string) ?? '',
+    re_run_triggered_by: (row.re_run_triggered_by as string) ?? '',
+    re_run_trigger: (row.re_run_trigger as ReRunRecord['re_run_trigger']) ?? 'manual',
+    re_run_pdf_sha256: (row.re_run_pdf_sha256 as string) ?? null,
+    re_run_vision_operation_name: (row.re_run_vision_operation_name as string) ?? null,
+    re_run_started_at: toIso(row.re_run_started_at),
+    re_run_completed_at: toIso(row.re_run_completed_at),
+    re_run_error_code: (row.re_run_error_code as string) ?? null,
+    re_run_error_message: (row.re_run_error_message as string) ?? null,
+    re_run_workbook_sha256: (row.re_run_workbook_sha256 as string) ?? null,
+    re_run_workbook_size_bytes: toNum(row.re_run_workbook_size_bytes) as number | null,
+    re_run_workbook_blob_url: (row.re_run_workbook_blob_url as string) ?? null,
+    re_run_prior_variance_aed: toNum(row.re_run_prior_variance_aed),
+    re_run_new_variance_aed: toNum(row.re_run_new_variance_aed),
+    re_run_prior_verdict: (row.re_run_prior_verdict as string) ?? null,
+    re_run_new_verdict: (row.re_run_new_verdict as string) ?? null
   };
 }

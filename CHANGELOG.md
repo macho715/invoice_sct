@@ -1,5 +1,192 @@
 # Changelog
 
+## Rate-match enrichment columns surfaced on 06_Rate_Check + 04_Line_View (2026-06-16)
+
+> **Scope:** 13-sheet 워크북의 `06_Rate_Check` / `04_Line_View` 시트가
+> `rate_match_logic.md` §3~§9의 enrichment 필드를 사용자가 직접 검토할
+> 수 있도록 노출. 워커 schema-drift(extra='ignore') 이후의 후속
+> 컬럼-스레딩 작업.
+
+### Added
+
+- **`RateCheckRow` enrichment** (`apps/worker-py/app/schemas.py:347-358`).
+  10개 신규 컬럼: `contract_row_id`, `unit`, `scope`, `type_b`,
+  `match_eligible` (Y/N/null), `rate_type`, `ai_rate_status`,
+  `variance_amount`, `variance_pct`, `evidence_status`. 타입은
+  `packages/tools` `check_rate_card` 출력과 동기화.
+- **`LineViewRow` enrichment** (`apps/worker-py/app/schemas.py:267-270`).
+  `risk` (LOW/MEDIUM/HIGH), `action`, `formula_text` (Excel 수식
+  injection 방지를 위해 `'` prefix literal 처리).
+- **Exporter 컬럼 매핑** (`apps/worker-py/app/exporters/xlsx.py:95, 136,
+  118`). `04_Line_View` 헤더 + writer에 risk/action/formula_text 추가,
+  `06_Rate_Check` 헤더 + writer에 10개 enrichment 컬럼 추가. 정렬/auto-filter/freeze-panes은 변경 없음.
+
+### Test
+
+`apps/worker-py/tests/test_xlsx_export.py::test_xlsx_export_exposes_rate_match_columns`
+(기존 GREEN): 10개 06_Rate_Check enrichment 컬럼 헤더 검증 + 값 매핑 검증,
+`04_Line_View` risk/action 검증. 1 passed. worker-py 전체 211/211 회귀 0.
+
+## OCR → variance re-compute + 1-click export re-run (auto re-run pipeline) - 2026-06-17
+
+> **Scope:** When Google Vision OCR completes with new content (pages or
+> evidence candidates), the system now **automatically re-runs the audit**
+> (re-validate via Cf MCP → re-export the 13-sheet workbook) so the
+> download reflects the OCR-augmented data without manual re-approval.
+> The 13-sheet export surface becomes self-healing once Vision OCR lands.
+
+### Added
+
+- **`/api/audit/re-run`** (`apps/web/src/app/api/audit/re-run/route.ts`,
+  NEW). Manual 1-click trigger from the UI / external integrations.
+  Body: `{ job_id, triggered_by? }`. Returns the initial `ReRunRecord`
+  immediately. Requires `vision_status === 'done'`; missing vision or
+  unknown job_id → 409 / 404. Replay-safe: same `(job_id, trigger,
+  pdf_sha256)` returns the cached record.
+- **`/api/audit/re-run-status`** (`apps/web/src/app/api/audit/re-run-status/route.ts`,
+  NEW). Polling endpoint. POST `{ job_id }` (canonical) or `GET
+  ?job_id=…` (fallback). Surfaces the full `ReRunRecord` plus
+  `ready_to_download: true` when the workbook is `exported`.
+- **`re-run-pipeline` orchestrator** (`apps/web/src/lib/re-run-pipeline.ts`,
+  NEW). `triggerReRun()` is **fire-and-forget** — returns the initial
+  `pending` record synchronously, then async: mark `running` → read
+  prior variance / verdict → re-validate (in-process Cf MCP client) →
+  merge validation into normalized invoice → call worker `/v1/export`
+  → mark `exported` with workbook sha256 / size / blob_url and
+  prior→new variance / verdict deltas. Errors are caught and written
+  to `re_run_status = 'failed'` with `re_run_error_code` /
+  `re_run_error_message` — the original (pre-OCR) workbook stays the
+  deliverable (Rule #0).
+- **`mergeValidationIntoNormalizedInvoice` shared helper**
+  (`apps/web/src/lib/validation-merge.ts`, NEW). Extracted from
+  `apps/web/src/app/api/invoice-audit/run/route.ts` so the re-run
+  pipeline reuses the same merge logic the initial audit uses. No
+  behavior change for the initial audit; the re-run now goes through
+  the same path.
+- **`ReRunStatus` enum + `ReRunRecord` schema**
+  (`apps/web/src/lib/types.ts`). `pending | running | exported | failed`
+  (17 fields: re_run_id, re_run_status, re_run_trigger,
+  re_run_triggered_by, re_run_pdf_sha256, re_run_vision_operation_name,
+  re_run_started_at, re_run_completed_at, re_run_error_code,
+  re_run_error_message, re_run_workbook_sha256, re_run_workbook_size_bytes,
+  re_run_workbook_blob_url, re_run_prior_variance_aed,
+  re_run_new_variance_aed, re_run_prior_verdict, re_run_new_verdict).
+- **Postgres storage with 42703 self-heal**
+  (`apps/web/src/lib/job-store-pg.ts`, `migrations/0019_jobs_re_run.sql`).
+  17 new columns + 2 indexes (`idx_jobs_re_run_status`,
+  `idx_jobs_re_run_pdf_sha256`). The PG adapter self-heals
+  `undefined_column` by running `ALTER TABLE jobs ADD COLUMN IF NOT
+  EXISTS` for any missing column so the re-run writes never block on
+  a missing migration. In-memory adapter keeps a parallel `Map`.
+- **Auto-trigger on Vision OCR done**
+  (`apps/web/src/app/api/audit/vision-status/route.ts`). When
+  `/v1/vision/collect` returns `COLLECTED` with `page_count > 0` or
+  `evidence_candidate_count > 0`, the route calls `triggerReRun({
+  trigger: 'vision_ocr_done', triggeredBy: 'auto:vision-status' })`.
+  Trace step `RE_RUN_AUTO` is written for both triggered and
+  best-effort error paths. **2026-06-17 fix**: the re-run signal was
+  originally keyed on the OCR result's `invoice_lines` /
+  `evidence_candidates` arrays, but `/collect` only returns **counts**.
+  The signal now uses `page_count > 0 || evidence_candidate_count > 0`
+  (a new optional `evidence_candidate_count` field on
+  `VisionOcrResultSchema`) — this is what the worker actually returns,
+  so the auto-trigger fires correctly on real OCR output.
+- **New audit trace steps** (`apps/web/src/lib/types.ts`):
+  `RE_RUN_TRIGGER` / `RE_RUN_START` / `RE_RUN_EXPORT` / `RE_RUN_FAIL`
+  / `RE_RUN_AUTO`. Step names are stable for grep / dashboard
+  consumers.
+
+### Idempotency
+
+Re-run triggers are keyed on `(job_id, trigger, pdf_sha256)`:
+- `exported` for the same key → return cached record, **no worker call**.
+- `running` for the same key → return cached record, **no worker call**.
+- Different `trigger` (`manual` vs `vision_ocr_done`) → fresh record.
+- Different `pdf_sha256` → fresh record.
+
+### Failure modes (all written to re_run_status, never block audit — Rule #0)
+
+| Code | Meaning |
+|---|---|
+| `WORKER_CONFIG_MISSING` | `PARSER_WORKER_URL` / `PARSER_WORKER_TOKEN` not set |
+| `RE_RUN_VALIDATE_FAILED` | Cf MCP `validate()` threw |
+| `EXPORT_REQUEST_FAILED` | Worker `/v1/export` fetch threw |
+| `EXPORT_FAILED` | Worker `/v1/export` returned non-2xx |
+| `RE_RUN_UNEXPECTED` | Orchestrator unexpected throw (safety net) |
+
+The original (pre-OCR) 13-sheet workbook remains the deliverable. The
+re-run `failed` record surfaces `re_run_error_code` /
+`re_run_error_message` for the UI to display.
+
+## Vision OCR — approval-gated flow (web polling, idempotent triggers) - 2026-06-17
+
+> **Scope:** Move Vision OCR from a default-on side effect to an **explicit
+> reviewer opt-in** invoked at approval time, with a polling endpoint so the
+> UI can show progress. Default behavior (no opt-in) is unchanged: no Vision
+> state, no worker call, no field in the response.
+
+### Added
+
+- **`/api/audit/approve` `enable_vision` field** (`apps/web/src/app/api/audit/approve/route.ts`).
+  When `true` and the job has a scanned PDF, the route kicks off the worker
+  `/v1/vision/start` (fire-and-forget) and returns `vision: { vision_status, … }`
+  in the response. Skipped, failed, and idempotent paths all write Vision state
+  into the job. Approval record carries `enable_vision`, `vision_requested_at`,
+  `vision_requested_by` for audit.
+- **New `POST /api/audit/vision-status`** (`apps/web/src/app/api/audit/vision-status/route.ts`,
+  NEW). Polls the worker `/v1/vision/collect` for any `running` record and
+  returns a stable `VisionStatusResponse` shape. Terminal states (`done` /
+  `failed` / `skipped`) are returned from cache without a worker call. The
+  `re_run_required: true` hint tells the UI to re-call `/api/audit/export` so
+  the 13-sheet workbook picks up the new lines/evidence. Optional `GET
+  ?job_id=…` is provided for clients that prefer query-string polling.
+- **Vision state in job store** — `apps/web/src/lib/types.ts` adds
+  `VisionStatusEnum`, `VisionOcrResultSchema`, `VisionStatusRecordSchema`;
+  `apps/web/src/lib/job-store.ts` adds `setVisionStatus` / `getVisionStatus`;
+  `apps/web/src/lib/job-store-pg.ts` adds the same with **42703 self-heal** so
+  a missing `vision_*` column doesn't block the audit. Migration `0018_jobs_vision_status.sql`
+  creates 12 columns + 2 indexes.
+- **`collectVisionOcr` parser client** — `apps/web/src/lib/parser-client.ts` adds
+  the polling half of the Vision flow. POSTs to `/v1/vision/collect` with bearer
+  + `operation_name`, returns the worker's current status. Non-2xx / timeouts /
+  fetch failures degrade to terminal `COLLECT_FAILED` / `COLLECT_TIMEOUT` shapes
+  (no throw — callers cache the result).
+
+### Idempotency
+
+Vision triggers are keyed on `(job_id, pdf_sha256)`:
+- `done` for the same PDF → return cached record, **no worker call**.
+- `running` for the same PDF → return cached record, **no worker call**.
+- Different PDF (or no record) → fresh `/v1/vision/start` trigger.
+
+### Failure modes (all written to vision_status, never block approval — Rule #0)
+
+| Code | Meaning |
+|---|---|
+| `VISION_NO_PDF` | No PDF source file on the job |
+| `VISION_NON_GCS_SOURCE` | PDF uploaded via Vercel Blob (not gs://) — re-upload via `/api/files/create-upload-url` to enable |
+| `WORKER_CONFIG_MISSING` | `PARSER_WORKER_URL` / `PARSER_WORKER_TOKEN` not set |
+| `VISION_DISABLED` / `HTTP_*` | Worker rejected the start call |
+| `VISION_OPERATION_NAME_MISSING` | `running` record without `operation_name` — previous trigger never produced a usable handle |
+| `COLLECT_FAILED` / `COLLECT_TIMEOUT` | Worker collect call failed or timed out |
+
+In all of these the approval still goes through and the AMBER/ZERO verdict
+flow is unchanged.
+
+### Tests
+
+- `apps/web/tests/api-audit-approve.test.ts` — 6 new tests covering
+  enable_vision=true: omitted (default), no-PDF, non-GCS, missing worker config,
+  happy path with mocked `/v1/vision/start`, idempotent re-approval on same PDF.
+- `apps/web/tests/api-audit-vision-status.test.ts` (NEW, 8 tests) — 400/404
+  error shapes, null state, terminal `done` cache, `running` → `done` poll,
+  `running` → `failed` poll, in-flight `RUNNING` shape, GET query-string
+  equivalent.
+- `apps/web/tests/parser-client.test.ts` — 4 new tests for `collectVisionOcr`:
+  POST + bearer, RUNNING shape, COLLECT_FAILED, COLLECT_TIMEOUT.
+
+**Total: 352/352 web tests passing** (44 test files, all green; typecheck 0 errors).
+
 ## Worker schema-drift fix — parse/export web↔Cloud Run sync - 2026-06-16
 
 > **Scope:** Production upload→13-sheet Excel was broken by a two-layer schema
