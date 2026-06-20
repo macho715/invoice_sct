@@ -36,7 +36,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: DLP scan (deferred — run in parent invoice/ workflow)
         run: |
@@ -53,7 +53,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -126,7 +126,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -213,7 +213,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'release-gate')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
