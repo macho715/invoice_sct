@@ -12,7 +12,7 @@
     "@invoice-audit/database": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
+    "@types/node": "^26.0.0",
     "typescript": "^5.6.3"
   },
   "exports": {

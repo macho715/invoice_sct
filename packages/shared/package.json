@@ -13,6 +13,6 @@
     "./trace-redact": "./trace-redact.ts"
   },
   "devDependencies": {
-    "@types/node": "^22.19.21"
+    "@types/node": "^26.0.0"
   }
 }
