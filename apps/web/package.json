@@ -20,7 +20,7 @@
     "@invoice-audit/telemetry": "workspace:*",
     "@invoice-audit/tools": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
-    "@vercel/blob": "^2.4.0",
+    "@vercel/blob": "^2.4.1",
     "next": "15.3.8",
     "pg": "^8.13.1",
     "react": "19.0.0",
